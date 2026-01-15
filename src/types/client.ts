@@ -1,0 +1,33 @@
+export type ClientStatus = 'active' | 'inactive' | 'lost'
+
+export interface Client {
+    id: string
+    name: string
+    email: string
+    phone: string | null
+    status: ClientStatus
+    start_date: string
+    contract_end_date: string | null
+    assigned_coach_id: string | null
+    client_type_id: string | null
+    ghl_contact_id: string
+    lead_source: 'coach_driven' | 'company_driven' | null
+    pipeline_stage: string | null
+    stripe_customer_id?: string | null
+    created_at: string
+    // Joined fields
+    client_type?: {
+        name: string
+    } | null
+    assigned_coach?: {
+        name: string
+        email: string
+    } | null
+}
+
+export interface ClientType {
+    id: string
+    name: string
+    description: string | null
+    is_active: boolean
+}
