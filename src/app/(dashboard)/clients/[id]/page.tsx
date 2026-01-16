@@ -1,5 +1,6 @@
 import { getClient } from '@/lib/actions/clients'
 import { getClientTasks } from '@/lib/actions/onboarding'
+import { getClientNotes } from '@/lib/actions/notes'
 import { notFound } from 'next/navigation'
 import { format } from 'date-fns'
 import { Calendar, Mail, Phone, CreditCard, CheckCircle2 } from 'lucide-react'
@@ -12,18 +13,32 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ClientOnboardingChecklist } from '@/components/clients/ClientOnboardingChecklist'
 import { ClientPaymentsList } from '@/components/clients/ClientPaymentsList'
 import { ClientDetailsCard } from '@/components/clients/ClientDetailsCard'
+import { ClientNotes } from '@/components/clients/ClientNotes'
+import { ClientActivityTimeline } from '@/components/clients/ClientActivityTimeline'
 import { getClientPayments } from '@/lib/actions/payments'
 import { OnboardingTask } from '@/types/onboarding'
+import { Note } from '@/types/client'
 
-export default async function ClientPage({ params }: { params: { id: string } }) {
+export default async function ClientPage(props: { params: Promise<{ id: string }> }) {
+    const params = await props.params;
     const client = await getClient(params.id)
     const tasksData = await getClientTasks(params.id)
     const tasks = (tasksData || []) as OnboardingTask[]
     const paymentsData = await getClientPayments(params.id)
     const payments = paymentsData || []
 
+    // Fetch notes
+    const notesData = await getClientNotes(params.id)
+    const notes = (notesData || []) as Note[]
+
     if (!client) {
-        notFound()
+        return (
+            <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+                <div className="flex items-center justify-center h-full">
+                    <p className="text-muted-foreground">Client not found or access denied.</p>
+                </div>
+            </div>
+        )
     }
 
     const getStatusColor = (status: string) => {
@@ -71,7 +86,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
 
             <Separator className="bg-primary/10" />
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-200px)]">
                 {/* Left Column: Identity & Contact (3 cols) */}
                 <div className="lg:col-span-3 space-y-6">
                     <ClientDetailsCard client={client} />
@@ -92,17 +107,19 @@ export default async function ClientPage({ params }: { params: { id: string } })
                             </div>
                         </CardContent>
                     </Card>
+
+                    <ClientActivityTimeline client={client} tasks={tasks} payments={payments} />
                 </div>
 
                 {/* Main Column: Journey & Timeline (6 cols) */}
-                <div className="lg:col-span-6 space-y-6">
-                    <Tabs defaultValue="onboarding" className="w-full">
+                <div className="lg:col-span-6 space-y-6 h-full flex flex-col">
+                    <Tabs defaultValue="onboarding" className="w-full flex-1 flex flex-col">
                         <TabsList className="grid w-full grid-cols-2">
                             <TabsTrigger value="onboarding">Onboarding Timeline</TabsTrigger>
-                            <TabsTrigger value="notes">Notes & Activity</TabsTrigger>
+                            <TabsTrigger value="notes">Notes</TabsTrigger>
                         </TabsList>
-                        <TabsContent value="onboarding" className="mt-4">
-                            <Card className="bg-card/40 border-primary/5 backdrop-blur-sm">
+                        <TabsContent value="onboarding" className="mt-4 flex-1">
+                            <Card className="bg-card/40 border-primary/5 backdrop-blur-sm h-full">
                                 <CardHeader>
                                     <CardTitle>Client Journey</CardTitle>
                                     <CardDescription>Track onboarding progress and steps.</CardDescription>
@@ -112,17 +129,8 @@ export default async function ClientPage({ params }: { params: { id: string } })
                                 </CardContent>
                             </Card>
                         </TabsContent>
-                        <TabsContent value="notes" className="mt-4">
-                            <Card className="bg-card/40 border-primary/5 min-h-[300px]">
-                                <CardHeader>
-                                    <CardTitle>Activity Log</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="text-center text-muted-foreground text-sm py-8">
-                                        No notes recorded yet.
-                                    </div>
-                                </CardContent>
-                            </Card>
+                        <TabsContent value="notes" className="mt-4 flex-1">
+                            <ClientNotes notes={notes} clientId={client.id} />
                         </TabsContent>
                     </Tabs>
                 </div>

@@ -37,7 +37,8 @@ export const getClients = unstable_cache(
 );
 
 export async function getClient(id: string) {
-    const supabase = await createClient()
+    // Use Admin Client to bypass RLS for detailed view, matching list view behavior
+    const supabase = createAdminClient()
 
     const { data, error } = await supabase
         .from('clients')

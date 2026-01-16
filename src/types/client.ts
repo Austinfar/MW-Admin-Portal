@@ -31,3 +31,15 @@ export interface ClientType {
     description: string | null
     is_active: boolean
 }
+
+export interface Note {
+    id: string
+    content: string
+    is_pinned: boolean
+    created_at: string
+    author?: {
+        name: string
+        email: string
+        id: string
+    } | null
+}

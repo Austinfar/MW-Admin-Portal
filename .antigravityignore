@@ -1,0 +1,42 @@
+# --- Dependencies & System ---
+node_modules/
+bower_components/
+.git/
+.svn/
+.hg/
+
+# --- Build Outputs (The agent doesn't need to read compiled code) ---
+dist/
+build/
+out/
+.next/
+.nuxt/
+.output/
+coverage/
+
+# --- Token Killers (Massive text files that provide 0 context) ---
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+bun.lockb
+composer.lock
+Gemfile.lock
+
+# --- Logs & Cache ---
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.cache/
+tmp/
+
+# --- Assets (The agent can't "see" images, so don't index them) ---
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.ico
+*.svg
+*.mp4
+*.mov
