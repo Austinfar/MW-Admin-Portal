@@ -49,7 +49,7 @@ export async function POST(req: Request) {
         if (error) {
             console.error('Error updating record:', error);
             return NextResponse.json(
-                { error: 'Failed to update record' },
+                { error: 'Failed to update record', details: error },
                 { status: 500 }
             );
         }
