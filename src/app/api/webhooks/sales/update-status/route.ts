@@ -1,9 +1,9 @@
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
     try {
-        const supabase = await createClient();
+        const supabase = createAdminClient();
         const body = await req.json();
         const { record_id, status, report_html, error_message, client_name } = body;
 
