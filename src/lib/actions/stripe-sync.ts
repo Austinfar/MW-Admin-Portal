@@ -320,8 +320,8 @@ export async function syncStripeSubscriptions() {
 
             // Cast to any for properties that might be missing in strict types or expansion
             const subAny = sub as any;
-            const currentPeriodEnd = sub.current_period_end
-                ? new Date(sub.current_period_end * 1000).toISOString()
+            const currentPeriodEnd = subAny.current_period_end
+                ? new Date(subAny.current_period_end * 1000).toISOString()
                 : null;
 
             const unitAmount = sub.items.data[0]?.price?.unit_amount || 0;
