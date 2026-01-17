@@ -38,7 +38,8 @@ export async function processScheduledCharges() {
     // 2. Process each charge
     for (const charge of charges) {
         try {
-            const schedule = charge.payment_schedules
+            const scheduleData = charge.payment_schedules
+            const schedule = Array.isArray(scheduleData) ? scheduleData[0] : scheduleData
 
             if (!schedule || !schedule.stripe_customer_id || !schedule.stripe_payment_method_id) {
                 // Should be caught by query filter, but safety check
