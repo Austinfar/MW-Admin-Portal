@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/table'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Search, ExternalLink, Calendar, CheckCircle2, User, Loader2, Clock, FileText, AlertCircle } from 'lucide-react'
+import { Search, ExternalLink, Calendar, CheckCircle2, User, Loader2, Clock, FileText, AlertCircle, Trash2 } from 'lucide-react'
 import { ReportViewer } from '@/components/dashboard/sales/report-viewer'
 import {
     Dialog,
@@ -89,7 +89,8 @@ export default function SalesPage() {
                     schema: 'public',
                     table: 'sales_call_logs',
                 },
-                () => {
+                (payload) => {
+                    console.log('Real-time update received:', payload)
                     fetchLogs()
                 }
             )
@@ -309,6 +310,15 @@ export default function SalesPage() {
                                                     <FileText className="h-4 w-4" />
                                                 </Button>
                                             )}
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => handleDelete(log.id)}
+                                                className="h-8 w-8 text-gray-500 hover:text-red-500 hover:bg-red-500/10"
+                                                title="Delete Log"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
                                         </div>
                                     </TableCell>
                                 </TableRow>
