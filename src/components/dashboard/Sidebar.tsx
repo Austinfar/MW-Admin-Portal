@@ -70,7 +70,7 @@ export function Sidebar({ className, isMobile = false, userAccess }: { className
 
         switch (route.href) {
             case '/':
-                return permissions.can_view_dashboard !== false
+                return !!permissions.can_view_dashboard
             case '/clients':
                 return !!permissions.can_view_clients
             case '/onboarding':
