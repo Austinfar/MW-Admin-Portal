@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { deleteSalesCallLog } from '@/lib/actions/sales'
 import { format } from 'date-fns'
 import {
     Table,
@@ -64,10 +65,22 @@ export default function SalesPage() {
 
             if (!response.ok) throw new Error(data.error || 'Failed to start analysis')
 
-            toast.success('Analysis started successfully. It may take a few minutes to appear.')
+            toast.success('Analysis started successfully.')
+
+            // Immediate UI update
+            const newLog: SalesCallLog = {
+                id: data.id,
+                created_at: new Date().toISOString(),
+                client_name: 'Analysis Pending...',
+                submitted_by: 'You', // Or get actual user name if available
+                meeting_url: newUrl,
+                report_html: null,
+                status: 'queued'
+            }
+
+            setLogs(prev => [newLog, ...prev])
             setNewUrl('')
             setIsDialogOpen(false)
-            // Optional: Reload logs after a delay or let realtime handle it
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Failed to start analysis')
         } finally {
@@ -83,17 +96,14 @@ export default function SalesPage() {
         toast.success('Log deleted')
 
         try {
-            const { error } = await supabase
-                .from('sales_call_logs')
-                .delete()
-                .eq('id', id)
+            const result = await deleteSalesCallLog(id)
 
-            if (error) {
-                throw error
+            if (result?.error) {
+                throw new Error(result.error)
             }
         } catch (error) {
             console.error('Delete error:', error)
-            toast.error('Failed to delete log')
+            toast.error(error instanceof Error ? error.message : 'Failed to delete log')
             fetchLogs() // Revert state on error
         }
     }
@@ -322,7 +332,7 @@ export default function SalesPage() {
                                                     </a>
                                                 </Button>
                                             )}
-                                            {log.status === 'completed' || log.status === 'analyzed' ? (
+                                            {log.report_html ? (
                                                 <ReportViewer
                                                     reportHtml={log.report_html}
                                                     clientName={log.client_name || 'Prospect'}
