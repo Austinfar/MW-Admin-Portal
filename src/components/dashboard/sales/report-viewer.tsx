@@ -21,37 +21,32 @@ export function ReportViewer({ reportHtml, clientName, date }: ReportViewerProps
             return
         }
 
-        // Helper to unescape HTML entities
-        const doc = new DOMParser().parseFromString(reportHtml, 'text/html')
-        let decoded = doc.documentElement.textContent || ''
+        let decoded = reportHtml
 
-        // If decoding resulted in an empty string (unexpected) or didn't seem to decode tags,
-        // and reportHtml *looks* like it has tags, maybe it wasn't escaped?
-        // But the screenshot shows raw tags, so it WAS escaped.
-        // However, if we recursively unescape, we might fit it.
-        // Let's try a simple heuristic: if the original string starts with a tag like <div, 
-        // it doesn't need unescaping. If it starts with &lt or doesn't have <, it might.
-        // Actually, reliable decoding:
-        if (reportHtml.trim().startsWith('<')) {
-            // It's likely already raw HTML
-            decoded = reportHtml
-        } else if (decoded.trim().startsWith('<')) {
-            // Decoding worked and revealed tags
-        } else {
-            // Fallback: maybe it's just text or complex escaping. 
-            // Trust the decoding for now if it changed something.
-            if (reportHtml.includes('&lt;') && !decoded.includes('&lt;')) {
-                // decoded
-            } else {
-                // standard text
-                decoded = reportHtml
-            }
+        // Robust string-based unescaping to handle &lt; tags
+        // We run this first because DOMParser can be finicky with partial fragments
+        const unescapeMap: { [key: string]: string } = {
+            '&lt;': '<',
+            '&gt;': '>',
+            '&quot;': '"',
+            '&#039;': "'",
+            '&amp;': '&',
+            '&nbsp;': ' '
         }
+
+        // Multiple passes to handle double-escaping if necessary, 
+        // effectively executing unescapeHtml
+        decoded = decoded.replace(/&lt;|&gt;|&quot;|&#039;|&amp;|&nbsp;/g, function (s) {
+            return unescapeMap[s] || s
+        })
+
+        // Also handle the specific case seen in screenshot: &quot;
+        decoded = decoded.replace(/\\"/g, '"')
 
         // Handle newlines
         decoded = decoded.replace(/\\n/g, '<br />').replace(/\n/g, '<br />')
 
-        // Remove markdown code blocks if any (```html ... ```)
+        // Remove markdown code blocks
         decoded = decoded.replace(/```html/g, '').replace(/```/g, '')
 
         setContent(decoded)
@@ -109,7 +104,7 @@ export function ReportViewer({ reportHtml, clientName, date }: ReportViewerProps
                     <FileText className="h-4 w-4" />
                 </Button>
             </DialogTrigger>
-            <DialogContent className="!max-w-[95vw] !w-[95vw] !h-[95vh] flex flex-col p-0 gap-0 bg-[#0a0a0a] border-white/10 shadow-2xl duration-200 sm:rounded-xl overflow-hidden max-w-none">
+            <DialogContent className="max-w-5xl w-full h-[85vh] flex flex-col p-0 gap-0 bg-[#0a0a0a] border-white/10 shadow-2xl duration-200 sm:rounded-xl overflow-hidden">
                 <div className="flex items-center justify-between px-8 py-6 border-b border-white/5 bg-[#0a0a0a]">
                     <div className="flex flex-col gap-1">
                         <h2 className="text-2xl font-bold text-white tracking-tight">Call Analysis Report</h2>
