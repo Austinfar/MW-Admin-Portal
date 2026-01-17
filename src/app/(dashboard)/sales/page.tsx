@@ -75,6 +75,29 @@ export default function SalesPage() {
         }
     }
 
+    const handleDelete = async (id: string) => {
+        if (!confirm('Are you sure you want to delete this sales call log? This action cannot be undone.')) return
+
+        // Optimistic update
+        setLogs(logs.filter(log => log.id !== id))
+        toast.success('Log deleted')
+
+        try {
+            const { error } = await supabase
+                .from('sales_call_logs')
+                .delete()
+                .eq('id', id)
+
+            if (error) {
+                throw error
+            }
+        } catch (error) {
+            console.error('Delete error:', error)
+            toast.error('Failed to delete log')
+            fetchLogs() // Revert state on error
+        }
+    }
+
 
     useEffect(() => {
         fetchLogs()
