@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { FileText, Download, X } from 'lucide-react'
@@ -11,18 +11,60 @@ interface ReportViewerProps {
     date: string
 }
 
-import ReactMarkdown from 'react-markdown'
-
 export function ReportViewer({ reportHtml, clientName, date }: ReportViewerProps) {
     const [isOpen, setIsOpen] = useState(false)
+    const [content, setContent] = useState('')
+
+    useEffect(() => {
+        if (!reportHtml) {
+            setContent('')
+            return
+        }
+
+        // Helper to unescape HTML entities
+        const doc = new DOMParser().parseFromString(reportHtml, 'text/html')
+        let decoded = doc.documentElement.textContent || ''
+
+        // If decoding resulted in an empty string (unexpected) or didn't seem to decode tags,
+        // and reportHtml *looks* like it has tags, maybe it wasn't escaped?
+        // But the screenshot shows raw tags, so it WAS escaped.
+        // However, if we recursively unescape, we might fit it.
+        // Let's try a simple heuristic: if the original string starts with a tag like <div, 
+        // it doesn't need unescaping. If it starts with &lt or doesn't have <, it might.
+        // Actually, reliable decoding:
+        if (reportHtml.trim().startsWith('<')) {
+            // It's likely already raw HTML
+            decoded = reportHtml
+        } else if (decoded.trim().startsWith('<')) {
+            // Decoding worked and revealed tags
+        } else {
+            // Fallback: maybe it's just text or complex escaping. 
+            // Trust the decoding for now if it changed something.
+            if (reportHtml.includes('&lt;') && !decoded.includes('&lt;')) {
+                // decoded
+            } else {
+                // standard text
+                decoded = reportHtml
+            }
+        }
+
+        // Handle newlines
+        decoded = decoded.replace(/\\n/g, '<br />').replace(/\n/g, '<br />')
+
+        // Remove markdown code blocks if any (```html ... ```)
+        decoded = decoded.replace(/```html/g, '').replace(/```/g, '')
+
+        setContent(decoded)
+
+    }, [reportHtml])
 
     const handleDownload = () => {
-        if (!reportHtml) return
+        if (!content) return
 
         const printWindow = window.open('', '_blank')
         if (!printWindow) return
 
-        const content = `
+        const printContent = `
             <!DOCTYPE html>
             <html>
                 <head>
@@ -44,7 +86,7 @@ export function ReportViewer({ reportHtml, clientName, date }: ReportViewerProps
                     <p><strong>Client:</strong> ${clientName}</p>
                     <p><strong>Date:</strong> ${date}</p>
                     <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eaeaea;" />
-                    <div style="white-space: pre-wrap;">${reportHtml}</div>
+                    <div style="white-space: pre-wrap;">${content}</div>
                     <script>
                         window.onload = function() {
                             window.print();
@@ -54,7 +96,7 @@ export function ReportViewer({ reportHtml, clientName, date }: ReportViewerProps
             </html>
         `
 
-        printWindow.document.write(content)
+        printWindow.document.write(printContent)
         printWindow.document.close()
     }
 
@@ -67,7 +109,7 @@ export function ReportViewer({ reportHtml, clientName, date }: ReportViewerProps
                     <FileText className="h-4 w-4" />
                 </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-[95vw] w-full h-[95vh] flex flex-col p-0 gap-0 bg-[#0a0a0a] border-white/10 shadow-2xl duration-200 sm:rounded-xl overflow-hidden">
+            <DialogContent className="!max-w-[95vw] !w-[95vw] !h-[95vh] flex flex-col p-0 gap-0 bg-[#0a0a0a] border-white/10 shadow-2xl duration-200 sm:rounded-xl overflow-hidden max-w-none">
                 <div className="flex items-center justify-between px-8 py-6 border-b border-white/5 bg-[#0a0a0a]">
                     <div className="flex flex-col gap-1">
                         <h2 className="text-2xl font-bold text-white tracking-tight">Call Analysis Report</h2>
@@ -98,21 +140,24 @@ export function ReportViewer({ reportHtml, clientName, date }: ReportViewerProps
                 </div>
 
                 <div className="flex-1 overflow-y-auto bg-[#0f0f0f]">
-                    <div className="max-w-5xl mx-auto py-12 px-8">
-                        <div className="prose prose-invert prose-lg max-w-none 
+                    <div className="max-w-screen-2xl mx-auto py-12 px-8">
+                        <div className="prose prose-invert prose-lg max-w-none w-full
                             prose-headings:text-white prose-headings:font-bold prose-headings:tracking-tight
                             prose-p:text-gray-300 prose-p:leading-relaxed
                             prose-strong:text-white prose-strong:font-semibold
                             prose-ul:text-gray-300 prose-li:marker:text-green-500
                             prose-blockquote:border-l-green-500 prose-blockquote:bg-white/5 prose-blockquote:py-2 prose-blockquote:px-6 prose-blockquote:rounded-r-lg prose-blockquote:not-italic
-                            prose-a:text-green-400 prose-a:no-underline hover:prose-a:text-green-300 hover:prose-a:underline">
+                            prose-a:text-green-400 prose-a:no-underline hover:prose-a:text-green-300 hover:prose-a:underline
+                            prose-pre:bg-[#1a1a1a] prose-pre:border prose-pre:border-white/10
+                            prose-code:text-green-400 prose-code:bg-green-500/10 prose-code:px-1 prose-code:rounded
+                            [&_div.grid-3]:grid [&_div.grid-3]:grid-cols-1 [&_div.grid-3]:md:grid-cols-3 [&_div.grid-3]:gap-6
+                            [&_div.card]:bg-[#1a1a1a] [&_div.card]:p-6 [&_div.card]:rounded-xl [&_div.card]:border [&_div.card]:border-white/10
+                            [&_div.card-label]:text-sm [&_div.card-label]:text-gray-400 [&_div.card-label]:uppercase [&_div.card-label]:tracking-wider [&_div.card-label]:mb-2
+                            [&_div.card-value]:text-2xl [&_div.card-value]:font-bold [&_div.card-value]:text-white [&_div.card-value]:mb-1
+                            [&_div.card-sub]:text-sm [&_div.card-sub]:text-green-400">
                             <div
                                 dangerouslySetInnerHTML={{
-                                    __html: reportHtml
-                                        ? reportHtml
-                                            .replace(/\\n/g, '<br />')
-                                            .replace(/\n/g, '<br />')
-                                        : ''
+                                    __html: content
                                 }}
                             />
                         </div>
