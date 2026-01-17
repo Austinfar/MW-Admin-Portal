@@ -106,9 +106,15 @@ export function ReportViewer({ reportHtml, clientName, date }: ReportViewerProps
                             prose-ul:text-gray-300 prose-li:marker:text-green-500
                             prose-blockquote:border-l-green-500 prose-blockquote:bg-white/5 prose-blockquote:py-2 prose-blockquote:px-6 prose-blockquote:rounded-r-lg prose-blockquote:not-italic
                             prose-a:text-green-400 prose-a:no-underline hover:prose-a:text-green-300 hover:prose-a:underline">
-                            <ReactMarkdown>
-                                {reportHtml || ''}
-                            </ReactMarkdown>
+                            <div
+                                dangerouslySetInnerHTML={{
+                                    __html: reportHtml
+                                        ? reportHtml
+                                            .replace(/\\n/g, '<br />')
+                                            .replace(/\n/g, '<br />')
+                                        : ''
+                                }}
+                            />
                         </div>
                     </div>
                 </div>
