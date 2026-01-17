@@ -6,10 +6,14 @@ import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Calendar, CheckCircle2, MoreHorizontal, ArrowRight, User } from 'lucide-react'
+import { Calendar, CheckCircle2, MoreHorizontal, ArrowRight, User, Search, Filter, SortAsc } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { useRouter } from 'next/navigation'
+import { useState, useMemo } from 'react'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Dumbbell } from 'lucide-react'
 
 interface OnboardingClient extends Client {
     onboarding_progress?: {
@@ -25,6 +29,41 @@ interface OnboardingBoardProps {
 
 export function OnboardingBoard({ clients }: OnboardingBoardProps) {
     const router = useRouter()
+    const [searchTerm, setSearchTerm] = useState('')
+    const [filterCoach, setFilterCoach] = useState('all')
+    const [sortBy, setSortBy] = useState<'start_date' | 'name' | 'progress'>('start_date')
+
+    const coaches = useMemo(() => {
+        const uniqueCoaches = new Set<string>()
+        const coachList: { id: string, name: string }[] = []
+        clients.forEach(c => {
+            if (c.assigned_coach?.name && !uniqueCoaches.has(c.assigned_coach.name)) {
+                uniqueCoaches.add(c.assigned_coach.name)
+                coachList.push({ id: c.assigned_coach.name, name: c.assigned_coach.name }) // Using name as ID for simple filtering
+            }
+        })
+        return coachList
+    }, [clients])
+
+    const filteredClients = useMemo(() => {
+        return clients
+            .filter(client => {
+                const matchesSearch = client.name.toLowerCase().includes(searchTerm.toLowerCase())
+                const matchesCoach = filterCoach === 'all' || client.assigned_coach?.name === filterCoach
+                return matchesSearch && matchesCoach
+            })
+            .sort((a, b) => {
+                if (sortBy === 'name') return a.name.localeCompare(b.name)
+                if (sortBy === 'progress') {
+                    const progA = a.onboarding_progress?.percentage || 0
+                    const progB = b.onboarding_progress?.percentage || 0
+                    return progB - progA // Higher progress first
+                }
+                // Default start_date (newest first usually, or oldest?) - task says 'Sort by Start Date'
+                // Let's do newest first (desc) as default in most apps
+                return new Date(b.start_date || 0).getTime() - new Date(a.start_date || 0).getTime()
+            })
+    }, [clients, searchTerm, filterCoach, sortBy])
 
     if (clients.length === 0) {
         return (
@@ -44,10 +83,54 @@ export function OnboardingBoard({ clients }: OnboardingBoardProps) {
     }
 
     return (
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {clients.map((client) => (
-                <ClientOnboardingCard key={client.id} client={client} />
-            ))}
+        <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row gap-4 items-center justify-between bg-card/40 p-4 rounded-lg border border-border/40">
+                <div className="relative w-full sm:w-72">
+                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        placeholder="Search clients..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-8"
+                    />
+                </div>
+                <div className="flex gap-2 w-full sm:w-auto">
+                    <Select value={filterCoach} onValueChange={setFilterCoach}>
+                        <SelectTrigger className="w-[160px]">
+                            <Filter className="w-4 h-4 mr-2" />
+                            <SelectValue placeholder="All Coaches" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Coaches</SelectItem>
+                            {coaches.map(coach => (
+                                <SelectItem key={coach.id} value={coach.id}>{coach.name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
+                        <SelectTrigger className="w-[160px]">
+                            <SortAsc className="w-4 h-4 mr-2" />
+                            <SelectValue placeholder="Sort by" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="start_date">Start Date</SelectItem>
+                            <SelectItem value="name">Name</SelectItem>
+                            <SelectItem value="progress">Progress</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+            </div>
+
+            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                {filteredClients.map((client) => (
+                    <ClientOnboardingCard key={client.id} client={client} />
+                ))}
+            </div>
+            {filteredClients.length === 0 && (
+                <div className="text-center py-12 text-muted-foreground">
+                    No clients match your filter.
+                </div>
+            )}
         </div>
     )
 }
@@ -79,6 +162,12 @@ function ClientOnboardingCard({ client }: { client: OnboardingClient }) {
                         {progress.completed}/{progress.total} Tasks
                     </Badge>
                 </div>
+                {client.client_type && (
+                    <div className="flex items-center gap-1.5 mt-3 text-xs text-primary/80 font-medium bg-primary/5 p-1.5 rounded w-fit">
+                        <Dumbbell className="h-3 w-3" />
+                        {client.client_type.name}
+                    </div>
+                )}
             </CardHeader>
             <CardContent className="pb-3">
                 <div className="space-y-4">

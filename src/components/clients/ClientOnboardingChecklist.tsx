@@ -8,6 +8,12 @@ import { updateClientTaskStatus } from '@/lib/actions/onboarding'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { useState } from 'react'
+import { Plus, Loader2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { createAdHocTask } from '@/lib/actions/onboarding'
+import { toast } from 'sonner'
 
 interface ClientOnboardingChecklistProps {
     tasks: OnboardingTask[]
@@ -24,6 +30,27 @@ export function ClientOnboardingChecklist({ tasks, clientId }: ClientOnboardingC
         // But for status toggle, we want to keep optimistic state.
         // A better approach in production is using useOptimistic from React 18/Next 14,
         // but explicit state is fine here for now.
+    }
+
+    const [isAddTaskOpen, setIsAddTaskOpen] = useState(false)
+    const [isAddingTask, setIsAddingTask] = useState(false)
+    const [newTaskTitle, setNewTaskTitle] = useState('')
+
+    async function handleAddTask(e: React.FormEvent) {
+        e.preventDefault()
+        if (!newTaskTitle.trim()) return
+
+        setIsAddingTask(true)
+        const result = await createAdHocTask(clientId, newTaskTitle)
+        setIsAddingTask(false)
+
+        if (result.error) {
+            toast.error(result.error)
+        } else {
+            toast.success('Task added')
+            setNewTaskTitle('')
+            setIsAddTaskOpen(false)
+        }
     }
 
     async function toggleTask(taskId: string, currentStatus: string) {
@@ -47,10 +74,40 @@ export function ClientOnboardingChecklist({ tasks, clientId }: ClientOnboardingC
                     <CardTitle>Onboarding Tasks</CardTitle>
                     <CardDescription>No tasks assigned.</CardDescription>
                 </CardHeader>
-                <CardContent className="h-[200px] flex items-center justify-center text-muted-foreground border-dashed border-2 m-4 rounded-lg">
-                    No onboarding tasks assigned.
-                    {/* Add button to assign manually could go here later */}
+                <CardContent className="h-[200px] flex flex-col items-center justify-center text-muted-foreground border-dashed border-2 m-4 rounded-lg gap-4">
+                    <span>No onboarding tasks assigned.</span>
+                    <Button variant="outline" size="sm" onClick={() => setIsAddTaskOpen(true)}>
+                        <Plus className="h-4 w-4 mr-2" /> Add Task
+                    </Button>
                 </CardContent>
+                <Dialog open={isAddTaskOpen} onOpenChange={setIsAddTaskOpen}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Add Custom Task</DialogTitle>
+                            <DialogDescription>Add a one-off task for this client.</DialogDescription>
+                        </DialogHeader>
+                        <form onSubmit={handleAddTask}>
+                            <div className="grid gap-4 py-4">
+                                <div className="grid gap-2">
+                                    <Label htmlFor="emptyTaskTitle">Task Title</Label>
+                                    <Input
+                                        id="emptyTaskTitle"
+                                        value={newTaskTitle}
+                                        onChange={(e) => setNewTaskTitle(e.target.value)}
+                                        placeholder="e.g. Schedule kick-off call"
+                                        autoFocus
+                                    />
+                                </div>
+                            </div>
+                            <DialogFooter>
+                                <Button type="submit" disabled={isAddingTask}>
+                                    {isAddingTask && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                                    Add Task
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    </DialogContent>
+                </Dialog>
             </Card>
         )
     }
@@ -120,6 +177,41 @@ export function ClientOnboardingChecklist({ tasks, clientId }: ClientOnboardingC
                     </div>
                 )}
             </CardContent>
+            <div className="p-6 pt-0">
+                <Dialog open={isAddTaskOpen} onOpenChange={setIsAddTaskOpen}>
+                    <DialogTrigger asChild>
+                        <Button variant="outline" size="sm" className="w-full">
+                            <Plus className="h-4 w-4 mr-2" /> Add Custom Task
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Add Custom Task</DialogTitle>
+                            <DialogDescription>Add a one-off task for this client.</DialogDescription>
+                        </DialogHeader>
+                        <form onSubmit={handleAddTask}>
+                            <div className="grid gap-4 py-4">
+                                <div className="grid gap-2">
+                                    <Label htmlFor="taskTitle">Task Title</Label>
+                                    <Input
+                                        id="taskTitle"
+                                        value={newTaskTitle}
+                                        onChange={(e) => setNewTaskTitle(e.target.value)}
+                                        placeholder="e.g. Schedule kick-off call"
+                                        autoFocus
+                                    />
+                                </div>
+                            </div>
+                            <DialogFooter>
+                                <Button type="submit" disabled={isAddingTask}>
+                                    {isAddingTask && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                                    Add Task
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    </DialogContent>
+                </Dialog>
+            </div>
         </Card>
     )
 }

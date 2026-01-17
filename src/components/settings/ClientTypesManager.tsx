@@ -2,8 +2,10 @@
 
 import { useState } from 'react'
 import { ClientType } from '@/types/client'
+import { OnboardingTemplate } from '@/types/onboarding'
 import { createClientType, toggleClientTypeStatus, deleteClientType } from '@/lib/actions/settings'
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -16,9 +18,10 @@ import { toast } from 'sonner'
 
 interface ClientTypesManagerProps {
     initialTypes: ClientType[]
+    onboardingTemplates: OnboardingTemplate[]
 }
 
-export function ClientTypesManager({ initialTypes }: ClientTypesManagerProps) {
+export function ClientTypesManager({ initialTypes, onboardingTemplates }: ClientTypesManagerProps) {
     const [open, setOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
 
@@ -26,8 +29,9 @@ export function ClientTypesManager({ initialTypes }: ClientTypesManagerProps) {
         setIsLoading(true)
         const name = formData.get('name') as string
         const description = formData.get('description') as string
+        const templateId = formData.get('default_onboarding_template_id') as string
 
-        const result = await createClientType(name, description)
+        const result = await createClientType(name, description, templateId)
         setIsLoading(false)
 
         if (result.error) {
@@ -86,6 +90,20 @@ export function ClientTypesManager({ initialTypes }: ClientTypesManagerProps) {
                                 <div className="grid gap-2">
                                     <Label htmlFor="description">Description (Optional)</Label>
                                     <Textarea id="description" name="description" placeholder="Brief description of the program..." />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="default_onboarding_template_id">Default Onboarding Template</Label>
+                                    <Select name="default_onboarding_template_id">
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select a template (Optional)" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="none">No Template</SelectItem>
+                                            {onboardingTemplates.map(t => (
+                                                <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
                                 </div>
                             </div>
                             <DialogFooter>

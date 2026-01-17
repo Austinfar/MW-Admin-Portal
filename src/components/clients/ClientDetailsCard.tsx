@@ -5,11 +5,18 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Mail, Phone, Edit2, Save, X, Loader2, ExternalLink } from 'lucide-react';
-import { Client } from '@/types/client';
+import { Mail, Phone, Edit2, Save, X, Loader2, ExternalLink, Activity } from 'lucide-react';
+import { Client, ClientStatus } from '@/types/client';
 import { updateClient } from '@/lib/actions/clients';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 
 interface ClientDetailsCardProps {
     client: Client;
@@ -26,6 +33,7 @@ export function ClientDetailsCard({ client, ghlLocationId }: ClientDetailsCardPr
         email: client.email,
         phone: client.phone || '',
         stripe_customer_id: client.stripe_customer_id || '',
+        status: client.status
     });
 
     const handleSave = async () => {
@@ -95,6 +103,23 @@ export function ClientDetailsCard({ client, ghlLocationId }: ClientDetailsCardPr
                                 onChange={(e) => setFormData({ ...formData, stripe_customer_id: e.target.value })}
                                 placeholder="cus_..."
                             />
+                        </div>
+                        <div className="space-y-1">
+                            <Label htmlFor="status">Client Status</Label>
+                            <Select
+                                value={formData.status}
+                                onValueChange={(value: ClientStatus) => setFormData({ ...formData, status: value })}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="active">Active</SelectItem>
+                                    <SelectItem value="onboarding">Onboarding</SelectItem>
+                                    <SelectItem value="inactive">Inactive</SelectItem>
+                                    <SelectItem value="lost">Lost</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
                         <div className="flex gap-2 pt-2">
                             <Button size="sm" onClick={handleSave} disabled={isLoading}>

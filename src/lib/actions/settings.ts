@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 
-export async function createClientType(name: string, description: string | null) {
+export async function createClientType(name: string, description: string | null, defaultOnboardingTemplateId: string | null = null) {
     const supabase = await createClient()
 
     const { error } = await supabase
@@ -11,6 +11,7 @@ export async function createClientType(name: string, description: string | null)
         .insert({
             name,
             description,
+            default_onboarding_template_id: defaultOnboardingTemplateId === 'none' ? null : defaultOnboardingTemplateId,
             is_active: true
         })
 

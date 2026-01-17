@@ -1,0 +1,373 @@
+{
+  "name": "Sales Call Analyzer",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "c055762a-8fe7-4141-a639-df2372f30060",
+      "typeVersion": 1.1,
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "position": [
+        0,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "transcriptId": "={{ $json.query.split('::').pop() }}"
+      },
+      "type": "@firefliesai/n8n-nodes-fireflies.fireflies",
+      "typeVersion": 1,
+      "position": [
+        144,
+        448
+      ],
+      "id": "db8a8c19-dc61-42ee-afbd-931b23a6bacb",
+      "name": "Get a transcript",
+      "credentials": {
+        "firefliesApi": {
+          "id": "ISNxtKjsoW768JXr",
+          "name": "Fireflies account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "transcript",
+              "value": "={{ $('Get a transcript').item.json.data.sentences.map(s => s.speaker_name + ': ' + s.text).join('\\n') }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "meetingTitle",
+              "value": "={{ $('Get a transcript').item.json.data.title }}",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "duration",
+              "value": "={{ $('Get a transcript').item.json.data.duration }}",
+              "type": "number"
+            },
+            {
+              "id": "id-4",
+              "name": "participants",
+              "value": "={{ $('Get a transcript').item.json.data.participants.join(', ') }}",
+              "type": "string"
+            },
+            {
+              "id": "id-5",
+              "name": "date",
+              "value": "={{ $('Get a transcript').item.json.data.dateString }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a511d26d-24a5-4819-a892-3ae1ac50b2b4",
+      "name": "Prepare Transcript for AI",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        304,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyze this sales call transcript:\n\nMeeting: {{ $json.meetingTitle }}\nDate: {{ $json.date }}\nParticipants: {{ $json.participants }}\nDuration: {{ $json.duration }} minutes\nMeeting URL: {{ $('When Executed by Another Workflow').item.json.query }}\n\nTranscript:\n{{ $json.transcript }}",
+        "options": {
+          "systemMessage": "=You are the Lead Sales Quality Assurance Analyst for MW Fitness Coaching. Your goal is to review sales call transcripts and generate a structured, visually rich HTML Dashboard report.\n\n### CRITICAL INSTRUCTION: EXHAUSTIVE EXTRACTION\n**Before generating HTML, you must perform a full extraction pass:**\n1.  **Scan the ENTIRE transcript** from start to finish.\n2.  **Extract EVERY discovery question** that gathers information. Do not summarize. Do not truncate. Do not say \"and more questions were asked.\" If 15 questions were asked, you MUST output exactly 15 separate question entries in the HTML. Each question gets its own <div class=\"q-row\"> element. This is non-negotiable.\n3.  **Extract EVERY objection.** Even small hesitations count.\n4.  **Count \"Micro-Commitments\"** (e.g., \"Sound good?\", \"With me so far?\"). Grading scale: 0-1 = Bad; 2 = Average; 3+ = Great.\n5.  **Verify the 11 HARDCODED Discovery Topics** listed below.\n6.  **Analyze the PITCH** using the 8-point checklist.\n7. **Analyze the PROCESS** and grade the rep on how well they followed the sales_sop.\n8. **Determine OUTCOME** by checking if it was a Sale - Payment Made, Sale - Awaiting Payment, No Sale - Follow Up, or No Sale - Lost.\n\n\n### KNOWLEDGE RETRIEVAL\nUse your tools to pull:\n1. Sales SOP\n2. Offer Framework\n3. Objection Handling Scripts\n4. Discovery Questions\n\n### DISCOVERY QUESTION DEFINITIONS (Reference)\n1. Pain: Why are they on the call? What’s NOT currently working? \n2. Timing: When are they looking to get help?  Do they realistically have the bandwidth to participate right now? \n3. Finances: Can they afford it?  If not, are they willing to get resourceful to solve the problem? \n4. Partner/Decision-Maker: Does anyone else need to be involved in making a financial decision today? \n5. Current Situation:  Where are they RIGHT NOW before getting your help? \n6. Goals:  Where do they want to be in the next 90 days?  Where do they want to be in the next 6 months?  (Tie this to the length of your program) \n7. Past Attempts:  What have they tried in the past to fix this problem? \n8. Doubt:  Why can’t they just do it on their own or continue what they’re currently doing? \n9. Comparison:  What else are they considering right now?  Other coaches? Programs? Courses? Friends helping them? \n10. Support Expectations:  In an ideal world, what kind of support are they looking for?  1:1? Group? Accountability? Education? \n11. Trust:  Do they trust you and your company?  How much do they know about you?  How long have they been following you?\n\n\n### THE TEMPLATE (Return ONLY this HTML)\n\n<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n    <title>Sales Analysis Dashboard</title>\n    <style>\n        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');\n        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #334155; margin: 0; padding: 40px; -webkit-print-color-adjust: exact; }\n        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; }\n        .header h1 { margin: 0; color: #0f172a; font-size: 26px; font-weight: 700; }\n        .header .meta { font-size: 13px; color: #64748b; margin-top: 5px; }\n        .fireflies-btn { display: inline-flex; align-items: center; gap: 6px; background: #7c3aed; color: white; padding: 8px 14px; border-radius: 6px; font-size: 11px; font-weight: 700; text-decoration: none; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }\n        .badge { display: inline-block; padding: 6px 14px; border-radius: 99px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }\n        .badge-sale-paid { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }\n        .badge-sale-pending { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }\n        .badge-lost { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }\n        .badge-followup { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }\n        .page-break { page-break-before: always; }\n        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px; }\n        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }\n        .card-label { font-size: 10px; text-transform: uppercase; color: #94a3b8; font-weight: 700; margin-bottom: 5px; }\n        .card-value { font-size: 18px; font-weight: 600; color: #0f172a; }\n        .card-sub { font-size: 12px; color: #64748b; margin-top: 4px; }\n        .opening-box { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 30px; }\n        .opening-item { background: white; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; }\n        .opening-label { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 5px; }\n        .opening-grade { font-size: 16px; font-weight: 700; color: #0f172a; }\n        .opening-comment { font-size: 11px; color: #64748b; margin-top: 4px; }\n        .section-title { font-size: 14px; font-weight: 800; text-transform: uppercase; color: #1e293b; margin: 35px 0 15px 0; display: flex; align-items: center; gap: 10px; }\n        .section-title::before { content: ''; display: block; width: 4px; height: 16px; background: #3b82f6; border-radius: 2px; }\n        .process-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }\n        .process-item { background: white; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; display: flex; flex-direction: column; gap: 5px; }\n        .proc-label { font-size: 12px; font-weight: 700; color: #334155; }\n        .proc-status { font-size: 11px; color: #64748b; }\n        .proc-icon { font-size: 18px; font-weight: 900; align-self: flex-end; margin-top: -20px; }\n                .heatmap-container { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }\n                .heatmap-item { flex: 1 0 18%; text-align: center; padding: 12px 8px; border-radius: 8px; border: 1px solid; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; height: 45px; min-width: 120px; position: relative; }\n        .heatmap-covered { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }\n        .heatmap-missed { background: #fef2f2; border-color: #fecaca; color: #991b1b; }\n        .heatmap-tally { position: absolute; top: 4px; left: 6px; font-size: 9px; color: #64748b; letter-spacing: 1px; }\n        .heatmap-tooltip { display: flex; align-items: center; gap: 5px; font-size: 10px; color: #94a3b8; margin-bottom: 10px; }\n        .heatmap-tooltip::before { content: 'ℹ️'; }\n        .question-log { background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; margin-bottom: 20px; }\n        .q-row { padding-bottom: 15px; margin-bottom: 15px; border-bottom: 1px dashed #e2e8f0; }\n        .q-row:last-child { border: none; margin: 0; padding: 0; }\n        .q-meta { font-size: 10px; color: #94a3b8; font-weight: 700; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }\n        .q-tags { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }\n        .q-text { font-size: 13px; color: #334155; font-style: italic; margin-bottom: 6px; border-left: 3px solid #e2e8f0; padding-left: 10px; }\n        .q-context { font-size: 11px; color: #64748b; background: #f8fafc; padding: 5px; border-radius: 4px; }\n        .tag { display: inline-block; font-size: 9px; padding: 2px 6px; background: #eff6ff; color: #1e40af; border-radius: 4px; font-weight: 700; margin-right: 4px; border: 1px solid #dbeafe; }\n        .pitch-checklist { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }\n        .pitch-item { background: white; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }\n        .pitch-label { font-size: 12px; font-weight: 600; color: #334155; }\n        .pitch-status { font-size: 14px; font-weight: 800; }\n        .pitch-yes { color: #166534; }\n        .pitch-no { color: #991b1b; }\n        .pitch-quote-box { background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; margin-bottom: 20px; }\n        .pitch-quote-row { padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px dashed #e2e8f0; }\n        .pitch-timestamp { font-size: 10px; color: #94a3b8; font-weight: 700; margin-bottom: 4px; }\n        .pitch-quote-text { font-size: 13px; color: #334155; font-style: italic; border-left: 3px solid #7c3aed; padding-left: 10px; }\n        .pitch-comment { font-size: 11px; color: #64748b; background: #f8fafc; padding: 5px; border-radius: 4px; margin-top: 4px; }\n        .obj-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 20px; border-left: 4px solid #f59e0b; }\n        .obj-header { display: flex; justify-content: space-between; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #f1f5f9; }\n        .obj-meta { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; }\n        .obj-quote { font-size: 14px; font-weight: 600; color: #0f172a; margin-bottom: 15px; font-style: italic; }\n        .obj-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }\n        .obj-check { background: #f8fafc; padding: 10px; border-radius: 6px; font-size: 11px; }\n        .check-label { font-weight: 700; color: #334155; display: block; margin-bottom: 3px; }\n        .check-val { color: #64748b; }\n        .obj-handling { background: #eff6ff; padding: 10px; border-radius: 6px; font-size: 12px; color: #1e40af; margin-bottom: 10px; border: 1px solid #dbeafe; }\n        .obj-fix { background: #fffbeb; padding: 10px; border-radius: 6px; font-size: 12px; color: #b45309; border: 1px solid #fcd34d; }\n        .improvement-box { background: #fffbeb; border: 1px solid #fcd34d; padding: 15px; border-radius: 8px; margin-bottom: 20px; }\n        .improvement-title { color: #b45309; font-weight: 700; font-size: 13px; margin-bottom: 10px; }\n        .improvement-item { font-size: 13px; color: #78350f; margin-bottom: 6px; display: flex; gap: 8px; }\n        .action-box { background: #f1f5f9; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; }\n        .action-box li { margin-bottom: 6px; color: #334155; font-size: 14px; }\n    </style>\n</head>\n<body>\n    <!-- PAGE 1: OVERVIEW -->\n    <div class=\"header\">\n        <div>\n            <a href=\"{FIREFLIES_URL}\" target=\"_blank\" class=\"fireflies-btn\">View Full Recording</a>\n            <h1>Call Analysis Report</h1>\n            <div class=\"meta\">\n                <strong>Rep:</strong> {REP_NAME} <span style=\"color:#cbd5e1; margin:0 5px;\">|</span> \n                <strong>Lead:</strong> {LEAD_NAME} <span style=\"color:#cbd5e1; margin:0 5px;\">|</span> \n                {MEETING_DATE}\n            </div>\n        </div>\n        <div style=\"text-align: right;\">\n            {OUTCOME_BADGE_HTML}\n            <div style=\"margin-top: 5px; font-size: 12px; color: #94a3b8;\">{MEETING_LENGTH}</div>\n        </div>\n    </div>\n\n    <div class=\"grid-3\">\n        <div class=\"card\">\n            <div class=\"card-label\">Offer Presented</div>\n            <div class=\"card-value\" style=\"color: #2563eb;\">{OFFER_NAME_OR_NA}</div>\n            <div class=\"card-sub\">Pitch Price: {PITCH_PRICE}</div>\n        </div>\n        <div class=\"card\">\n            <div class=\"card-label\">Closing Terms</div>\n            <div class=\"card-value\">{AGREED_TERMS_OR_NO_SALE}</div>\n            <div class=\"card-sub\">Collected: {CASH_COLLECTED_IF_KNOWN}</div>\n        </div>\n        <div class=\"card\">\n            <div class=\"card-label\">SOP Adherence</div>\n            <div class=\"card-value\">{SOP_Adherence_Grade}</div>\n            <div class=\"card-sub\">{SOP_COMMENT}</div>\n        </div>\n    </div>\n\n    <div class=\"opening-box\">\n        <div class=\"opening-item\">\n            <div class=\"opening-label\">Rapport Building</div>\n            <div class=\"opening-grade\">{RAPPORT_GRADE}</div>\n            <div class=\"opening-comment\">{RAPPORT_COMMENT}</div>\n        </div>\n        <div class=\"opening-item\">\n            <div class=\"opening-label\">Call Framing</div>\n            <div class=\"opening-grade\">{FRAMING_GRADE}</div>\n            <div class=\"opening-comment\">{FRAMING_COMMENT}</div>\n        </div>\n        <div class=\"opening-item\">\n            <div class=\"opening-label\">Pain Bridge</div>\n            <div class=\"opening-grade\">{PAIN_BRIDGE_GRADE}</div>\n            <div class=\"opening-comment\">{PAIN_BRIDGE_COMMENT}</div>\n        </div>\n    </div>\n\n    <div class=\"section-title\">Process Mechanics</div>\n    <div class=\"process-grid\">\n        <div class=\"process-item\">\n            <div class=\"proc-label\">Did they Pitch?</div>\n            <div class=\"proc-status\">{PITCH_CONTEXT}</div>\n            <div class=\"proc-icon\">{YES_NO_ICON}</div>\n        </div>\n        <div class=\"process-item\">\n            <div class=\"proc-label\">Temp Check?</div>\n            <div class=\"proc-status\">{TEMP_CHECK_CONTEXT}</div>\n            <div class=\"proc-icon\">{YES_NO_ICON}</div>\n        </div>\n        <div class=\"process-item\">\n            <div class=\"proc-label\">Price Drop?</div>\n            <div class=\"proc-status\">{DROP_STRATEGY_COMMENT}</div>\n            <div class=\"proc-icon\">{YES_NO_ICON}</div>\n        </div>\n        <div class=\"process-item\" style=\"border-color: #dbeafe; background: #eff6ff;\">\n            <div class=\"proc-label\" style=\"color: #1e40af;\">Micro-Commits</div>\n            <div class=\"proc-status\">Count: {MICRO_COMMIT_COUNT}</div>\n            <div class=\"proc-icon\">{MICRO_COMMIT_GRADE}</div>\n        </div>\n    </div>\n\n    <div class=\"section-title\">Strategic Action Plan</div>\n    <div class=\"action-box\">\n        <ul style=\"margin: 0; padding-left: 20px;\">\n            <li>{SUGGESTION_1}</li>\n            <li>{SUGGESTION_2}</li>\n            <li>{SUGGESTION_3}</li>\n        </ul>\n        <div style=\"margin-top: 15px; padding-top: 10px; border-top: 1px solid #e2e8f0;\">\n            <strong>Next Steps:</strong> {AGREED_NEXT_STEPS}\n        </div>\n    </div>\n\n    <!-- PAGE 2: DISCOVERY -->\n    <div class=\"page-break\"></div>\n\n    <div class=\"section-title\">Discovery Review (11 Topics)</div>\n    \n    <div class=\"heatmap-tooltip\">Each dot (•) represents how many times this topic was explored during the call</div>\n    \n    <div class=\"heatmap-container\">\n        <!-- \n        AI INSTRUCTION FOR HEATMAP ITEMS:\n        \n        For EACH of the 11 topics, generate this structure:\n        \n        <div class=\"heatmap-item {heatmap-covered OR heatmap-missed}\">\n            <span class=\"heatmap-tally\">{DOTS}</span>\n            <span>{TOPIC_NAME}</span>\n        </div>\n        \n        NO ICONS. Just the tally dots in top-left and topic name centered.\n        The green/red background color indicates covered vs missed.\n\n        \n        TALLY LOGIC:\n        - Count how many questions touched this topic\n        - Display as dots: • = 1 time, •• = 2 times, ••• = 3 times, etc.\n        - If topic was NEVER covered, show \"—\" instead of dots\n        - Max display: ••••• (5 dots). If more than 5, show \"•••••+\"\n        \n        EXAMPLES:\n        - Pain asked 2x: <span class=\"heatmap-tally\">••</span>\n        - Trust asked 1x: <span class=\"heatmap-tally\">•</span>\n        - Comparison never asked: <span class=\"heatmap-tally\">—</span>\n        -->\n        \n        {HTML_FOR_TOPIC_PAIN}\n        {HTML_FOR_TOPIC_TIMING}\n        {HTML_FOR_TOPIC_FINANCES}\n        {HTML_FOR_TOPIC_PARTNER_DM}\n        {HTML_FOR_TOPIC_CURRENT_SITUATION}\n        {HTML_FOR_TOPIC_GOALS}\n        {HTML_FOR_TOPIC_PAST_ATTEMPTS}\n        {HTML_FOR_TOPIC_DOUBT}\n        {HTML_FOR_TOPIC_COMPARISON}\n        {HTML_FOR_TOPIC_SUPPORT}\n        {HTML_FOR_TOPIC_TRUST}\n    </div>\n\n\n    <div class=\"question-log\">\n        <div style=\"font-size: 11px; text-transform: uppercase; color: #94a3b8; font-weight: 700; margin-bottom: 15px; display:flex; justify-content:space-between;\">\n            <span>Complete Discovery Audit</span>\n            <span>{NUMBER_OF_DISCOVERY_QUESTIONS_ASKED} Discovery Questions Asked</span>\n        </div>\n        \n        <!-- \n        ############################################\n        ## CRITICAL: EXHAUSTIVE QUESTION LOGGING ##\n        ############################################\n        \n        AI INSTRUCTION: You MUST output EVERY SINGLE discovery question the rep asked.\n        \n        DO NOT summarize. DO NOT truncate. DO NOT say \"and X more questions...\"\n        \n        If the count above says 15 questions, there MUST be exactly 15 <div class=\"q-row\"> elements below.\n        \n        For EACH question, use this EXACT structure:\n        \n        <div class=\"q-row\">\n            <div class=\"q-meta\">\n                <span>[MM:SS]</span>\n                <div class=\"q-tags\">\n                    <span class=\"tag\">TOPIC_1</span>\n                    <span class=\"tag\">TOPIC_2</span>\n                </div>\n            </div>\n            <div class=\"q-text\">\"Exact question the rep asked...\"</div>\n            <div class=\"q-context\">{LEAD_FIRST_NAME} {PERSONALIZED_RESPONSE_SUMMARY}</div>\n        </div>\n        \n        TAG INSTRUCTIONS:\n        - Tags appear on the RIGHT side of the timestamp row\n        - If question covers 1 topic: show 1 tag\n        - If question covers 2+ topics: show ALL relevant tags side-by-side\n        - Example for multi-topic: <div class=\"q-tags\"><span class=\"tag\">PAIN</span><span class=\"tag\">GOALS</span></div>\n        \n        INSTRUCTIONS FOR LEAD RESPONSE:\n        - Use the lead's FIRST NAME (e.g., \"Corey\", \"Sarah\")\n        - Write in 3rd person narrative style\n        - Example: \"Corey expressed confusion and lack of direction in his fitness journey.\"\n        - Example: \"Sarah mentioned she's tried multiple apps but found them too rigid.\"\n        - DO NOT write \"Lead's Answer:\" or \"Response:\" - just the narrative.\n        \n        INSTRUCTIONS FOR TOPIC TAG:\n        - Show the Discovery Topic(s) in the top right as tags\n        - If multiple topics covered, show multiple tags: <span class=\"tag\">PAIN</span><span class=\"tag\">GOALS</span>\n        \n        REPEAT the above structure for ALL {NUMBER_OF_DISCOVERY_QUESTIONS_ASKED} questions.\n        \n        FAILURE TO LIST ALL QUESTIONS IS UNACCEPTABLE.\n        -->\n        \n        {ALL_DISCOVERY_QUESTIONS_HTML}\n    </div>\n\n\n    <div class=\"improvement-box\">\n        <div class=\"improvement-title\">⚡ Discovery Improvements</div>\n        <div class=\"improvement-item\"><span>•</span> {DISCOVERY_IMPROVEMENT_1}</div>\n        <div class=\"improvement-item\"><span>•</span> {DISCOVERY_IMPROVEMENT_2}</div>\n        <div class=\"improvement-item\"><span>•</span> {DISCOVERY_IMPROVEMENT_3}</div>\n    </div>\n    <!-- PAGE 3: PITCH ANALYSIS -->\n    <div class=\"page-break\"></div>\n\n    <div class=\"section-title\">Pitch Analysis</div>\n    \n    <!-- 8-POINT CHECKLIST -->\n    <div class=\"pitch-checklist\">\n        <div class=\"pitch-item\">\n            <div class=\"pitch-label\">Did They Pitch?</div>\n            <div class=\"pitch-status {PITCH_STATUS_CLASS}\">{PITCH_YES_NO}</div>\n        </div>\n        <div class=\"pitch-item\">\n            <div class=\"pitch-label\">Timing Correct? (Discovery First)</div>\n            <div class=\"pitch-status {TIMING_STATUS_CLASS}\">{TIMING_YES_NO}</div>\n        </div>\n        <div class=\"pitch-item\">\n            <div class=\"pitch-label\">Offer Presented Correctly?</div>\n            <div class=\"pitch-status {OFFER_STATUS_CLASS}\">{OFFER_YES_NO}</div>\n        </div>\n        <div class=\"pitch-item\">\n            <div class=\"pitch-label\">Tied to Goals/Pain?</div>\n            <div class=\"pitch-status {TIED_STATUS_CLASS}\">{TIED_YES_NO}</div>\n        </div>\n        <div class=\"pitch-item\">\n            <div class=\"pitch-label\">Used Scarcity/Urgency?</div>\n            <div class=\"pitch-status {SCARCITY_STATUS_CLASS}\">{SCARCITY_YES_NO}</div>\n        </div>\n        <div class=\"pitch-item\">\n            <div class=\"pitch-label\">Temp Check Before Pitch?</div>\n            <div class=\"pitch-status {TEMPCHECK_STATUS_CLASS}\">{TEMPCHECK_YES_NO}</div>\n        </div>\n        <div class=\"pitch-item\">\n            <div class=\"pitch-label\">Anchored High / Value First?</div>\n            <div class=\"pitch-status {ANCHOR_STATUS_CLASS}\">{ANCHOR_YES_NO}</div>\n        </div>\n        <div class=\"pitch-item\">\n            <div class=\"pitch-label\">Offered Payment Plans?</div>\n            <div class=\"pitch-status {PAYMENT_STATUS_CLASS}\">{PAYMENT_YES_NO}</div>\n        </div>\n    </div>\n\n    <!-- PITCH QUOTES WITH TIMESTAMPS -->\n    <div class=\"pitch-quote-box\">\n        <div style=\"font-size: 11px; text-transform: uppercase; color: #94a3b8; font-weight: 700; margin-bottom: 15px;\">Key Pitch Moments</div>\n        \n        <!-- AI: Extract 3-5 key moments from the pitch with timestamps -->\n        {PITCH_QUOTES_HTML}\n    </div>\n\n    <div class=\"improvement-box\">\n        <div class=\"improvement-title\">⚡ Pitch Improvements</div>\n        <div class=\"improvement-item\"><span>•</span> {PITCH_IMPROVEMENT_1}</div>\n        <div class=\"improvement-item\"><span>•</span> {PITCH_IMPROVEMENT_2}</div>\n        <div class=\"improvement-item\"><span>•</span> {PITCH_IMPROVEMENT_3}</div>\n    </div>\n\n    <!-- PAGE 4: OBJECTIONS -->\n    <div class=\"page-break\"></div>\n    \n    <div class=\"section-title\">Objection Analysis</div>\n    <div>\n        <!-- AI INSTRUCTION: Create one card for EACH objection. \n             CRITICAL: List ALL objections, even small hesitations.\n             Use this exact structure for each:\n        \n        <div class=\"obj-card\">\n            <div class=\"obj-header\">\n                <div class=\"obj-meta\">[MM:SS] {OBJECTION_TYPE}</div>\n                <div class=\"obj-meta\">TOPIC: {RELATED_DISCOVERY_TOPIC}</div>\n            </div>\n            <div class=\"obj-quote\">\"{OBJECTION_QUOTE}\"</div>\n            \n            <div class=\"obj-grid\">\n                <div class=\"obj-check\">\n<!-- AI INSTRUCTION: Did the rep isolate the objection and revert lead's thinking back to goal based thinking?\n                    <span class=\"check-label\">Isolate & Revert to Goals?</span>\n                    <span class=\"check-val\">{YES/NO} - {COMMENT}</span>\n                </div>\n                <div class=\"obj-check\">\n                    <span class=\"check-label\">Root Cause Uncovered?</span>\n                    <span class=\"check-val\">{YES/NO} - {COMMENT}</span>\n                </div>\n            </div>\n\n            <div class=\"obj-handling\"><strong>Handling:</strong> {HOW_REP_HANDLED}</div>\n            <div class=\"obj-fix\"><strong>💡 Improvement:</strong> {SPECIFIC_FIX}</div>\n        </div>\n        -->\n        {OBJECTION_CARDS_HTML}\n    </div>\n\n</body>\n</html>\n"
+        }
+      },
+      "id": "fe804474-36ba-47ac-81d4-5cbdb258c9a2",
+      "name": "Analyze Sales Call",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        544,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5.1",
+          "mode": "list",
+          "cachedResultName": "gpt-5.1"
+        },
+        "builtInTools": {},
+        "options": {
+          "temperature": 0.2,
+          "timeout": 200000
+        }
+      },
+      "id": "f12f8d53-1205-4ca0-8b05-cd0fdfd00b76",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        448,
+        656
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "pi3e5NP8bVZgPclm",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "URL/HTML to PDF",
+        "convertType": "htmlToPDF",
+        "html": "={{ $json.output }}",
+        "advancedOptions": {
+          "name": "={{ $('Prepare Transcript for AI').item.json.meetingTitle }}-Analysis ",
+          "mediaType": "screen"
+        }
+      },
+      "type": "n8n-nodes-pdfco.PDFco Api",
+      "typeVersion": 1,
+      "position": [
+        928,
+        448
+      ],
+      "id": "f89c73ea-a0c9-4836-a450-9021b1832c16",
+      "name": "PDFco Api",
+      "credentials": {
+        "pdfcoApi": {
+          "id": "XqRHYUuHbkAQFwRG",
+          "name": "PDF.co account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Use this tool to look up MW Fitness Coaching sales documentation including Sales SOP, Offer Framework, Objection Handling techniques, and Discovery Questions",
+        "tableName": {
+          "__rl": true,
+          "value": "sales_documents",
+          "mode": "list",
+          "cachedResultName": "sales_documents"
+        },
+        "topK": 10,
+        "options": {
+          "queryName": "match_sales_documents"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1.3,
+      "position": [
+        640,
+        688
+      ],
+      "id": "c95b7da2-b47e-4245-b664-334c04a45513",
+      "name": "Reference Sales Framework",
+      "credentials": {
+        "supabaseApi": {
+          "id": "vmfEYuZovTPqBuC1",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        640,
+        880
+      ],
+      "id": "d2fc939f-7a49-4f5b-bbdf-a9f380ab0b1d",
+      "name": "Embeddings OpenAI1",
+      "credentials": {
+        "openAiApi": {
+          "id": "pi3e5NP8bVZgPclm",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        944,
+        848
+      ],
+      "id": "49ae8e9a-18a2-416a-98bb-537e46b4a016",
+      "name": "Embeddings OpenAI2",
+      "credentials": {
+        "openAiApi": {
+          "id": "pi3e5NP8bVZgPclm",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Look up successful sales techniques from top performing calls",
+        "tableName": {
+          "__rl": true,
+          "value": "analysis_patterns",
+          "mode": "list",
+          "cachedResultName": "analysis_patterns"
+        },
+        "topK": 3,
+        "options": {
+          "queryName": "={{ $json.transcript }}"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1.3,
+      "position": [
+        944,
+        688
+      ],
+      "id": "8734f11a-677f-404b-bfbd-1b7de10a2efa",
+      "name": "Reference Top Performer Patterns",
+      "credentials": {
+        "supabaseApi": {
+          "id": "vmfEYuZovTPqBuC1",
+          "name": "Supabase account"
+        }
+      },
+      "disabled": true
+    }
+  ],
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "query": "https://app.fireflies.ai/view/Corey-Lehman-Consultation-Call::01KE89E94HRCMBA3C6R8K69ZEW"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Get a transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Transcript for AI": {
+      "main": [
+        [
+          {
+            "node": "Analyze Sales Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Analyze Sales Call",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Sales Call": {
+      "main": [
+        [
+          {
+            "node": "PDFco Api",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a transcript": {
+      "main": [
+        [
+          {
+            "node": "Prepare Transcript for AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings OpenAI1": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Reference Sales Framework",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings OpenAI2": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Reference Top Performer Patterns",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reference Sales Framework": {
+      "ai_tool": [
+        [
+          {
+            "node": "Analyze Sales Call",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reference Top Performer Patterns": {
+      "ai_tool": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "c420a7a2-2e8b-415b-863b-94579693d881",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "ad396560b72fda40779025836e6580c86eb4bc6374e0c091a313a49cd95d3d65"
+  },
+  "id": "YxmnN9FAMQ3LzQYR",
+  "tags": []
+}

@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { LayoutDashboard, Users, CheckSquare, DollarSign, LogOut, ChevronLeft, ChevronRight, CreditCard } from 'lucide-react'
+import { LayoutDashboard, Users, CheckSquare, DollarSign, LogOut, ChevronLeft, ChevronRight, CreditCard, PhoneCall } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useSidebar } from './SidebarContext'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -44,6 +44,12 @@ const routes = [
         icon: CreditCard,
         href: '/payment-links',
         color: 'text-blue-500',
+    },
+    {
+        label: 'Sales Call Analyzer',
+        icon: PhoneCall,
+        href: '/sales',
+        color: 'text-rose-500',
     },
 ]
 

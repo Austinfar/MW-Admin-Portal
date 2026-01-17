@@ -207,6 +207,16 @@ export async function updateClientTaskStatus(taskId: string, status: 'pending' |
         updateData.completed_at = null
     }
 
+    // 1. Get task details first to know the client_id
+    const { data: currentTask, error: fetchError } = await supabase
+        .from('onboarding_tasks')
+        .select('client_id, status')
+        .eq('id', taskId)
+        .single()
+
+    if (fetchError || !currentTask) return { error: 'Task not found' }
+
+    // 2. Update the task status
     const { error } = await supabase
         .from('onboarding_tasks')
         .update(updateData)
@@ -214,10 +224,62 @@ export async function updateClientTaskStatus(taskId: string, status: 'pending' |
 
     if (error) return { error: 'Failed to update task' }
 
-    revalidatePath('/clients') // Revalidate clients pages
+    // 3. Auto-complete client logic
+    if (status === 'completed') {
+        // Fetch all tasks for this client to check if all are done
+        const { data: allTasks } = await supabase
+            .from('onboarding_tasks')
+            .select('status')
+            .eq('client_id', currentTask.client_id)
+
+        const allCompleted = allTasks?.every(t => t.status === 'completed')
+
+        if (allCompleted) {
+            // Check current client status to ensure we only graduate 'onboarding' clients
+            const { data: client } = await supabase
+                .from('clients')
+                .select('status')
+                .eq('id', currentTask.client_id)
+                .single()
+
+            if (client?.status === 'onboarding') {
+                await supabase
+                    .from('clients')
+                    .update({ status: 'active' })
+                    .eq('id', currentTask.client_id)
+            }
+        }
+    }
+
+    revalidatePath('/clients')
+    revalidatePath(`/clients/${currentTask.client_id}`)
+    revalidatePath('/onboarding')
     return { success: true }
 }
 
+export async function createAdHocTask(clientId: string, taskTitle: string, dueDate?: string) {
+    const supabase = await createClient()
+
+    if (!taskTitle) return { error: 'Task title is required' }
+
+    const { error } = await supabase
+        .from('onboarding_tasks')
+        .insert({
+            client_id: clientId,
+            title: taskTitle,
+            status: 'pending',
+            due_date: dueDate || new Date().toISOString(), // Default to today if not set
+            created_at: new Date().toISOString()
+        })
+
+    if (error) {
+        console.error('Error creating ad-hoc task:', error)
+        return { error: 'Failed to create task' }
+    }
+
+    revalidatePath(`/clients/${clientId}`)
+    return { success: true }
+}
 
 export async function getOnboardingClients() {
     const supabase = await createClient()

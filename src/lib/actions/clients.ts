@@ -201,6 +201,19 @@ export async function updateClient(id: string, data: Partial<Client>) {
         }
     }
 
+    // 3. Auto-assign onboarding if client type changed
+    if (data.client_type_id) {
+        const { data: clientType } = await supabase
+            .from('client_types')
+            .select('default_onboarding_template_id')
+            .eq('id', data.client_type_id)
+            .single()
+
+        if (clientType?.default_onboarding_template_id) {
+            await assignTemplateToClient(id, clientType.default_onboarding_template_id)
+        }
+    }
+
     revalidatePath(`/clients/${id}`)
     revalidatePath('/clients')
     return { success: true }

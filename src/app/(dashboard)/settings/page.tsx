@@ -1,4 +1,5 @@
 import { getAllClientTypes } from '@/lib/actions/settings'
+import { getOnboardingTemplates } from '@/lib/actions/onboarding'
 import { ClientTypesManager } from '@/components/settings/ClientTypesManager'
 import { Separator } from '@/components/ui/separator'
 import { getGHLPipelines } from '@/lib/actions/ghl'
@@ -10,6 +11,7 @@ import { StripeSyncSettings } from '@/components/settings/StripeSyncSettings'
 
 export default async function SettingsPage() {
     const clientTypes = await getAllClientTypes()
+    const onboardingTemplates = await getOnboardingTemplates()
     const { pipelines } = await getGHLPipelines()
     const settings = await getAppSettings()
 
@@ -41,7 +43,7 @@ export default async function SettingsPage() {
                                 Configure the types of coaching services you offer.
                             </p>
                         </div>
-                        <ClientTypesManager initialTypes={clientTypes} />
+                        <ClientTypesManager initialTypes={clientTypes} onboardingTemplates={onboardingTemplates} />
 
                         <Separator />
 
@@ -51,17 +53,17 @@ export default async function SettingsPage() {
                                 Manage external service connections.
                             </p>
                         </div>
-                        
+
                         {/* API Connection Status */}
                         <ApiConnectionStatus />
-                        
+
                         {/* GoHighLevel Settings */}
                         <GHLConnectionSettings
                             initialAccessToken={settings['ghl_access_token']}
                             initialLocationId={settings['ghl_location_id']}
                         />
                         <GHLSyncSettings pipelines={pipelines} />
-                        
+
                         {/* Stripe Settings */}
                         <StripeSyncSettings />
                     </div>
