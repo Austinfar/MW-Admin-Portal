@@ -13,6 +13,22 @@ export async function POST(req: Request) {
             )
         }
 
+        // Validate URL domain
+        try {
+            const url = new URL(meeting_url)
+            if (!url.hostname.endsWith('fireflies.ai')) {
+                return NextResponse.json(
+                    { error: 'Invalid URL. Only Fireflies.ai recording URLs are currently supported.' },
+                    { status: 400 }
+                )
+            }
+        } catch (e) {
+            return NextResponse.json(
+                { error: 'Invalid URL format' },
+                { status: 400 }
+            )
+        }
+
         // 1. Create the detailed record immediately
         const { data: record, error: insertError } = await supabase
             .from('sales_call_logs')
