@@ -5,6 +5,8 @@ import { getGHLPipelines } from '@/lib/actions/ghl'
 import { GHLSyncSettings } from '@/components/settings/GHLSyncSettings'
 import { getAppSettings } from '@/lib/actions/app-settings'
 import { GHLConnectionSettings } from '@/components/settings/GHLConnectionSettings'
+import { ApiConnectionStatus } from '@/components/settings/ApiConnectionStatus'
+import { StripeSyncSettings } from '@/components/settings/StripeSyncSettings'
 
 export default async function SettingsPage() {
     const clientTypes = await getAllClientTypes()
@@ -49,11 +51,19 @@ export default async function SettingsPage() {
                                 Manage external service connections.
                             </p>
                         </div>
+                        
+                        {/* API Connection Status */}
+                        <ApiConnectionStatus />
+                        
+                        {/* GoHighLevel Settings */}
                         <GHLConnectionSettings
                             initialAccessToken={settings['ghl_access_token']}
                             initialLocationId={settings['ghl_location_id']}
                         />
                         <GHLSyncSettings pipelines={pipelines} />
+                        
+                        {/* Stripe Settings */}
+                        <StripeSyncSettings />
                     </div>
                 </div>
             </div>

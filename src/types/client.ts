@@ -1,4 +1,4 @@
-export type ClientStatus = 'active' | 'inactive' | 'lost'
+export type ClientStatus = 'active' | 'inactive' | 'lost' | 'onboarding'
 
 export interface Client {
     id: string

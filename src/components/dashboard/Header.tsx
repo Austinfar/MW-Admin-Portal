@@ -1,14 +1,48 @@
 'use client'
 
-import { Bell, Search } from 'lucide-react'
+import { Bell, Search, User, Settings, LogOut, Shield } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Sidebar } from './Sidebar'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { Menu } from 'lucide-react'
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import Link from 'next/link'
+import { useEffect, useState } from 'react'
+import { getCurrentUserProfile, UserProfile } from '@/lib/actions/profile'
 
 export function Header() {
+    const [profile, setProfile] = useState<UserProfile | null>(null);
+
+    useEffect(() => {
+        getCurrentUserProfile().then(setProfile);
+    }, []);
+
+    const getInitials = () => {
+        if (!profile) return 'U';
+        const nameParts = profile.name?.split(' ') || [];
+        const first = profile.first_name?.[0] || nameParts[0]?.[0] || '';
+        const last = profile.last_name?.[0] || nameParts[1]?.[0] || '';
+        return (first + last).toUpperCase() || profile.email?.[0]?.toUpperCase() || 'U';
+    };
+
+    const getRoleDisplay = (role: string) => {
+        switch (role) {
+            case 'admin': return 'Administrator';
+            case 'coach': return 'Coach';
+            case 'sales_closer': return 'Sales Closer';
+            default: return role;
+        }
+    };
+
     return (
         <div className="flex items-center p-6 border-b border-border/40 bg-background/50 backdrop-blur supports-[backdrop-filter]:bg-background/20">
             <div className="md:hidden">
@@ -18,20 +52,12 @@ export function Header() {
                             <Menu />
                         </Button>
                     </SheetTrigger>
-                    <SheetContent side="left" className="p-0 bg-sidebar text-sidebar-foreground border-r-border">
-                        <Sidebar />
+                    <SheetContent side="left" className="p-0 bg-sidebar text-sidebar-foreground border-r-border w-72">
+                        <Sidebar isMobile />
                     </SheetContent>
                 </Sheet>
             </div>
 
-            <div className="hidden md:flex flex-col">
-                <h2 className="text-2xl font-bold tracking-tight text-foreground">
-                    Welcome Back, John!
-                </h2>
-                <p className="text-muted-foreground text-sm">
-                    Here's what's happening with your clients today.
-                </p>
-            </div>
 
             <div className="ml-auto flex items-center space-x-4">
                 <div className="relative hidden md:block w-64">
@@ -50,10 +76,61 @@ export function Header() {
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
                     </span>
                 </Button>
-                <Avatar className="h-9 w-9 border-2 border-primary/20">
-                    <AvatarImage src="https://github.com/shadcn.png" alt="@shadcn" />
-                    <AvatarFallback>CN</AvatarFallback>
-                </Avatar>
+
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0">
+                            <Avatar className="h-9 w-9 border-2 border-primary/20 cursor-pointer hover:border-primary/50 transition-colors">
+                                <AvatarImage src={profile?.avatar_url || ''} alt={profile?.name || 'User'} />
+                                <AvatarFallback className="bg-primary/10 text-primary">
+                                    {getInitials()}
+                                </AvatarFallback>
+                            </Avatar>
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="w-56" align="end" forceMount>
+                        <DropdownMenuLabel className="font-normal">
+                            <div className="flex flex-col space-y-1">
+                                <p className="text-sm font-medium leading-none">
+                                    {profile?.name || 'User'}
+                                </p>
+                                <p className="text-xs leading-none text-muted-foreground">
+                                    {profile?.email}
+                                </p>
+                                {profile?.role && (
+                                    <div className="flex items-center gap-1 mt-1">
+                                        <Shield className="h-3 w-3 text-primary" />
+                                        <span className="text-xs text-primary">
+                                            {getRoleDisplay(profile.role)}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        </DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem asChild>
+                            <Link href="/profile" className="cursor-pointer">
+                                <User className="mr-2 h-4 w-4" />
+                                <span>Profile</span>
+                            </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                            <Link href="/settings" className="cursor-pointer">
+                                <Settings className="mr-2 h-4 w-4" />
+                                <span>Settings</span>
+                            </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem asChild>
+                            <form action="/auth/signout" method="post" className="w-full">
+                                <button type="submit" className="flex items-center w-full text-destructive">
+                                    <LogOut className="mr-2 h-4 w-4" />
+                                    <span>Log out</span>
+                                </button>
+                            </form>
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
             </div>
         </div>
     )

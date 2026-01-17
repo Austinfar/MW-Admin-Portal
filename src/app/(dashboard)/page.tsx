@@ -11,6 +11,16 @@ export default async function DashboardPage() {
 
     return (
         <div className="flex-1 space-y-6">
+            {/* Welcome Message - Dashboard Only */}
+            <div className="hidden md:block">
+                <h2 className="text-2xl font-bold tracking-tight text-foreground">
+                    Welcome Back, John!
+                </h2>
+                <p className="text-muted-foreground text-sm">
+                    Here's what's happening with your clients today.
+                </p>
+            </div>
+
             {/* Top Stats Row - "Crypto Ticker" Style */}
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
                 <Card className="bg-card/50 backdrop-blur-sm border-primary/10 hover:border-primary/30 transition-all duration-300">

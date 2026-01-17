@@ -82,5 +82,5 @@ export async function syncGHLContact(contactOrId: any, client?: GHLClient) {
         return { error: `DB Error: ${error.message}` }
     }
 
-    return { success: true, client: data }
+    return { success: true, client: data, stripeLinked: !!stripeCustomerId }
 }

@@ -2,6 +2,22 @@
 
 import { createAdminClient } from '@/lib/supabase/admin';
 import { revalidatePath, unstable_noStore } from 'next/cache';
+import { writeFileSync, readFileSync, existsSync } from 'fs';
+import { join } from 'path';
+
+export type SyncStatus = {
+    state: 'idle' | 'syncing' | 'completed' | 'error';
+    total: number;
+    processed: number;
+    synced: number;  // Actually successfully synced contacts
+    matched_stripe: number; // Contacts linked to a Stripe Customer
+    unmatched_stripe: number; // Contacts processed but no Stripe Match found
+    errors: number;
+    last_updated: string;
+};
+
+// Use a temp file to persist state across server action invocations
+const SYNC_STATUS_FILE = join(process.cwd(), '.sync-status.json');
 
 export async function getAppSettings() {
     unstable_noStore(); // Force dynamic fetch
@@ -51,48 +67,34 @@ export async function updateAppSetting(key: string, value: string) {
     return { success: true };
 }
 
-export type SyncStatus = {
-    state: 'idle' | 'syncing' | 'completed' | 'error';
-    total: number;
-    processed: number;
-    errors: number;
-    last_updated: string;
-};
-
 export async function getSyncStatus(): Promise<SyncStatus> {
-    const settings = await getAppSettings();
-    const rawStatus = settings['ghl_sync_status'];
-
-    if (!rawStatus) {
-        return {
-            state: 'idle',
-            total: 0,
-            processed: 0,
-            errors: 0,
-            last_updated: new Date().toISOString()
-        };
-    }
+    unstable_noStore(); // Prevent caching for real-time updates
 
     try {
-        return JSON.parse(rawStatus);
+        if (existsSync(SYNC_STATUS_FILE)) {
+            const content = readFileSync(SYNC_STATUS_FILE, 'utf-8');
+            return JSON.parse(content);
+        }
     } catch (e) {
-        return {
-            state: 'idle',
-            total: 0,
-            processed: 0,
-            errors: 0,
-            last_updated: new Date().toISOString()
-        };
+        // File doesn't exist or is invalid
     }
+
+    return {
+        state: 'idle',
+        total: 0,
+        processed: 0,
+        synced: 0,
+        matched_stripe: 0,
+        unmatched_stripe: 0,
+        errors: 0,
+        last_updated: new Date().toISOString()
+    };
 }
 
 export async function updateSyncStatus(status: SyncStatus) {
-    // Avoid revalidating path on every tick to prevent UI thrashing if we were using server components
-    // But since we are polling form client, we just need to update DB.
-    const supabase = createAdminClient();
-    await supabase.from('app_settings').upsert({
-        key: 'ghl_sync_status',
-        value: JSON.stringify(status),
-        updated_at: new Date().toISOString()
-    });
+    try {
+        writeFileSync(SYNC_STATUS_FILE, JSON.stringify(status), 'utf-8');
+    } catch (e) {
+        console.error('[Sync Status] Failed to write status file:', e);
+    }
 }

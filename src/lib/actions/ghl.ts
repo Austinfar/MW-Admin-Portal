@@ -4,6 +4,12 @@ import { GHLClient } from '@/lib/ghl/client';
 import { syncGHLContact } from '@/lib/ghl/sync';
 import { getAppSettings } from '@/lib/actions/app-settings';
 import { revalidatePath, revalidateTag } from 'next/cache';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { join } from 'path';
+
+// Cache file for pipelines (5 min TTL)
+const PIPELINES_CACHE_FILE = join(process.cwd(), '.pipelines-cache.json');
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 // Helper to get client with DB settings
 async function getAuthenticatedGHLClient() {
@@ -15,14 +21,48 @@ async function getAuthenticatedGHLClient() {
 }
 
 /**
- * Fetches all pipelines from GHL location.
+ * Fetches all pipelines from GHL location with caching to avoid rate limits.
  */
 export async function getGHLPipelines() {
+    // Try to read from cache first
+    try {
+        if (existsSync(PIPELINES_CACHE_FILE)) {
+            const cached = JSON.parse(readFileSync(PIPELINES_CACHE_FILE, 'utf-8'));
+            const age = Date.now() - cached.timestamp;
+            if (age < CACHE_TTL_MS && cached.pipelines?.length > 0) {
+                console.log('[GHL Info] Using cached pipelines (age: ' + Math.round(age / 1000) + 's)');
+                return { pipelines: cached.pipelines };
+            }
+        }
+    } catch (e) {
+        // Cache read failed, continue to API call
+    }
+
     const client = await getAuthenticatedGHLClient();
     const result = await client.getPipelines();
 
     if (!result || !result.pipelines) {
+        // On rate limit or error, try to return stale cache
+        try {
+            if (existsSync(PIPELINES_CACHE_FILE)) {
+                const cached = JSON.parse(readFileSync(PIPELINES_CACHE_FILE, 'utf-8'));
+                if (cached.pipelines?.length > 0) {
+                    console.log('[GHL Info] API failed, returning stale cache');
+                    return { pipelines: cached.pipelines, stale: true };
+                }
+            }
+        } catch (e) { }
         return { error: 'Failed to fetch pipelines', pipelines: [] };
+    }
+
+    // Cache the successful result
+    try {
+        writeFileSync(PIPELINES_CACHE_FILE, JSON.stringify({
+            pipelines: result.pipelines,
+            timestamp: Date.now()
+        }), 'utf-8');
+    } catch (e) {
+        console.error('[GHL Cache] Failed to write cache:', e);
     }
 
     return { pipelines: result.pipelines };
@@ -44,6 +84,9 @@ export async function syncGHLPipeline(pipelineId: string) {
         state: 'syncing',
         total: 0,
         processed: 0,
+        synced: 0,
+        matched_stripe: 0,
+        unmatched_stripe: 0,
         errors: 0,
         last_updated: new Date().toISOString()
     });
@@ -56,6 +99,9 @@ export async function syncGHLPipeline(pipelineId: string) {
             state: 'error',
             total: 0,
             processed: 0,
+            synced: 0,
+            matched_stripe: 0,
+            unmatched_stripe: 0,
             errors: 1,
             last_updated: new Date().toISOString()
         });
@@ -63,17 +109,41 @@ export async function syncGHLPipeline(pipelineId: string) {
     }
 
     const opportunities = result.opportunities;
+
+    // Deduplicate by Contact ID to avoid redundant syncs
+    const uniqueContacts = new Map();
+    for (const opp of opportunities) {
+        const contactId = typeof opp.contact === 'string'
+            ? opp.contact
+            : (opp.contact?.id || opp.contactId || opp.contact_id);
+
+        if (contactId && !uniqueContacts.has(contactId)) {
+            uniqueContacts.set(contactId, opp);
+        }
+    }
+
+    const uniqueOpps = Array.from(uniqueContacts.values());
+    const total = uniqueOpps.length;
+
+    console.log(`Starting sync for Pipeline ${pipelineId}. Found ${opportunities.length} opportunities, ${total} unique contacts.`);
+
+    if (total === 0) {
+        return { success: true, count: 0, errors: 0 };
+    }
+
     let syncedCount = 0;
     let errorCount = 0;
-    const total = opportunities.length;
-
-    console.log(`Starting sync for Pipeline ${pipelineId}. Found ${total} opportunities.`);
+    let matchedCount = 0;
+    let unmatchedCount = 0;
 
     // Initialize Sync Status with Total
     await updateSyncStatus({
         state: 'syncing',
         total: total,
         processed: 0,
+        synced: 0,
+        matched_stripe: 0,
+        unmatched_stripe: 0,
         errors: 0,
         last_updated: new Date().toISOString()
     });
@@ -83,8 +153,11 @@ export async function syncGHLPipeline(pipelineId: string) {
         console.log('[DEBUG] First Opportunity Structure:', JSON.stringify(opportunities[0], null, 2));
     }
 
-    // Loop
-    for (const [index, opp] of opportunities.entries()) {
+    // Small delay helper to avoid rate limiting
+    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+    // Loop through unique contacts
+    for (const [index, opp] of uniqueOpps.entries()) {
         const contactToSync = opp.contact || opp.contactId || opp.contact_id;
         const contactIdForLog = typeof contactToSync === 'string' ? contactToSync : (contactToSync?.id || 'unknown');
 
@@ -95,21 +168,28 @@ export async function syncGHLPipeline(pipelineId: string) {
                 errorCount++;
             } else {
                 syncedCount++;
+                if (syncResult.stripeLinked) {
+                    matchedCount++;
+                } else {
+                    unmatchedCount++;
+                }
             }
-        } else {
-            // Even if we skip, we count it as processed in terms of "items handled"
         }
 
-        // Update status every 5 items or last item
-        if ((index + 1) % 5 === 0 || index === total - 1) {
-            await updateSyncStatus({
-                state: 'syncing',
-                total: total,
-                processed: index + 1,
-                errors: errorCount,
-                last_updated: new Date().toISOString()
-            });
-        }
+        // Update status after every contact for real-time progress updates
+        await updateSyncStatus({
+            state: 'syncing',
+            total: total,
+            processed: index + 1,
+            synced: syncedCount,
+            matched_stripe: matchedCount,
+            unmatched_stripe: unmatchedCount,
+            errors: errorCount,
+            last_updated: new Date().toISOString()
+        });
+
+        // Small delay between requests to avoid rate limiting (100ms)
+        await delay(50);
     }
 
     const debugData = opportunities.length > 0 ? opportunities[0] : null;
@@ -119,6 +199,9 @@ export async function syncGHLPipeline(pipelineId: string) {
         state: 'completed',
         total: total,
         processed: total,
+        synced: syncedCount,
+        matched_stripe: matchedCount,
+        unmatched_stripe: unmatchedCount,
         errors: errorCount,
         last_updated: new Date().toISOString()
     });

@@ -29,25 +29,30 @@ export function DownloadCommissionReportButton({ data, currentDate }: DownloadCo
             doc.setFontSize(11)
             doc.text(`Week of: ${format(currentDate, 'MMMM d, yyyy')}`, 14, 30)
 
-            // Calculate Totals per Coach
-            const coachTotals: Record<string, number> = {}
+            // Calculate splits per Coach
+            const coachSplits: Record<string, { count: number; avgPercentage: number }> = {}
             data.forEach(item => {
                 const name = item.coach?.name || 'Unknown'
-                coachTotals[name] = (coachTotals[name] || 0) + Number(item.amount)
+                if (!coachSplits[name]) {
+                    coachSplits[name] = { count: 0, avgPercentage: 0 }
+                }
+                coachSplits[name].count += 1
+                coachSplits[name].avgPercentage += Number(item.split_percentage)
             })
 
             // Summary Table
             doc.setFontSize(14)
-            doc.text('Payout Summary', 14, 45)
+            doc.text('Summary by Coach', 14, 45)
 
-            const summaryBody = Object.entries(coachTotals).map(([name, total]) => [
+            const summaryBody = Object.entries(coachSplits).map(([name, stats]) => [
                 name,
-                new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(total)
+                stats.count.toString(),
+                `${(stats.avgPercentage / stats.count).toFixed(1)}%`
             ])
 
             autoTable(doc, {
                 startY: 50,
-                head: [['Coach', 'Total Payout']],
+                head: [['Coach', 'Total Splits', 'Avg Percentage']],
                 body: summaryBody,
                 theme: 'striped',
                 headStyles: { fillColor: [16, 185, 129] },
@@ -60,20 +65,19 @@ export function DownloadCommissionReportButton({ data, currentDate }: DownloadCo
             const detailBody = data.map(item => [
                 format(new Date(item.created_at), 'MMM d, HH:mm'),
                 item.coach?.name || 'Unknown',
-                item.role,
-                item.payment?.client?.name || 'Client',
-                new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(item.payment?.amount || 0),
-                `${item.percentage * 100}%`,
-                new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(item.amount)
+                item.role_in_sale.replace('_', ' '),
+                item.client?.name || 'Client',
+                `${item.split_percentage}%`,
+                item.notes || '-'
             ])
 
             autoTable(doc, {
                 startY: finalY + 20,
-                head: [['Date', 'Coach', 'Role', 'Client', 'Pay Amount', 'Rate', 'Commission']],
+                head: [['Date', 'Coach', 'Role', 'Client', 'Split %', 'Notes']],
                 body: detailBody,
                 theme: 'grid',
                 styles: { fontSize: 8 },
-                headStyles: { fillColor: [6, 78, 59] }, // Darker green for detail header
+                headStyles: { fillColor: [6, 78, 59] },
             })
 
             doc.save(`commission-report-${format(currentDate, 'yyyy-MM-dd')}.pdf`)

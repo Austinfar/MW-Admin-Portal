@@ -95,40 +95,41 @@ export class GHLClient {
             const nextUrl = response.meta?.nextPageUrl || response.meta?.nextPage || (response as any).nextPageUrl;
 
             if (nextUrl) {
-                // Next URL might be absolute or relative, handling both would be complex without a library, 
-                // but GHL often gives a full URL.
-                // However, request() prepends base URL. If nextUrl is full, we need to handle that.
-                // Simpler approach for Search endpoint usually supports 'startAfter' or 'startAfterId' from the last item
-                // IF nextUrl is not easily usable.
-                // BUT, let's try to just follow if we got a full page (100 items).
+                console.log(`[GHL DEBUG] Page ${page} received. Meta:`, response.meta);
 
-                // If we didn't receive a full page, we are likely done
-                if (response.opportunities.length < 100) {
-                    break;
-                }
+                let nextRequestUrl = '';
 
-                // If GHL returns a full text URL for next page (common in v2), we need to extract the query params or path.
-                // For now, let's assume we can continue if we received 100 items by using the 'startAfter' logic if specific meta isn't clear.
-                // Actually, let's stick to a robust simpler logic:
-                // If we got 100 items, verify if there's a simple 'startAfterId' or 'start_after' logic we can assume.
-                // WITHOUT DOCS, SAFE FALLBACK:
-                // Only fetching first 100 for now would be an improvement over 20.
-                // Let's rely on the user feedback if 100 is not enough or try to look for startAfter.
-
-                // For 'opportunities/search', often it uses `startAfterId`.
                 if (response.meta?.startAfterId) {
-                    url = `/opportunities/search?location_id=${this.locationId}&pipeline_id=${pipelineId}&limit=100&startAfterId=${response.meta.startAfterId}`;
+                    nextRequestUrl = `/opportunities/search?location_id=${this.locationId}&pipeline_id=${pipelineId}&limit=100&startAfterId=${response.meta.startAfterId}`;
                 } else if (response.meta?.nextPageUrl) {
-                    // If it gives a URL, it might be tricky to plug into our current request() helper which appends base.
-                    // Let's Parse properly.
                     const nextUrlObj = new URL(response.meta.nextPageUrl);
-                    // We just need the path and query
-                    url = `${nextUrlObj.pathname}${nextUrlObj.search}`;
-                } else {
-                    // No obvious next page token, break
+                    nextRequestUrl = `${nextUrlObj.pathname}${nextUrlObj.search}`;
+                } else if (response.opportunities.length === 100) {
+                    // Fallback: If we got a full page but no meta, try using the last item's ID as startAfterId
+                    const lastItem = response.opportunities[response.opportunities.length - 1];
+                    console.log('[GHL DEBUG] Page full (100 items), no meta.next. LastItem ID:', lastItem?.id);
+
+                    if (lastItem && lastItem.id) {
+                        console.log('[GHL DEBUG] Constructing manual next page URL using startAfterId:', lastItem.id);
+                        nextRequestUrl = `/opportunities/search?location_id=${this.locationId}&pipeline_id=${pipelineId}&limit=100&startAfterId=${lastItem.id}`;
+                    }
+                }
+
+                // If no next URL found, or if it's the exact same URL as before (infinite loop), break
+                if (!nextRequestUrl) {
+                    console.warn('[GHL Warning] No next page URL could be determined. Stopping.');
                     break;
                 }
+
+                if (nextRequestUrl === url) {
+                    console.warn('[GHL Warning] Pagination loop detected (URL did not change). Stopping.', { current: url, next: nextRequestUrl });
+                    break;
+                }
+
+                console.log('[GHL Info] Advancing to next page:', nextRequestUrl);
+                url = nextRequestUrl;
             } else {
+                console.log(`[GHL Info] No nextUrl trigger found for Page ${page}. Stopping.`);
                 break;
             }
 

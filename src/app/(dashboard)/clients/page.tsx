@@ -1,9 +1,12 @@
-import { getClients, getClientTypes } from '@/lib/actions/clients'
+import { getClients, getClientTypes, getCoaches } from '@/lib/actions/clients'
 import { ClientsTable } from '@/components/clients/ClientsTable'
 
 export default async function ClientsPage() {
-    const clients = await getClients()
-    const clientTypes = await getClientTypes()
+    const [clients, clientTypes, coaches] = await Promise.all([
+        getClients(),
+        getClientTypes(),
+        getCoaches()
+    ])
 
     return (
         <div className="flex-1 space-y-6">
@@ -15,7 +18,7 @@ export default async function ClientsPage() {
                     </p>
                 </div>
             </div>
-            <ClientsTable data={clients} clientTypes={clientTypes} />
+            <ClientsTable data={clients} clientTypes={clientTypes} coaches={coaches} />
         </div>
     )
 }

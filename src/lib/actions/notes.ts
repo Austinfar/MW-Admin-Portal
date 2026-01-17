@@ -1,15 +1,12 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 
-
-// I will use `createClient` from '@/utils/supabase/server' which is standard in this project (inferred from context, though I didn't explicitly check `src/lib/supabase`).
-// Actually, previous files used `import { updateClient } from '@/lib/actions/clients'` and `import { createClient } from '@/utils/supabase/server'` usually.
-// Let me double check `src/lib/actions/clients.ts` imports if possible, or just default to standard Supabase Server Action pattern.
-
 export async function getClientNotes(clientId: string) {
-    const supabase = await createClient()
+    // Use Admin Client to bypass RLS on users table (which has recursive policy issue)
+    const supabase = createAdminClient()
 
     const { data, error } = await supabase
         .from('client_notes')

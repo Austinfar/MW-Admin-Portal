@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Mail, Phone, Edit2, Save, X, Loader2 } from 'lucide-react';
+import { Mail, Phone, Edit2, Save, X, Loader2, ExternalLink } from 'lucide-react';
 import { Client } from '@/types/client';
 import { updateClient } from '@/lib/actions/clients';
 import { toast } from 'sonner';
@@ -13,9 +13,10 @@ import { useRouter } from 'next/navigation';
 
 interface ClientDetailsCardProps {
     client: Client;
+    ghlLocationId?: string;
 }
 
-export function ClientDetailsCard({ client }: ClientDetailsCardProps) {
+export function ClientDetailsCard({ client, ghlLocationId }: ClientDetailsCardProps) {
     const [isEditing, setIsEditing] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const router = useRouter();
@@ -24,6 +25,7 @@ export function ClientDetailsCard({ client }: ClientDetailsCardProps) {
         name: client.name,
         email: client.email,
         phone: client.phone || '',
+        stripe_customer_id: client.stripe_customer_id || '',
     });
 
     const handleSave = async () => {
@@ -85,6 +87,15 @@ export function ClientDetailsCard({ client }: ClientDetailsCardProps) {
                                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                             />
                         </div>
+                        <div className="space-y-1">
+                            <Label htmlFor="stripe_customer_id">Stripe Customer ID</Label>
+                            <Input
+                                id="stripe_customer_id"
+                                value={formData.stripe_customer_id}
+                                onChange={(e) => setFormData({ ...formData, stripe_customer_id: e.target.value })}
+                                placeholder="cus_..."
+                            />
+                        </div>
                         <div className="flex gap-2 pt-2">
                             <Button size="sm" onClick={handleSave} disabled={isLoading}>
                                 {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
@@ -111,15 +122,40 @@ export function ClientDetailsCard({ client }: ClientDetailsCardProps) {
                                 {client.phone || <span className="text-muted-foreground italic">N/A</span>}
                             </div>
                         </div>
+
                         <div className="space-y-1">
-                            <label className="text-xs font-medium text-muted-foreground">GHL Contact ID</label>
+                            <label className="text-xs font-medium text-muted-foreground">Stripe ID</label>
+                            <div className="flex items-center gap-2">
+                                <div className={`text-xs font-mono p-1.5 rounded overflow-hidden text-ellipsis border transition-colors flex-1 ${client.stripe_customer_id
+                                    ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                                    : 'bg-secondary/20 text-muted-foreground border-transparent'
+                                    }`}>
+                                    {client.stripe_customer_id || 'Not Linked'}
+                                </div>
+                            </div>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-xs font-medium text-muted-foreground flex items-center justify-between">
+                                <span>GHL Contact ID</span>
+                                {client.ghl_contact_id && ghlLocationId && (
+                                    <a
+                                        href={`https://app.gohighlevel.com/v2/location/${ghlLocationId}/contacts/detail/${client.ghl_contact_id}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-[10px] text-primary hover:underline flex items-center gap-1"
+                                    >
+                                        View in GHL
+                                        <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                )}
+                            </label>
                             <div className="text-xs font-mono bg-secondary/20 p-1.5 rounded text-muted-foreground overflow-hidden text-ellipsis border border-transparent hover:border-primary/10 transition-colors">
-                                {client.ghl_contact_id}
+                                {client.ghl_contact_id || 'Not Synced'}
                             </div>
                         </div>
                     </>
                 )}
             </CardContent>
-        </Card>
+        </Card >
     );
 }

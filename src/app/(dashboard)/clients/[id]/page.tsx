@@ -1,6 +1,7 @@
 import { getClient } from '@/lib/actions/clients'
 import { getClientTasks } from '@/lib/actions/onboarding'
 import { getClientNotes } from '@/lib/actions/notes'
+import { GHL_CONFIG } from '@/lib/ghl/config'
 import { notFound } from 'next/navigation'
 import { format } from 'date-fns'
 import { Calendar, Mail, Phone, CreditCard, CheckCircle2 } from 'lucide-react'
@@ -24,13 +25,6 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
     const client = await getClient(params.id)
     const tasksData = await getClientTasks(params.id)
     const tasks = (tasksData || []) as OnboardingTask[]
-    const paymentsData = await getClientPayments(params.id)
-    const payments = paymentsData || []
-
-    // Fetch notes
-    const notesData = await getClientNotes(params.id)
-    const notes = (notesData || []) as Note[]
-
     if (!client) {
         return (
             <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
@@ -40,6 +34,16 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
             </div>
         )
     }
+
+    const paymentsData = await getClientPayments(client.id, {
+        email: client.email,
+        stripeCustomerId: client.stripe_customer_id
+    })
+    const payments = paymentsData || []
+
+    // Fetch notes
+    const notesData = await getClientNotes(params.id)
+    const notes = (notesData || []) as Note[]
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -89,7 +93,7 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-200px)]">
                 {/* Left Column: Identity & Contact (3 cols) */}
                 <div className="lg:col-span-3 space-y-6">
-                    <ClientDetailsCard client={client} />
+                    <ClientDetailsCard client={client} ghlLocationId={GHL_CONFIG.LOCATION_ID} />
 
                     <Card className="bg-card/40 border-primary/5 backdrop-blur-sm">
                         <CardHeader>
@@ -168,7 +172,11 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
                         </CardHeader>
                         <CardContent>
                             <div className="mb-4">
-                                <div className="text-2xl font-bold text-emerald-500">$0.00</div>
+                                <div className="text-2xl font-bold text-emerald-500">
+                                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
+                                        payments.reduce((sum, p) => sum + p.amount, 0)
+                                    )}
+                                </div>
                                 <p className="text-xs text-muted-foreground">Lifetime Revenue</p>
                             </div>
                             <Separator className="my-4 bg-primary/10" />

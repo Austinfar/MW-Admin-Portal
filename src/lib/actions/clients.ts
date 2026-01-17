@@ -76,6 +76,31 @@ export async function getClientTypes() {
     return data
 }
 
+export interface Coach {
+    id: string
+    name: string
+    email: string
+    role: string
+}
+
+export async function getCoaches(): Promise<Coach[]> {
+    const supabase = createAdminClient()
+
+    const { data, error } = await supabase
+        .from('users')
+        .select('id, name, email, role')
+        .eq('is_active', true)
+        .in('role', ['coach', 'admin'])
+        .order('name', { ascending: true })
+
+    if (error) {
+        console.error('Error fetching coaches:', error)
+        return []
+    }
+
+    return data as Coach[]
+}
+
 import { assignTemplateToClient } from './onboarding'
 
 // ... existing imports
@@ -144,7 +169,8 @@ export async function updateClient(id: string, data: Partial<Client>) {
             status: data.status,
             contract_end_date: data.contract_end_date,
             client_type_id: data.client_type_id,
-            assigned_coach_id: data.assigned_coach_id
+            assigned_coach_id: data.assigned_coach_id,
+            stripe_customer_id: data.stripe_customer_id
         })
         .eq('id', id)
 

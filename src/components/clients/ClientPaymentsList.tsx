@@ -32,8 +32,8 @@ export function ClientPaymentsList({ payments }: ClientPaymentsListProps) {
                     {payments.map((payment) => (
                         <div key={payment.id} className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
                             <div>
-                                <p className="font-medium text-sm">{payment.description || 'Payment'}</p>
-                                <p className="text-xs text-muted-foreground">{format(new Date(payment.created), 'PPP')}</p>
+                                <p className="font-medium text-sm">{payment.product_name || 'Payment'}</p>
+                                <p className="text-xs text-muted-foreground">{format(new Date(payment.payment_date), 'PPP')}</p>
                             </div>
                             <div className="text-right">
                                 <p className="font-medium text-sm">

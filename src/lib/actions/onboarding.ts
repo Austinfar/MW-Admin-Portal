@@ -218,3 +218,38 @@ export async function updateClientTaskStatus(taskId: string, status: 'pending' |
     return { success: true }
 }
 
+
+export async function getOnboardingClients() {
+    const supabase = await createClient()
+    const { data, error } = await supabase
+        .from('clients')
+        .select(`
+            *,
+            assigned_coach:users!clients_assigned_coach_id_fkey(name, email),
+            client_type:client_types(name),
+            onboarding_tasks(id, status)
+        `)
+        .eq('status', 'onboarding')
+        .order('start_date', { ascending: false })
+
+    if (error) {
+        console.error('Error fetching onboarding clients:', error)
+        return []
+    }
+
+    // Transform and calculate progress
+    return data.map((client: any) => {
+        const totalTasks = client.onboarding_tasks?.length || 0
+        const completedTasks = client.onboarding_tasks?.filter((t: any) => t.status === 'completed').length || 0
+        const progress = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0
+
+        return {
+            ...client,
+            onboarding_progress: {
+                total: totalTasks,
+                completed: completedTasks,
+                percentage: Math.round(progress)
+            }
+        }
+    })
+}

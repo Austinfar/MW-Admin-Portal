@@ -6,12 +6,23 @@ CREATE TABLE public.users (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     email TEXT UNIQUE NOT NULL,
     name TEXT NOT NULL,
+    first_name TEXT,
+    last_name TEXT,
+    phone TEXT,
+    avatar_url TEXT,
     role TEXT CHECK (role IN ('admin', 'coach', 'sales_closer')) NOT NULL DEFAULT 'coach',
     ghl_user_id TEXT,
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- Migration for existing databases (run this if users table already exists):
+-- ALTER TABLE public.users 
+-- ADD COLUMN IF NOT EXISTS first_name TEXT,
+-- ADD COLUMN IF NOT EXISTS last_name TEXT,
+-- ADD COLUMN IF NOT EXISTS phone TEXT,
+-- ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 
 -- CLIENT TYPES TABLE
 CREATE TABLE public.client_types (

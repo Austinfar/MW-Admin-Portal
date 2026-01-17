@@ -2,12 +2,14 @@ export interface Payment {
     id: string
     stripe_payment_id: string
     amount: number
-    currency: string
+    currency?: string
     status: string
-    created: string
-    client_email: string | null
-    stripe_customer_id: string | null
+    client_email?: string | null
+    stripe_customer_id?: string | null
     client_id: string | null
-    description: string | null
+    product_name?: string | null
+    payment_date: string
+    commission_calculated?: boolean
     created_at: string
+    clients?: { name: string } | null
 }

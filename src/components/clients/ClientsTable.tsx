@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import {
     Table,
     TableBody,
@@ -20,25 +20,102 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { MoreHorizontal, Filter } from 'lucide-react'
+import { MoreHorizontal, Filter, X, Check, CreditCard } from 'lucide-react'
 import { Client, ClientType } from '@/types/client'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { AddClientDialog } from './AddClientDialog'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
+import { Separator } from '@/components/ui/separator'
+import { Coach } from '@/lib/actions/clients'
 
 interface ClientsTableProps {
     data: Client[]
     clientTypes: ClientType[]
+    coaches: Coach[]
 }
 
-export function ClientsTable({ data, clientTypes }: ClientsTableProps) {
+interface Filters {
+    statuses: string[]
+    programs: string[]
+    coaches: string[]
+    leadSources: string[]
+}
+
+const STATUSES = [
+    { value: 'active', label: 'Active', color: 'bg-emerald-500' },
+    { value: 'inactive', label: 'Inactive', color: 'bg-gray-500' },
+    { value: 'lost', label: 'Lost', color: 'bg-red-500' },
+]
+
+const LEAD_SOURCES = [
+    { value: 'coach_driven', label: 'Coach Driven' },
+    { value: 'company_driven', label: 'Company Driven' },
+]
+
+export function ClientsTable({ data, clientTypes, coaches }: ClientsTableProps) {
     const [searchTerm, setSearchTerm] = useState('')
+    const [filters, setFilters] = useState<Filters>({
+        statuses: [],
+        programs: [],
+        coaches: [],
+        leadSources: [],
+    })
+    const [isFilterOpen, setIsFilterOpen] = useState(false)
     const router = useRouter()
 
-    const filteredData = data.filter((client) =>
-        client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        client.email.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    const activeFilterCount = useMemo(() => {
+        return filters.statuses.length + filters.programs.length + filters.coaches.length + filters.leadSources.length
+    }, [filters])
+
+    const filteredData = useMemo(() => {
+        return data.filter((client) => {
+            // Search filter
+            const matchesSearch = searchTerm === '' ||
+                client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                client.email.toLowerCase().includes(searchTerm.toLowerCase())
+
+            // Status filter
+            const matchesStatus = filters.statuses.length === 0 ||
+                filters.statuses.includes(client.status)
+
+            // Program filter
+            const matchesProgram = filters.programs.length === 0 ||
+                (client.client_type_id && filters.programs.includes(client.client_type_id)) ||
+                (filters.programs.includes('unassigned') && !client.client_type_id)
+
+            // Coach filter
+            const matchesCoach = filters.coaches.length === 0 ||
+                (client.assigned_coach_id && filters.coaches.includes(client.assigned_coach_id)) ||
+                (filters.coaches.includes('unassigned') && !client.assigned_coach_id)
+
+            // Lead source filter
+            const matchesLeadSource = filters.leadSources.length === 0 ||
+                (client.lead_source && filters.leadSources.includes(client.lead_source))
+
+            return matchesSearch && matchesStatus && matchesProgram && matchesCoach && matchesLeadSource
+        })
+    }, [data, searchTerm, filters])
+
+    const toggleFilter = (category: keyof Filters, value: string) => {
+        setFilters(prev => ({
+            ...prev,
+            [category]: prev[category].includes(value)
+                ? prev[category].filter(v => v !== value)
+                : [...prev[category], value]
+        }))
+    }
+
+    const clearFilters = () => {
+        setFilters({
+            statuses: [],
+            programs: [],
+            coaches: [],
+            leadSources: [],
+        })
+    }
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -63,11 +140,182 @@ export function ClientsTable({ data, clientTypes }: ClientsTableProps) {
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="max-w-sm bg-background border-border"
                     />
-                    <Button variant="outline" size="icon">
-                        <Filter className="h-4 w-4" />
-                    </Button>
+                    <Popover open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+                        <PopoverTrigger asChild>
+                            <Button variant="outline" size="icon" className="relative">
+                                <Filter className="h-4 w-4" />
+                                {activeFilterCount > 0 && (
+                                    <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-[10px] font-medium text-primary-foreground flex items-center justify-center">
+                                        {activeFilterCount}
+                                    </span>
+                                )}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80" align="start">
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <h4 className="font-medium">Filters</h4>
+                                    {activeFilterCount > 0 && (
+                                        <Button variant="ghost" size="sm" onClick={clearFilters} className="h-auto py-1 px-2 text-xs">
+                                            Clear all
+                                        </Button>
+                                    )}
+                                </div>
+
+                                {/* Status Filter */}
+                                <div className="space-y-2">
+                                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</Label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {STATUSES.map(status => (
+                                            <Button
+                                                key={status.value}
+                                                variant={filters.statuses.includes(status.value) ? "default" : "outline"}
+                                                size="sm"
+                                                onClick={() => toggleFilter('statuses', status.value)}
+                                                className="h-8 text-xs justify-start"
+                                            >
+                                                <div className={`w-2 h-2 rounded-full mr-2 ${status.color}`} />
+                                                {status.label}
+                                            </Button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <Separator />
+
+                                {/* Program Filter */}
+                                <div className="space-y-2">
+                                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Program</Label>
+                                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                                        <div className="flex items-center space-x-2">
+                                            <Checkbox
+                                                id="program-unassigned"
+                                                checked={filters.programs.includes('unassigned')}
+                                                onCheckedChange={() => toggleFilter('programs', 'unassigned')}
+                                            />
+                                            <label htmlFor="program-unassigned" className="text-sm text-muted-foreground italic cursor-pointer">
+                                                Unassigned
+                                            </label>
+                                        </div>
+                                        {clientTypes.map(type => (
+                                            <div key={type.id} className="flex items-center space-x-2">
+                                                <Checkbox
+                                                    id={`program-${type.id}`}
+                                                    checked={filters.programs.includes(type.id)}
+                                                    onCheckedChange={() => toggleFilter('programs', type.id)}
+                                                />
+                                                <label htmlFor={`program-${type.id}`} className="text-sm cursor-pointer">
+                                                    {type.name}
+                                                </label>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <Separator />
+
+                                {/* Coach Filter */}
+                                <div className="space-y-2">
+                                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Assigned Coach</Label>
+                                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                                        <div className="flex items-center space-x-2">
+                                            <Checkbox
+                                                id="coach-unassigned"
+                                                checked={filters.coaches.includes('unassigned')}
+                                                onCheckedChange={() => toggleFilter('coaches', 'unassigned')}
+                                            />
+                                            <label htmlFor="coach-unassigned" className="text-sm text-muted-foreground italic cursor-pointer">
+                                                Unassigned
+                                            </label>
+                                        </div>
+                                        {coaches.map(coach => (
+                                            <div key={coach.id} className="flex items-center space-x-2">
+                                                <Checkbox
+                                                    id={`coach-${coach.id}`}
+                                                    checked={filters.coaches.includes(coach.id)}
+                                                    onCheckedChange={() => toggleFilter('coaches', coach.id)}
+                                                />
+                                                <label htmlFor={`coach-${coach.id}`} className="text-sm cursor-pointer">
+                                                    {coach.name}
+                                                </label>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <Separator />
+
+                                {/* Lead Source Filter */}
+                                <div className="space-y-2">
+                                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Lead Source</Label>
+                                    <div className="flex gap-2">
+                                        {LEAD_SOURCES.map(source => (
+                                            <Button
+                                                key={source.value}
+                                                variant={filters.leadSources.includes(source.value) ? "default" : "outline"}
+                                                size="sm"
+                                                onClick={() => toggleFilter('leadSources', source.value)}
+                                                className="h-8 text-xs"
+                                            >
+                                                {source.label}
+                                            </Button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </PopoverContent>
+                    </Popover>
+
+                    {/* Active filter badges */}
+                    {activeFilterCount > 0 && (
+                        <div className="flex items-center gap-1 flex-wrap">
+                            {filters.statuses.map(status => (
+                                <Badge key={status} variant="secondary" className="gap-1 pr-1">
+                                    {status}
+                                    <button onClick={() => toggleFilter('statuses', status)} className="ml-1 hover:bg-muted rounded">
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                </Badge>
+                            ))}
+                            {filters.programs.map(programId => {
+                                const program = programId === 'unassigned' ? { name: 'Unassigned' } : clientTypes.find(t => t.id === programId)
+                                return (
+                                    <Badge key={programId} variant="secondary" className="gap-1 pr-1">
+                                        {program?.name || programId}
+                                        <button onClick={() => toggleFilter('programs', programId)} className="ml-1 hover:bg-muted rounded">
+                                            <X className="h-3 w-3" />
+                                        </button>
+                                    </Badge>
+                                )
+                            })}
+                            {filters.coaches.map(coachId => {
+                                const coach = coachId === 'unassigned' ? { name: 'Unassigned' } : coaches.find(c => c.id === coachId)
+                                return (
+                                    <Badge key={coachId} variant="secondary" className="gap-1 pr-1">
+                                        {coach?.name || coachId}
+                                        <button onClick={() => toggleFilter('coaches', coachId)} className="ml-1 hover:bg-muted rounded">
+                                            <X className="h-3 w-3" />
+                                        </button>
+                                    </Badge>
+                                )
+                            })}
+                            {filters.leadSources.map(source => (
+                                <Badge key={source} variant="secondary" className="gap-1 pr-1">
+                                    {source.replace('_', ' ')}
+                                    <button onClick={() => toggleFilter('leadSources', source)} className="ml-1 hover:bg-muted rounded">
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                </Badge>
+                            ))}
+                        </div>
+                    )}
                 </div>
                 <AddClientDialog clientTypes={clientTypes} />
+            </div>
+
+            {/* Results count */}
+            <div className="text-sm text-muted-foreground">
+                Showing {filteredData.length} of {data.length} clients
             </div>
 
             <div className="rounded-md border bg-card/40 border-primary/5 shadow-sm">
@@ -94,7 +342,15 @@ export function ClientsTable({ data, clientTypes }: ClientsTableProps) {
                                 <TableRow key={client.id} className="cursor-pointer hover:bg-muted/50 border-border/50" onClick={() => router.push(`/clients/${client.id}`)}>
                                     <TableCell>
                                         <div className="flex flex-col">
-                                            <span className="font-medium text-card-foreground">{client.name}</span>
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="font-medium text-card-foreground">{client.name}</span>
+                                                <div
+                                                    title={client.stripe_customer_id ? "Stripe Connected" : "No Stripe Account"}
+                                                    className={client.stripe_customer_id ? "text-emerald-500" : "text-muted-foreground/30"}
+                                                >
+                                                    <CreditCard className="h-3.5 w-3.5" />
+                                                </div>
+                                            </div>
                                             <span className="text-xs text-muted-foreground">{client.email}</span>
                                         </div>
                                     </TableCell>

@@ -3,8 +3,10 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { LayoutDashboard, Users, CheckSquare, DollarSign, Settings, LogOut } from 'lucide-react'
+import { LayoutDashboard, Users, CheckSquare, DollarSign, LogOut, ChevronLeft, ChevronRight, CreditCard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useSidebar } from './SidebarContext'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 const routes = [
     {
@@ -38,58 +40,133 @@ const routes = [
         color: 'text-orange-700',
     },
     {
-        label: 'Settings',
-        icon: Settings,
-        href: '/settings',
+        label: 'Payment Links',
+        icon: CreditCard,
+        href: '/payment-links',
+        color: 'text-blue-500',
     },
 ]
 
-export function Sidebar({ className }: { className?: string }) {
+export function Sidebar({ className, isMobile = false }: { className?: string; isMobile?: boolean }) {
     const pathname = usePathname()
+    const { isCollapsed, toggleSidebar } = useSidebar()
+
+    // Don't collapse on mobile sheet
+    const collapsed = isMobile ? false : isCollapsed
 
     return (
-        <div className={cn("space-y-4 py-4 flex flex-col h-full bg-sidebar text-sidebar-foreground border-r border-sidebar-border", className)}>
-            <div className="px-3 py-2 flex-1">
-                <Link href="/" className="flex items-center pl-3 mb-14">
-                    <div className="relative w-8 h-8 mr-4">
-                        {/* Logo placeholder - replace with actual logo */}
-                        <div className="absolute inset-0 bg-primary/20 rounded-lg blur-md animate-pulse" />
-                        <div className="relative w-full h-full bg-sidebar-accent rounded-lg border border-sidebar-border flex items-center justify-center font-bold text-lg text-primary">
-                            MW
+        <TooltipProvider delayDuration={0}>
+            <div className={cn(
+                "space-y-4 py-4 flex flex-col h-full bg-sidebar text-sidebar-foreground border-r border-sidebar-border transition-all duration-300",
+                collapsed ? "w-[72px]" : "w-72",
+                className
+            )}>
+                <div className={cn("py-2 flex-1", collapsed ? "px-2" : "px-3")}>
+                    <Link href="/" className={cn(
+                        "flex items-center mb-14 transition-all duration-300",
+                        collapsed ? "justify-center px-0" : "pl-3"
+                    )}>
+                        <div className={cn("relative w-8 h-8", collapsed ? "mr-0" : "mr-4")}>
+                            {/* Logo placeholder - replace with actual logo */}
+                            <div className="absolute inset-0 bg-primary/20 rounded-lg blur-md animate-pulse" />
+                            <div className="relative w-full h-full bg-sidebar-accent rounded-lg border border-sidebar-border flex items-center justify-center font-bold text-lg text-primary">
+                                MW
+                            </div>
                         </div>
+                        {!collapsed && (
+                            <h1 className="text-xl font-bold text-sidebar-foreground whitespace-nowrap">
+                                MW Fitness Coaching
+                            </h1>
+                        )}
+                    </Link>
+                    <div className="space-y-1">
+                        {routes.map((route) => {
+                            const linkContent = (
+                                <Link
+                                    key={route.href}
+                                    href={route.href}
+                                    className={cn(
+                                        "text-sm group flex p-3 w-full font-medium cursor-pointer rounded-lg transition duration-200",
+                                        collapsed ? "justify-center" : "justify-start",
+                                        pathname === route.href
+                                            ? "bg-primary text-primary-foreground shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+                                            : "text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+                                    )}
+                                >
+                                    <div className={cn("flex items-center", collapsed ? "justify-center" : "flex-1")}>
+                                        <route.icon className={cn(
+                                            "h-5 w-5",
+                                            collapsed ? "mr-0" : "mr-3",
+                                            pathname === route.href ? "text-primary-foreground" : route.color
+                                        )} />
+                                        {!collapsed && route.label}
+                                    </div>
+                                </Link>
+                            )
+
+                            if (collapsed) {
+                                return (
+                                    <Tooltip key={route.href}>
+                                        <TooltipTrigger asChild>
+                                            {linkContent}
+                                        </TooltipTrigger>
+                                        <TooltipContent side="right" className="bg-popover border-border">
+                                            {route.label}
+                                        </TooltipContent>
+                                    </Tooltip>
+                                )
+                            }
+
+                            return linkContent
+                        })}
                     </div>
-                    <h1 className="text-xl font-bold text-sidebar-foreground">
-                        MW Fitness Coaching
-                    </h1>
-                </Link>
-                <div className="space-y-1">
-                    {routes.map((route) => (
-                        <Link
-                            key={route.href}
-                            href={route.href}
+                </div>
+
+                {/* Collapse Toggle Button - only show on desktop */}
+                {!isMobile && (
+                    <div className={cn("px-3", collapsed && "px-2")}>
+                        <Button
+                            variant="ghost"
+                            onClick={toggleSidebar}
                             className={cn(
-                                "text-sm group flex p-3 w-full justify-start font-medium cursor-pointer rounded-lg transition duration-200",
-                                pathname === route.href
-                                    ? "bg-primary text-primary-foreground shadow-[0_0_20px_rgba(16,185,129,0.3)]"
-                                    : "text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+                                "w-full text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50",
+                                collapsed ? "justify-center px-0" : "justify-start"
                             )}
                         >
-                            <div className="flex items-center flex-1">
-                                <route.icon className={cn("h-5 w-5 mr-3", pathname === route.href ? "text-primary-foreground" : route.color)} />
-                                {route.label}
-                            </div>
-                        </Link>
-                    ))}
+                            {collapsed ? (
+                                <ChevronRight className="h-5 w-5" />
+                            ) : (
+                                <>
+                                    <ChevronLeft className="h-5 w-5 mr-3" />
+                                    Collapse
+                                </>
+                            )}
+                        </Button>
+                    </div>
+                )}
+
+                <div className={cn("px-3", collapsed && "px-2")}>
+                    <form action="/auth/signout" method="post">
+                        {collapsed ? (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button variant="ghost" className="w-full justify-center text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50 px-0">
+                                        <LogOut className="h-5 w-5" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="bg-popover border-border">
+                                    Logout
+                                </TooltipContent>
+                            </Tooltip>
+                        ) : (
+                            <Button variant="ghost" className="w-full justify-start text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50">
+                                <LogOut className="h-5 w-5 mr-3" />
+                                Logout
+                            </Button>
+                        )}
+                    </form>
                 </div>
             </div>
-            <div className="px-3">
-                <form action="/auth/signout" method="post">
-                    <Button variant="ghost" className="w-full justify-start text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50">
-                        <LogOut className="h-5 w-5 mr-3" />
-                        Logout
-                    </Button>
-                </form>
-            </div>
-        </div>
+        </TooltipProvider>
     )
 }

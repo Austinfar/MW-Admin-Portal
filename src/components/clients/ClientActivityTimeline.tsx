@@ -43,9 +43,9 @@ export function ClientActivityTimeline({ client, tasks, payments }: ClientActivi
         activities.push({
             id: p.id,
             type: 'payment',
-            date: new Date(p.created),
+            date: new Date(p.payment_date),
             title: `Payment: ${p.status}`,
-            description: `${new Intl.NumberFormat('en-US', { style: 'currency', currency: p.currency }).format(p.amount)} - ${p.description || 'Stripe Charge'}`,
+            description: `${new Intl.NumberFormat('en-US', { style: 'currency', currency: p.currency }).format(p.amount)} - ${p.product_name || 'Stripe Charge'}`,
             metadata: { status: p.status }
         })
     })

@@ -23,6 +23,9 @@
 # misc
 .DS_Store
 *.pem
+.sync-status.json
+.stripe-sync-status.json
+.pipelines-cache.json
 
 # debug
 npm-debug.log*

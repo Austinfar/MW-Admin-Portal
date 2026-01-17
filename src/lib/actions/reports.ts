@@ -1,31 +1,28 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { startOfWeek, endOfWeek, format, subWeeks } from 'date-fns'
 
 export interface CommissionReportItem {
     id: string
-    payment_id: string
-    coach_id: string
-    role: string
-    amount: number
-    percentage: number
+    client_id: string | null
+    user_id: string
+    role_in_sale: string
+    split_percentage: number
+    notes: string | null
     created_at: string
     coach: {
         name: string
         email: string
-    }
-    payment: {
-        amount: number
-        client_id: string | null
-        client: {
-            name: string
-        } | null
-    }
+    } | null
+    client: {
+        name: string
+    } | null
 }
 
 export async function getWeeklyCommissions(date: Date) {
-    const supabase = await createClient()
+    // Use Admin Client to bypass RLS on users table (which has recursive policy issue)
+    const supabase = createAdminClient()
     const start = startOfWeek(date, { weekStartsOn: 0 }).toISOString() // Sunday
     const end = endOfWeek(date, { weekStartsOn: 0 }).toISOString() // Saturday
 
@@ -33,12 +30,8 @@ export async function getWeeklyCommissions(date: Date) {
         .from('commission_splits')
         .select(`
             *,
-            coach:users(name, email),
-            payment:payments(
-                amount, 
-                client_id,
-                client:clients(name)
-            )
+            coach:users!commission_splits_user_id_fkey(name, email),
+            client:clients(name)
         `)
         .gte('created_at', start)
         .lte('created_at', end)

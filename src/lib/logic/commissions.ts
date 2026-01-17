@@ -44,37 +44,66 @@ export async function calculateCommission(paymentId: string) {
     // 3. Determine Rate
     let rate = 0
 
-    // Check if re-sign
-    if (client.is_resign) {
-        rate = getRate('commission_rate_resign') // e.g. 0.70
-    } else {
-        // Initial term logic
-        // Check date logic? "Initial 6 months".
-        // Let's compare payment.created (date) vs client.start_date
-        const paymentDate = new Date(payment.created)
-        const startDate = new Date(client.start_date)
-        const sixMonthsLater = new Date(startDate)
-        sixMonthsLater.setMonth(sixMonthsLater.getMonth() + 6)
+    // NEW: Check if coach has a specific override rate
+    // We need to fetch the coach's profile.
+    if (client.assigned_coach_id) {
+        const { data: coach } = await supabase
+            .from('users')
+            .select('commission_rate')
+            .eq('id', client.assigned_coach_id)
+            .single()
 
-        if (paymentDate > sixMonthsLater) {
-            // Post-initial term on a non-resign client? 
-            // Spec says: "Initial term" vs "Resign".
-            // If they are NOT resign, but past 6 months, maybe they should have resigned?
-            // Or maybe it falls back to a different rate?
-            // For now, let's assume if they are NOT resign, we treat them as "Initial term" bucket rules OR stop paying?
-            // "Commissions are calculated... during the first 6 months... or indefinitely for re-signed".
-            // So if NOT re-signed and > 6 months, rate might be 0?
-            // Let's log a warning and default to 0 for safety, or just apply resign rate?
-            // Let's stick to strict: if not resign and > 6mo, 0.
-            rate = 0
-            console.log('Commission Calc: Payment past 6 months for non-resign client. Rate = 0.')
+        if (coach && coach.commission_rate !== null && coach.commission_rate !== undefined) {
+            rate = Number(coach.commission_rate)
+            // If stored as percentage (e.g. 50), convert to decimal (0.50)
+            // If stored as decimal (0.50), use as is.
+            // Assumption: Stored as decimal based on 'commission_rate' naming.
+            // Let's assume standard decimal (0.50 = 50%).
+            console.log(`Commission Calc: Using coach specific rate: ${rate}`)
+
+            // If we found a specific rate, we skip the default logic?
+            // "if a user has a specific commission set up, use that." -> Yes.
+
+            // However, maybe re-sign logic still applies? 
+            // "Default commission should follow the general commission structure; if a user has a specific commission set up, use that."
+            // Usually specific overrides EVERYTHING.
+        }
+    }
+
+    // Only calculate default if no specific rate was found (rate is still 0)
+    if (rate === 0) {
+        // Check if re-sign
+        if (client.is_resign) {
+            rate = getRate('commission_rate_resign') // e.g. 0.70
         } else {
-            // Within 6 months
-            if (client.lead_source === 'company_driven') {
-                rate = getRate('commission_rate_company_lead') // 0.50
+            // Initial term logic
+            // Check date logic? "Initial 6 months".
+            // Let's compare payment.created (date) vs client.start_date
+            const paymentDate = new Date(payment.created)
+            const startDate = new Date(client.start_date)
+            const sixMonthsLater = new Date(startDate)
+            sixMonthsLater.setMonth(sixMonthsLater.getMonth() + 6)
+
+            if (paymentDate > sixMonthsLater) {
+                // Post-initial term on a non-resign client? 
+                // Spec says: "Initial term" vs "Resign".
+                // If they are NOT resign, but past 6 months, maybe they should have resigned?
+                // Or maybe it falls back to a different rate?
+                // For now, let's assume if they are NOT resign, we treat them as "Initial term" bucket rules OR stop paying?
+                // "Commissions are calculated... during the first 6 months... or indefinitely for re-signed".
+                // So if NOT re-signed and > 6 months, rate might be 0?
+                // Let's log a warning and default to 0 for safety, or just apply resign rate?
+                // Let's stick to strict: if not resign and > 6mo, 0.
+                rate = 0
+                console.log('Commission Calc: Payment past 6 months for non-resign client. Rate = 0.')
             } else {
-                // Coach driven (or null default?)
-                rate = getRate('commission_rate_coach_lead') // 0.70
+                // Within 6 months
+                if (client.lead_source === 'company_driven') {
+                    rate = getRate('commission_rate_company_lead') // 0.50
+                } else {
+                    // Coach driven (or null default?)
+                    rate = getRate('commission_rate_coach_lead') // 0.70
+                }
             }
         }
     }
