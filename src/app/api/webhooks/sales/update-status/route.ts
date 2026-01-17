@@ -25,7 +25,6 @@ export async function POST(req: Request) {
 
         const updateData: any = {
             status,
-            updated_at: new Date().toISOString()
         };
 
         if (status === 'completed' && report_html) {
