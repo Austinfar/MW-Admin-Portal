@@ -1,3 +1,4 @@
+
 'use client'
 
 import { Sidebar } from './Sidebar'
@@ -5,7 +6,14 @@ import { Header } from './Header'
 import { useSidebar } from './SidebarContext'
 import { cn } from '@/lib/utils'
 
-export function DashboardContent({ children }: { children: React.ReactNode }) {
+import { UserAccess } from '@/lib/auth-utils'
+
+interface DashboardContentProps {
+    children: React.ReactNode
+    userAccess?: UserAccess
+}
+
+export function DashboardContent({ children, userAccess }: DashboardContentProps) {
     const { isCollapsed } = useSidebar()
 
     return (
@@ -14,7 +22,7 @@ export function DashboardContent({ children }: { children: React.ReactNode }) {
                 "hidden h-full md:flex md:flex-col md:fixed md:inset-y-0 z-[80] transition-all duration-300",
                 isCollapsed ? "md:w-[72px]" : "md:w-72"
             )}>
-                <Sidebar />
+                <Sidebar userAccess={userAccess} />
             </div>
             <main className={cn(
                 "transition-all duration-300",

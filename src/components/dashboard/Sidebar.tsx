@@ -1,3 +1,4 @@
+
 'use client'
 
 import Link from 'next/link'
@@ -7,6 +8,7 @@ import { LayoutDashboard, Users, CheckSquare, DollarSign, LogOut, ChevronLeft, C
 import { Button } from '@/components/ui/button'
 import { useSidebar } from './SidebarContext'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { UserAccess } from '@/lib/auth-utils'
 
 const routes = [
     {
@@ -53,12 +55,40 @@ const routes = [
     },
 ]
 
-export function Sidebar({ className, isMobile = false }: { className?: string; isMobile?: boolean }) {
+export function Sidebar({ className, isMobile = false, userAccess }: { className?: string; isMobile?: boolean; userAccess?: UserAccess }) {
     const pathname = usePathname()
     const { isCollapsed, toggleSidebar } = useSidebar()
+    const { role, permissions } = userAccess || { role: 'coach', permissions: {} }
 
     // Don't collapse on mobile sheet
     const collapsed = isMobile ? false : isCollapsed
+
+    // Filter routes based on permissions
+    const filteredRoutes = routes.filter(route => {
+        // Admin always sees everything
+        if (role === 'admin') return true
+
+        switch (route.href) {
+            case '/':
+                return permissions.can_view_dashboard !== false
+            case '/clients':
+                return !!permissions.can_view_clients
+            case '/onboarding':
+                return !!permissions.can_view_onboarding
+            case '/sales':
+                return !!permissions.can_view_sales
+            case '/payment-links':
+                return !!permissions.can_view_payment_links
+            case '/settings':
+                return true // Always allow settings root
+            case '/commissions':
+                return !!permissions.can_view_business
+            case '/business':
+                return !!permissions.can_view_business
+            default:
+                return true
+        }
+    })
 
     return (
         <TooltipProvider delayDuration={0}>
@@ -86,7 +116,7 @@ export function Sidebar({ className, isMobile = false }: { className?: string; i
                         )}
                     </Link>
                     <div className="space-y-1">
-                        {routes.map((route) => {
+                        {filteredRoutes.map((route) => {
                             const linkContent = (
                                 <Link
                                     key={route.href}

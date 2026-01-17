@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { getInvitations, revokeInvitation, Invitation } from '@/lib/actions/invitations';
+import { getAllUsers, User } from '@/lib/actions/profile';
 import { InviteMemberDialog } from '@/components/team/InviteMemberDialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,47 +10,54 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Shield, ChevronDown, ChevronUp } from 'lucide-react';
+import { PermissionToggles } from './PermissionToggles';
 
 export function TeamSettingsClient() {
     const [invitations, setInvitations] = useState<Invitation[]>([]);
+    const [users, setUsers] = useState<User[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [expandedUser, setExpandedUser] = useState<string | null>(null);
 
-    const fetchInvitations = async () => {
+    const fetchData = async () => {
         setIsLoading(true);
-        const { invitations, error } = await getInvitations();
-        if (error) {
-            toast.error(error);
-        } else {
-            setInvitations(invitations || []);
+
+        // Fetch Invitations
+        const invResult = await getInvitations();
+        if (invResult.error) toast.error(invResult.error);
+        else setInvitations(invResult.invitations || []);
+
+        // Fetch Users (Requires Admin)
+        const userResult = await getAllUsers();
+        if ('error' in userResult && userResult.error) {
+            // Silently fail if not admin or just log? 
+            // If unauthorized, we just might not show the user list or show empty.
+            console.error(userResult.error);
+        } else if ('users' in userResult) {
+            setUsers(userResult.users || []);
         }
+
         setIsLoading(false);
     };
 
     useEffect(() => {
-        fetchInvitations();
+        fetchData();
     }, []);
 
     const handleRevoke = async (id: string) => {
-        const confirm = window.confirm('Are you sure you want to revoke this invitation?');
-        if (!confirm) return;
-
+        if (!confirm('Are you sure you want to revoke this invitation?')) return;
         const { error } = await revokeInvitation(id);
-        if (error) {
-            toast.error(error);
-        } else {
+        if (error) toast.error(error);
+        else {
             toast.success('Invitation revoked');
-            fetchInvitations(); // Refresh list
+            fetchData();
         }
     };
 
-    // Helper to format status badges
     const getStatusBadge = (status: string, expiresAt: string) => {
         if (status === 'accepted') return <Badge className="bg-green-600">Accepted</Badge>;
         if (status === 'pending') {
-            if (new Date(expiresAt) < new Date()) {
-                return <Badge variant="destructive">Expired</Badge>;
-            }
+            if (new Date(expiresAt) < new Date()) return <Badge variant="destructive">Expired</Badge>;
             return <Badge variant="secondary" className="bg-yellow-600/20 text-yellow-500">Pending</Badge>;
         }
         return <Badge variant="outline">{status}</Badge>;
@@ -60,25 +68,79 @@ export function TeamSettingsClient() {
             <div className="flex justify-between items-center">
                 <div>
                     <h3 className="text-lg font-medium">Team Members</h3>
-                    <p className="text-sm text-muted-foreground">
-                        Manage your team, roles, and pending invitations.
-                    </p>
+                    <p className="text-sm text-muted-foreground">Manage your team, roles, and permissions.</p>
                 </div>
                 <InviteMemberDialog />
             </div>
 
+            {/* Active Team List */}
             <Card className="bg-[#121212] border-white/10">
                 <CardHeader>
-                    <CardTitle>Pending Invitations</CardTitle>
-                    <CardDescription>
-                        Invitations sent to potential team members.
-                    </CardDescription>
+                    <CardTitle>Active Team</CardTitle>
+                    <CardDescription>Current members with access to the dashboard.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {isLoading ? (
-                        <div className="text-sm text-gray-500">Loading invitations...</div>
-                    ) : invitations.length === 0 ? (
-                        <div className="text-sm text-gray-500">No pending invitations found.</div>
+                    <div className="space-y-4">
+                        {users.map((user) => (
+                            <div key={user.id} className="border border-white/10 rounded-lg p-4">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center space-x-3">
+                                        <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
+                                            {user.name?.[0] || user.email[0].toUpperCase()}
+                                        </div>
+                                        <div>
+                                            <p className="font-medium">{user.name || 'Unnamed User'}</p>
+                                            <p className="text-sm text-muted-foreground">{user.email}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <Badge variant="outline" className="capitalize">
+                                            {user.role}
+                                        </Badge>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => setExpandedUser(expandedUser === user.id ? null : user.id)}
+                                        >
+                                            {expandedUser === user.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                            <span className="ml-2">Permissions</span>
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                {expandedUser === user.id && (
+                                    <div className="mt-4 pt-4 border-t border-white/10 animate-in fade-in slide-in-from-top-2">
+                                        {user.role === 'admin' ? (
+                                            <div className="flex items-center text-emerald-500 bg-emerald-500/10 p-3 rounded-md">
+                                                <Shield className="h-5 w-5 mr-2" />
+                                                <span className="text-sm font-medium">Admins have full access to all features.</span>
+                                            </div>
+                                        ) : (
+                                            <PermissionToggles
+                                                userId={user.id}
+                                                initialPermissions={user.permissions || {}}
+                                                onUpdate={() => { }} // Optional: refresh list if needed, but local state handles UI
+                                            />
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                        {users.length === 0 && !isLoading && (
+                            <div className="text-center py-8 text-muted-foreground">No active users found.</div>
+                        )}
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Pending Invitations */}
+            <Card className="bg-[#121212] border-white/10 opacity-80 hover:opacity-100 transition-opacity">
+                <CardHeader>
+                    <CardTitle>Pending Invitations</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {invitations.length === 0 ? (
+                        <div className="text-sm text-muted-foreground">No pending invitations.</div>
                     ) : (
                         <Table>
                             <TableHeader>
@@ -86,27 +148,18 @@ export function TeamSettingsClient() {
                                     <TableHead>Email</TableHead>
                                     <TableHead>Role</TableHead>
                                     <TableHead>Status</TableHead>
-                                    <TableHead>Expires</TableHead>
                                     <TableHead className="text-right">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {invitations.map((invite) => (
                                     <TableRow key={invite.id} className="border-white/10">
-                                        <TableCell className="font-medium">{invite.email}</TableCell>
+                                        <TableCell>{invite.email}</TableCell>
                                         <TableCell className="capitalize">{invite.role}</TableCell>
                                         <TableCell>{getStatusBadge(invite.status, invite.expires_at)}</TableCell>
-                                        <TableCell className="text-muted-foreground text-xs">
-                                            {formatDistanceToNow(new Date(invite.expires_at), { addSuffix: true })}
-                                        </TableCell>
                                         <TableCell className="text-right">
                                             {invite.status === 'pending' && (
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => handleRevoke(invite.id)}
-                                                    className="text-red-500 hover:text-red-400 hover:bg-red-950/20"
-                                                >
+                                                <Button variant="ghost" size="sm" onClick={() => handleRevoke(invite.id)} className="text-red-500">
                                                     <Trash2 className="h-4 w-4" />
                                                 </Button>
                                             )}
@@ -116,19 +169,6 @@ export function TeamSettingsClient() {
                             </TableBody>
                         </Table>
                     )}
-                </CardContent>
-            </Card>
-
-            {/* Placeholder for Active Team List - could fetch from profiles table later */}
-            <Card className="bg-[#121212] border-white/10 opacity-50">
-                <CardHeader>
-                    <CardTitle>Active Team</CardTitle>
-                    <CardDescription>
-                        Current members with access to the dashboard.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <p className="text-sm text-muted-foreground">Team list implementation coming next.</p>
                 </CardContent>
             </Card>
         </div>

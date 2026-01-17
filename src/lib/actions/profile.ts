@@ -1,8 +1,10 @@
+
 'use server';
 
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
+import { UserPermissions } from '@/lib/auth-utils';
 
 export interface UserProfile {
     id: string;
@@ -16,6 +18,16 @@ export interface UserProfile {
     commission_rate: number | null;
     is_active: boolean;
     created_at: string;
+}
+
+export interface User {
+    id: string
+    name: string | null
+    email: string
+    role: 'admin' | 'coach' | 'sales_closer'
+    permissions: UserPermissions
+    is_active: boolean
+    created_at: string
 }
 
 /**
@@ -238,20 +250,79 @@ export async function updateUserRole(userId: string, role: 'admin' | 'coach' | '
 }
 
 /**
- * Get all users (for admin user management)
+ * Get all users (for admin user management) - Protected
  */
-export async function getAllUsers(): Promise<UserProfile[]> {
-    const adminClient = createAdminClient();
+export async function getAllUsers() {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
 
-    const { data, error } = await adminClient
-        .from('users')
-        .select('*')
-        .order('name', { ascending: true });
-
-    if (error) {
-        console.error('[Profile] Error fetching users:', error);
-        return [];
+    if (!user) {
+        return { error: 'Not authenticated' }
     }
 
-    return data as UserProfile[];
+    const admin = createAdminClient()
+
+    // Verify requesting user is admin
+    const { data: requesterProfile } = await admin
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+    if (requesterProfile?.role !== 'admin') {
+        return { error: 'Unauthorized: Admin access required' }
+    }
+
+    const { data: users, error } = await admin
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+    if (error) {
+        return { error: error.message }
+    }
+
+    return { users: users as User[] }
+}
+
+/**
+ * Update user permissions (admin only)
+ */
+export async function updateUserPermissions(userId: string, permissions: UserPermissions) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+        return { error: 'Not authenticated' }
+    }
+
+    const admin = createAdminClient()
+
+    // Verify requesting user is admin
+    const { data: requesterProfile } = await admin
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+    if (requesterProfile?.role !== 'admin') {
+        return { error: 'Unauthorized' }
+    }
+
+    const { error } = await admin
+        .from('users')
+        .update({
+            permissions,
+            updated_at: new Date().toISOString()
+        })
+        .eq('id', userId)
+
+    if (error) {
+        return { error: error.message }
+    }
+
+    // Revalidate paths that depend on permissions
+    revalidatePath('/')
+
+    return { success: true }
 }
