@@ -1,12 +1,11 @@
 'use client'
 
-import { Bell, Search, User, Settings, LogOut, Shield } from 'lucide-react'
+import { Bell, Search, User, Settings, LogOut, Shield, Menu } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Sidebar } from './Sidebar'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
-import { Menu } from 'lucide-react'
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -18,13 +17,27 @@ import {
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { getCurrentUserProfile, UserProfile } from '@/lib/actions/profile'
+import { UserAccess } from '@/lib/auth-utils'
+import { useEasterEgg } from './EasterEggProvider'
 
-export function Header() {
+export function Header({ userAccess }: { userAccess?: UserAccess }) {
     const [profile, setProfile] = useState<UserProfile | null>(null);
+    const [searchValue, setSearchValue] = useState('')
+    const { triggerEasterEgg } = useEasterEgg()
 
     useEffect(() => {
         getCurrentUserProfile().then(setProfile);
     }, []);
+
+    const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value
+        setSearchValue(val)
+
+        if (val.toLowerCase() === '100k month') {
+            triggerEasterEgg()
+            setSearchValue('')
+        }
+    }
 
     const getInitials = () => {
         if (!profile) return 'U';
@@ -44,7 +57,8 @@ export function Header() {
     };
 
     return (
-        <div className="flex items-center p-6 border-b border-border/40 bg-background/50 backdrop-blur supports-[backdrop-filter]:bg-background/20">
+        <div className="flex items-center p-6 border-b border-border/40 bg-background/50 backdrop-blur supports-[backdrop-filter]:bg-background/20 relative">
+
             <div className="md:hidden">
                 <Sheet>
                     <SheetTrigger asChild>
@@ -53,7 +67,7 @@ export function Header() {
                         </Button>
                     </SheetTrigger>
                     <SheetContent side="left" className="p-0 bg-sidebar text-sidebar-foreground border-r-border w-72">
-                        <Sidebar isMobile />
+                        <Sidebar isMobile userAccess={userAccess} />
                     </SheetContent>
                 </Sheet>
             </div>
@@ -65,6 +79,8 @@ export function Header() {
                     <Input
                         type="search"
                         placeholder="Search..."
+                        value={searchValue}
+                        onChange={handleSearchChange}
                         className="w-full bg-secondary/50 border-transparent focus-visible:ring-primary rounded-full pl-9"
                     />
                 </div>

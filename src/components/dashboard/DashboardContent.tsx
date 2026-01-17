@@ -28,8 +28,8 @@ export function DashboardContent({ children, userAccess }: DashboardContentProps
                 "transition-all duration-300",
                 isCollapsed ? "md:pl-[72px]" : "md:pl-72"
             )}>
-                <Header />
-                <div className="p-8 min-h-[calc(100vh-64px)]">
+                <Header userAccess={userAccess} />
+                <div className="p-4 md:p-8 min-h-[calc(100vh-64px)]">
                     {children}
                 </div>
             </main>

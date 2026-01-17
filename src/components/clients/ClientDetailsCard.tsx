@@ -77,6 +77,7 @@ export function ClientDetailsCard({ client, ghlLocationId }: ClientDetailsCardPr
                                 id="name"
                                 value={formData.name}
                                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                className="max-w-full"
                             />
                         </div>
                         <div className="space-y-1">
@@ -121,12 +122,12 @@ export function ClientDetailsCard({ client, ghlLocationId }: ClientDetailsCardPr
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="flex gap-2 pt-2">
-                            <Button size="sm" onClick={handleSave} disabled={isLoading}>
+                        <div className="flex gap-2 pt-2 flex-wrap">
+                            <Button size="sm" onClick={handleSave} disabled={isLoading} className="flex-1 sm:flex-none">
                                 {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
                                 Save
                             </Button>
-                            <Button size="sm" variant="ghost" onClick={() => setIsEditing(false)} disabled={isLoading}>
+                            <Button size="sm" variant="ghost" onClick={() => setIsEditing(false)} disabled={isLoading} className="flex-1 sm:flex-none">
                                 <X className="h-4 w-4 mr-1" /> Cancel
                             </Button>
                         </div>

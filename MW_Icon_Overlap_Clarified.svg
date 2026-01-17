@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200.23 130.29">
+  <defs>
+    <style>
+      .icon-base {
+        fill: #05A660;
+      }
+      .icon-overlap {
+        fill: #05A660;
+        stroke: #ffffff;
+        stroke-width: 1.5px;
+        stroke-opacity: 0.2;
+      }
+    </style>
+  </defs>
+  <g id="Layer_1-2" data-name="Layer_1">
+    <g>
+      <!-- Base M Shape -->
+      <polygon class="icon-base" points="0 1.28 0 32.3 58.05 90.63 101.99 46.91 115.14 60.04 115.14 1.28 108.96 1.28 58.78 52.41 56.87 52.4 6.69 1.28 0 1.28"/>
+      <polygon class="icon-base" points="0 130.29 26.75 130.29 26.76 86.84 .23 60.09 0 130.29"/>
+      
+      <!-- Overlapping W Shape parts - With strokes to simulate 'cutout' or separation -->
+      <polyline class="icon-overlap" points="115.14 89.61 115.14 60.04 145.47 89.47 200 34.97 200 60.75 148.36 113.56 142.39 113.56"/>
+      <polyline class="icon-overlap" points="88.4 89.21 88.4 130.28 115.15 130.29 115.14 90.17 101.29 77.74"/>
+    </g>
+  </g>
+</svg>

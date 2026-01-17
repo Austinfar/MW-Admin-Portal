@@ -16,6 +16,8 @@ export interface UserPermissions {
 export interface UserAccess {
     role: string;
     permissions: UserPermissions;
+    first_name?: string;
+    last_name?: string;
 }
 
 export async function getCurrentUserAccess(): Promise<UserAccess | null> {
@@ -28,13 +30,15 @@ export async function getCurrentUserAccess(): Promise<UserAccess | null> {
 
     const { data, error } = await admin
         .from('users')
-        .select('role, permissions')
+        .select('role, permissions, first_name, last_name')
         .eq('id', user.id)
         .single();
 
     if (error || !data) return null;
 
     const role = data.role || 'coach';
+    const first_name = data.first_name || '';
+    const last_name = data.last_name || '';
     let permissions = (data.permissions || {}) as UserPermissions;
 
     // If admin, grant all permissions implicitly
@@ -51,7 +55,7 @@ export async function getCurrentUserAccess(): Promise<UserAccess | null> {
         };
     }
 
-    return { role, permissions };
+    return { role, permissions, first_name, last_name };
 }
 
 // Keep deprecated function for backward compat if needed, but we should replace usages

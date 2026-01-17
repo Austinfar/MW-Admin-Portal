@@ -1,6 +1,23 @@
 'use client'
 
+import Image from 'next/image'
 import { useEffect, useState, use } from 'react'
+// ...
+
+// ... inside JSX ...
+<div className="w-full border-b border-white/10 bg-black/50 backdrop-blur-md sticky top-0 z-10 hidden md:block">
+    <div className="max-w-6xl mx-auto px-6 h-16 flex items-center">
+        <div className="flex items-center gap-2">
+            <Image
+                src="/logo-glow.svg"
+                alt="MW Fitness"
+                width={150}
+                height={40}
+                className="object-contain"
+            />
+        </div>
+    </div>
+</div>
 import { loadStripe } from '@stripe/stripe-js'
 import {
     EmbeddedCheckoutProvider,
@@ -76,12 +93,13 @@ export default function PayPage({ params }: { params: Promise<{ id: string }> })
             <div className="w-full border-b border-white/10 bg-black/50 backdrop-blur-md sticky top-0 z-10 hidden md:block">
                 <div className="max-w-6xl mx-auto px-6 h-16 flex items-center">
                     <div className="flex items-center gap-2">
-                        <div className="h-6 w-6 bg-green-600 rounded flex items-center justify-center">
-                            <svg className="w-4 h-4 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                            </svg>
-                        </div>
-                        <span className="font-bold text-lg tracking-tight">MW Fitness</span>
+                        <Image
+                            src="/logo-white.svg"
+                            alt="MW Fitness"
+                            width={150}
+                            height={40}
+                            className="object-contain"
+                        />
                     </div>
                 </div>
             </div>

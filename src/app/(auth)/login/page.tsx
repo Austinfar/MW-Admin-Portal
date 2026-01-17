@@ -1,6 +1,26 @@
 'use client'
 
+import Image from 'next/image'
 import { login, signup } from './actions'
+// ... existing imports ...
+
+// ... inside component ...
+<CardHeader className="space-y-2 pb-6">
+    {/* Logo */}
+    <div className="flex justify-center mb-2">
+        <Image
+            src="/logo-glow.svg"
+            alt="MW Fitness Coaching"
+            width={240}
+            height={80}
+            className="object-contain"
+            priority
+        />
+    </div>
+    <CardDescription className="text-center text-gray-400">
+        Enter your credentials to access the dashboard
+    </CardDescription>
+</CardHeader>
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -34,11 +54,17 @@ export default function LoginPage() {
             <div className="z-10 w-full max-w-md px-4">
                 <Card className="w-full bg-[#121212]/50 backdrop-blur-md border-white/10 shadow-2xl">
                     <CardHeader className="space-y-2 pb-6">
-                        {/* Logo / Brand Mark could go here, for now just text */}
-                        <div className="h-12 w-12 bg-green-600 rounded mx-auto flex items-center justify-center mb-2 shadow-lg shadow-green-900/20">
-                            <span className="font-bold text-black text-xl tracking-tighter">MW</span>
+                        {/* Logo */}
+                        <div className="flex justify-center mb-2">
+                            <Image
+                                src="/logo-white.svg"
+                                alt="MW Fitness Coaching"
+                                width={240}
+                                height={80}
+                                className="object-contain"
+                                priority
+                            />
                         </div>
-                        <CardTitle className="text-2xl font-bold text-center text-white tracking-tight">MW Fitness Coaching</CardTitle>
                         <CardDescription className="text-center text-gray-400">
                             Enter your credentials to access the dashboard
                         </CardDescription>

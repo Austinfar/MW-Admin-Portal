@@ -38,19 +38,22 @@ export async function middleware(request: NextRequest) {
     } = await supabase.auth.getUser()
 
     // Protect dashboard routes
-    if (request.nextUrl.pathname.startsWith('/') &&
-        !request.nextUrl.pathname.startsWith('/login') &&
-        !request.nextUrl.pathname.startsWith('/join') &&
-        !request.nextUrl.pathname.startsWith('/auth') &&
-        !request.nextUrl.pathname.startsWith('/api/webhooks') &&
-        !request.nextUrl.pathname.startsWith('/api/cron') &&
-        !user) {
+    // Check if path is dashboard or root
+    const isDashboardRoute = request.nextUrl.pathname.startsWith('/dashboard')
+    const isRootRoute = request.nextUrl.pathname === '/'
+
+    if ((isDashboardRoute || isRootRoute) && !user) {
         return NextResponse.redirect(new URL('/login', request.url))
     }
 
-    // Redirect to dashboard if logged in and visiting login
+    // Redirect to dashboard if logged in and visiting login or root
     if (request.nextUrl.pathname.startsWith('/login') && user) {
-        return NextResponse.redirect(new URL('/', request.url))
+        return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
+
+    // Redirect root to dashboard if logged in
+    if (isRootRoute && user) {
+        return NextResponse.redirect(new URL('/dashboard', request.url))
     }
 
     return response

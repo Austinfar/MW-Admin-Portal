@@ -318,81 +318,89 @@ export function ClientsTable({ data, clientTypes, coaches }: ClientsTableProps) 
                 Showing {filteredData.length} of {data.length} clients
             </div>
 
-            <div className="rounded-md border bg-card/40 border-primary/5 shadow-sm">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead className="w-[250px]">Client</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead>Program</TableHead>
-                            <TableHead>Assigned Coach</TableHead>
-                            <TableHead>Start Date</TableHead>
-                            <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {filteredData.length === 0 ? (
+            <div className="rounded-md border bg-card/40 border-primary/5 shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                    <Table>
+                        <TableHeader>
                             <TableRow>
-                                <TableCell colSpan={6} className="h-24 text-center">
-                                    No results.
-                                </TableCell>
+                                <TableHead className="w-[250px]">Client</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Program</TableHead>
+                                <TableHead>Assigned Coach</TableHead>
+                                <TableHead>Start Date</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
-                        ) : (
-                            filteredData.map((client) => (
-                                <TableRow key={client.id} className="cursor-pointer hover:bg-muted/50 border-border/50" onClick={() => router.push(`/clients/${client.id}`)}>
-                                    <TableCell>
-                                        <div className="flex flex-col">
-                                            <div className="flex items-center gap-1.5">
-                                                <span className="font-medium text-card-foreground">{client.name}</span>
-                                                <div
-                                                    title={client.stripe_customer_id ? "Stripe Connected" : "No Stripe Account"}
-                                                    className={client.stripe_customer_id ? "text-emerald-500" : "text-muted-foreground/30"}
-                                                >
-                                                    <CreditCard className="h-3.5 w-3.5" />
-                                                </div>
-                                            </div>
-                                            <span className="text-xs text-muted-foreground">{client.email}</span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge variant="secondary" className={getStatusColor(client.status)}>
-                                            {client.status.toUpperCase()}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell>
-                                        {client.client_type?.name || <span className="text-gray-400 italic">Unassigned</span>}
-                                    </TableCell>
-                                    <TableCell>
-                                        {client.assigned_coach?.name || <span className="text-gray-400 italic">Unassigned</span>}
-                                    </TableCell>
-                                    <TableCell>
-                                        {format(new Date(client.start_date), 'MMM d, yyyy')}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button variant="ghost" className="h-8 w-8 p-0">
-                                                    <span className="sr-only">Open menu</span>
-                                                    <MoreHorizontal className="h-4 w-4" />
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                <DropdownMenuItem onClick={() => navigator.clipboard.writeText(client.id)}>
-                                                    Copy ID
-                                                </DropdownMenuItem>
-                                                <DropdownMenuSeparator />
-                                                <DropdownMenuItem>View details</DropdownMenuItem>
-                                                <DropdownMenuItem>View payments</DropdownMenuItem>
-                                                <DropdownMenuItem className="text-red-600">Archive client</DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
+                        </TableHeader>
+                        <TableBody>
+                            {filteredData.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={6} className="h-24 text-center">
+                                        No results.
                                     </TableCell>
                                 </TableRow>
-                            ))
-                        )}
-                    </TableBody>
-                </Table>
+                            ) : (
+                                filteredData.map((client) => (
+                                    <TableRow key={client.id} className="cursor-pointer hover:bg-muted/50 border-border/50" onClick={() => router.push(`/clients/${client.id}`)}>
+                                        <TableCell>
+                                            <div className="flex flex-col">
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="font-medium text-card-foreground">{client.name}</span>
+                                                    <div
+                                                        title={client.stripe_customer_id ? "Stripe Connected" : "No Stripe Account"}
+                                                        className={client.stripe_customer_id ? "text-emerald-500" : "text-muted-foreground/30"}
+                                                    >
+                                                        <CreditCard className="h-3.5 w-3.5" />
+                                                    </div>
+                                                </div>
+                                                <span className="text-xs text-muted-foreground">{client.email}</span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant="secondary" className={getStatusColor(client.status)}>
+                                                {client.status.toUpperCase()}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            <span className="whitespace-nowrap">
+                                                {client.client_type?.name || <span className="text-gray-400 italic">Unassigned</span>}
+                                            </span>
+                                        </TableCell>
+                                        <TableCell>
+                                            <span className="whitespace-nowrap">
+                                                {client.assigned_coach?.name || <span className="text-gray-400 italic">Unassigned</span>}
+                                            </span>
+                                        </TableCell>
+                                        <TableCell>
+                                            <span className="whitespace-nowrap">
+                                                {format(new Date(client.start_date), 'MMM d, yyyy')}
+                                            </span>
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" className="h-8 w-8 p-0">
+                                                        <span className="sr-only">Open menu</span>
+                                                        <MoreHorizontal className="h-4 w-4" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                                    <DropdownMenuItem onClick={() => navigator.clipboard.writeText(client.id)}>
+                                                        Copy ID
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuSeparator />
+                                                    <DropdownMenuItem>View details</DropdownMenuItem>
+                                                    <DropdownMenuItem>View payments</DropdownMenuItem>
+                                                    <DropdownMenuItem className="text-red-600">Archive client</DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
             </div>
         </div>
     )

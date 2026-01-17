@@ -60,14 +60,14 @@ export function WeeklyReport({ data, currentDate }: WeeklyReportProps) {
                 <CardContent>
                     <div className="space-y-4">
                         {data.map((item) => (
-                            <div key={item.id} className="flex items-center justify-between border-b border-border/50 pb-4 last:border-0 last:pb-0">
+                            <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border/50 pb-4 last:border-0 last:pb-0 gap-2">
                                 <div className="space-y-1">
                                     <p className="font-medium text-sm text-foreground">{item.coach?.name || 'Unknown'}</p>
                                     <p className="text-xs text-muted-foreground">
                                         {item.role_in_sale.toUpperCase().replace('_', ' ')} for {item.client?.name || 'Unknown Client'}
                                     </p>
                                 </div>
-                                <div className="text-right">
+                                <div className="text-left sm:text-right">
                                     <p className="font-medium text-sm text-foreground">
                                         {item.split_percentage}%
                                     </p>

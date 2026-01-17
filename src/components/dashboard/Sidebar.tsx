@@ -2,6 +2,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { LayoutDashboard, Users, CheckSquare, DollarSign, LogOut, ChevronLeft, ChevronRight, CreditCard, PhoneCall } from 'lucide-react'
@@ -14,7 +15,7 @@ const routes = [
     {
         label: 'Dashboard',
         icon: LayoutDashboard,
-        href: '/',
+        href: '/dashboard',
         color: 'text-sky-500',
     },
     {
@@ -69,7 +70,7 @@ export function Sidebar({ className, isMobile = false, userAccess }: { className
         if (role === 'admin') return true
 
         switch (route.href) {
-            case '/':
+            case '/dashboard':
                 return !!permissions.can_view_dashboard
             case '/clients':
                 return !!permissions.can_view_clients
@@ -102,18 +103,26 @@ export function Sidebar({ className, isMobile = false, userAccess }: { className
                         "flex items-center mb-14 transition-all duration-300",
                         collapsed ? "justify-center px-0" : "pl-3"
                     )}>
-                        <div className={cn("relative w-8 h-8", collapsed ? "mr-0" : "mr-4")}>
-                            {/* Logo placeholder - replace with actual logo */}
-                            <div className="absolute inset-0 bg-primary/20 rounded-lg blur-md animate-pulse" />
-                            <div className="relative w-full h-full bg-sidebar-accent rounded-lg border border-sidebar-border flex items-center justify-center font-bold text-lg text-primary">
-                                MW
-                            </div>
+                        <div className={cn("relative", collapsed ? "w-8 h-8 mr-0" : "w-40 h-12 mr-4")}>
+                            {collapsed ? (
+                                <Image
+                                    src="/icon-green.svg"
+                                    alt="MW"
+                                    width={32}
+                                    height={32}
+                                    className="object-contain"
+                                />
+                            ) : (
+                                <Image
+                                    src="/logo-white.svg"
+                                    alt="MW Fitness Coaching"
+                                    width={160}
+                                    height={48}
+                                    className="object-contain"
+                                    priority
+                                />
+                            )}
                         </div>
-                        {!collapsed && (
-                            <h1 className="text-xl font-bold text-sidebar-foreground whitespace-nowrap">
-                                MW Fitness Coaching
-                            </h1>
-                        )}
                     </Link>
                     <div className="space-y-1">
                         {filteredRoutes.map((route) => {
