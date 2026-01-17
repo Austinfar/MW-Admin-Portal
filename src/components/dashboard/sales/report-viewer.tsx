@@ -11,6 +11,8 @@ interface ReportViewerProps {
     date: string
 }
 
+import ReactMarkdown from 'react-markdown'
+
 export function ReportViewer({ reportHtml, clientName, date }: ReportViewerProps) {
     const [isOpen, setIsOpen] = useState(false)
 
@@ -42,7 +44,7 @@ export function ReportViewer({ reportHtml, clientName, date }: ReportViewerProps
                     <p><strong>Client:</strong> ${clientName}</p>
                     <p><strong>Date:</strong> ${date}</p>
                     <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eaeaea;" />
-                    ${reportHtml}
+                    <div style="white-space: pre-wrap;">${reportHtml}</div>
                     <script>
                         window.onload = function() {
                             window.print();
@@ -61,37 +63,54 @@ export function ReportViewer({ reportHtml, clientName, date }: ReportViewerProps
     return (
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-400 hover:text-blue-300">
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-400 hover:text-blue-300 transition-colors">
                     <FileText className="h-4 w-4" />
                 </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col p-0 gap-0 bg-[#1A1A1A] border-gray-800">
-                <div className="flex items-center justify-between p-4 border-b border-gray-800">
-                    <h2 className="text-lg font-semibold text-white">Call Analysis Report</h2>
-                    <div className="flex items-center gap-2">
+            <DialogContent className="max-w-[95vw] w-full h-[95vh] flex flex-col p-0 gap-0 bg-[#0a0a0a] border-white/10 shadow-2xl duration-200 sm:rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between px-8 py-6 border-b border-white/5 bg-[#0a0a0a]">
+                    <div className="flex flex-col gap-1">
+                        <h2 className="text-2xl font-bold text-white tracking-tight">Call Analysis Report</h2>
+                        <div className="flex items-center gap-2 text-sm text-gray-400">
+                            <span className="font-medium text-white">{clientName}</span>
+                            <span>•</span>
+                            <span>{date}</span>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
                         <Button
                             variant="outline"
-                            size="sm"
                             onClick={handleDownload}
-                            className="bg-transparent border-gray-700 text-gray-300 hover:bg-gray-800"
+                            className="bg-transparent border-white/10 text-gray-300 hover:bg-white/5 hover:text-white transition-all"
                         >
                             <Download className="h-4 w-4 mr-2" />
                             Export PDF
                         </Button>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setIsOpen(false)}
+                            className="text-gray-400 hover:text-white hover:bg-white/5 rounded-full"
+                        >
+                            <X className="h-5 w-5" />
+                        </Button>
                     </div>
                 </div>
-                <div className="flex-1 overflow-y-auto p-6 bg-white text-black rounded-b-lg">
-                    {/* Render HTML safely here is okay because it comes from our trusted internal n8n workflow */}
-                    <div
-                        className="prose max-w-none dark:prose-invert"
-                        dangerouslySetInnerHTML={{
-                            __html: reportHtml
-                                ? reportHtml
-                                    .replace(/\\n/g, '<br />')
-                                    .replace(/\n/g, '<br />')
-                                : ''
-                        }}
-                    />
+
+                <div className="flex-1 overflow-y-auto bg-[#0f0f0f]">
+                    <div className="max-w-5xl mx-auto py-12 px-8">
+                        <div className="prose prose-invert prose-lg max-w-none 
+                            prose-headings:text-white prose-headings:font-bold prose-headings:tracking-tight
+                            prose-p:text-gray-300 prose-p:leading-relaxed
+                            prose-strong:text-white prose-strong:font-semibold
+                            prose-ul:text-gray-300 prose-li:marker:text-green-500
+                            prose-blockquote:border-l-green-500 prose-blockquote:bg-white/5 prose-blockquote:py-2 prose-blockquote:px-6 prose-blockquote:rounded-r-lg prose-blockquote:not-italic
+                            prose-a:text-green-400 prose-a:no-underline hover:prose-a:text-green-300 hover:prose-a:underline">
+                            <ReactMarkdown>
+                                {reportHtml || ''}
+                            </ReactMarkdown>
+                        </div>
+                    </div>
                 </div>
             </DialogContent>
         </Dialog>
