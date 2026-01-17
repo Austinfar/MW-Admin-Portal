@@ -83,8 +83,14 @@ export function ReportViewer({ reportHtml, clientName, date }: ReportViewerProps
                 <div className="flex-1 overflow-y-auto p-6 bg-white text-black rounded-b-lg">
                     {/* Render HTML safely here is okay because it comes from our trusted internal n8n workflow */}
                     <div
-                        className="prose max-w-none"
-                        dangerouslySetInnerHTML={{ __html: reportHtml }}
+                        className="prose max-w-none dark:prose-invert"
+                        dangerouslySetInnerHTML={{
+                            __html: reportHtml
+                                ? reportHtml
+                                    .replace(/\\n/g, '<br />')
+                                    .replace(/\n/g, '<br />')
+                                : ''
+                        }}
                     />
                 </div>
             </DialogContent>
