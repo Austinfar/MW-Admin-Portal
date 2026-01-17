@@ -112,6 +112,73 @@ export async function POST(req: Request) {
                 await calculateCommission(insertedPayment.id)
             }
         }
+
+        if (event.type === 'checkout.session.completed') {
+            const session = event.data.object as Stripe.Checkout.Session
+
+            // Check if this session is related to a Payment Schedule
+            // We store scheduleId in metadata
+            const scheduleId = session.metadata?.scheduleId
+
+            if (scheduleId) {
+                console.log(`Processing checkout.session.completed for schedule ${scheduleId}`)
+
+                // We need to fetch the session with expansion to retrieve the payment method
+                // because the event object might not have it expanded, or we want to be sure.
+                // Or identifying the method from the PaymentIntent.
+
+                try {
+                    // Retrieve fresh session with expansions
+                    const expandedSession = await stripe.checkout.sessions.retrieve(session.id, {
+                        expand: ['payment_intent', 'setup_intent']
+                    })
+
+                    const customerId = typeof expandedSession.customer === 'string'
+                        ? expandedSession.customer
+                        : expandedSession.customer?.id
+
+                    let paymentMethodId: string | null = null
+
+                    // Extract PM from PaymentIntent
+                    if (expandedSession.payment_intent && typeof expandedSession.payment_intent !== 'string') {
+                        const pm = expandedSession.payment_intent.payment_method
+                        paymentMethodId = typeof pm === 'string' ? pm : pm?.id || null
+                    }
+
+                    // Fallback to SetupIntent if enabled (e.g. for subscription setup mode)
+                    if (!paymentMethodId && expandedSession.setup_intent && typeof expandedSession.setup_intent !== 'string') {
+                        const pm = expandedSession.setup_intent.payment_method
+                        paymentMethodId = typeof pm === 'string' ? pm : pm?.id || null
+                    }
+
+                    const customerEmail = expandedSession.customer_details?.email
+
+                    // Update payment_schedules
+                    if (customerId && paymentMethodId) {
+                        const { error } = await supabase
+                            .from('payment_schedules')
+                            .update({
+                                stripe_customer_id: customerId,
+                                stripe_payment_method_id: paymentMethodId,
+                                client_email: customerEmail || undefined,
+                                status: 'active', // Mark active so cron picks up future charges
+                            })
+                            .eq('id', scheduleId)
+
+                        if (error) {
+                            console.error('Error updating payment schedule:', error)
+                        } else {
+                            console.log(`Updated schedule ${scheduleId} with customer ${customerId}`)
+                        }
+                    } else {
+                        console.warn(`Missing customer or PM for schedule ${scheduleId}`)
+                    }
+
+                } catch (err) {
+                    console.error('Error processing checkout session:', err)
+                }
+            }
+        }
         // Add other events like 'payment_intent.payment_failed' if needed
     } catch (err: any) {
         console.error('Webhook handler error:', err)

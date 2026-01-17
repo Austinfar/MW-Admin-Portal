@@ -138,4 +138,14 @@ export class GHLClient {
 
         return { opportunities: allOpportunities };
     }
+    async sendSMS(contactId: string, message: string) {
+        return this.request<{ conversationId: string; messageId: string }>('/conversations/messages', {
+            method: 'POST',
+            body: JSON.stringify({
+                contactId,
+                type: 'SMS',
+                message
+            })
+        });
+    }
 }

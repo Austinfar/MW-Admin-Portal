@@ -40,6 +40,7 @@ export async function middleware(request: NextRequest) {
     // Protect dashboard routes
     if (request.nextUrl.pathname.startsWith('/') &&
         !request.nextUrl.pathname.startsWith('/login') &&
+        !request.nextUrl.pathname.startsWith('/join') &&
         !request.nextUrl.pathname.startsWith('/auth') &&
         !request.nextUrl.pathname.startsWith('/api/webhooks') &&
         !request.nextUrl.pathname.startsWith('/api/cron') &&

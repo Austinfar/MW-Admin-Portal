@@ -8,6 +8,7 @@ import { getAppSettings } from '@/lib/actions/app-settings'
 import { GHLConnectionSettings } from '@/components/settings/GHLConnectionSettings'
 import { ApiConnectionStatus } from '@/components/settings/ApiConnectionStatus'
 import { StripeSyncSettings } from '@/components/settings/StripeSyncSettings'
+import Link from 'next/link'
 
 export default async function SettingsPage() {
     const clientTypes = await getAllClientTypes()
@@ -30,9 +31,12 @@ export default async function SettingsPage() {
                         <span className="justify-start inline-flex items-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2 bg-muted hover:bg-muted">
                             General
                         </span>
-                        <span className="justify-start inline-flex items-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2 text-muted-foreground">
-                            Team (Coming Soon)
-                        </span>
+                        <Link
+                            href="/settings/team"
+                            className="justify-start inline-flex items-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2 text-muted-foreground"
+                        >
+                            Team
+                        </Link>
                     </nav>
                 </aside>
                 <div className="flex-1 lg:max-w-2xl">

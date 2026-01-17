@@ -228,3 +228,19 @@ export async function updateGHLContact(contactId: string, data: any) {
         return { error: 'Internal server error during GHL update' };
     }
 }
+
+export async function sendGHLSms(contactId: string, message: string) {
+    const client = await getAuthenticatedGHLClient();
+    if (!contactId || !message) return { error: 'Missing contact ID or message' };
+
+    try {
+        const result = await client.sendSMS(contactId, message);
+        if (!result) {
+            return { error: 'Failed to send SMS via GHL' };
+        }
+        return { success: true };
+    } catch (error) {
+        console.error('Error sending GHL SMS:', error);
+        return { error: 'Internal server error during SMS send' };
+    }
+}
