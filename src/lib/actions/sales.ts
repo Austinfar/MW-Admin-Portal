@@ -33,3 +33,31 @@ export async function deleteSalesCallLog(id: string) {
         return { error: `Unexpected error: ${error instanceof Error ? error.message : String(error)}` };
     }
 }
+
+import { createClient } from '@/lib/supabase/server';
+
+export async function linkClientToLog(logId: string, clientId: string) {
+    const supabase = await createClient()
+
+    const { data, error } = await supabase
+        .from('sales_call_logs')
+        .update({ client_id: clientId })
+        .eq('id', logId)
+        .select()
+
+    console.log('[linkClientToLog] Update result:', { data, error, logId, clientId })
+
+    if (error) {
+        console.error('Error linking client to log:', error)
+        return { error: error.message }
+    }
+
+    if (!data || data.length === 0) {
+        console.error('[linkClientToLog] No rows updated. Possible RLS issue or ID mismatch.')
+        return { error: 'No changes made. Check permissions.' }
+    }
+
+    revalidatePath('/sales')
+    revalidatePath(`/clients/${clientId}`)
+    return { success: true }
+}

@@ -33,6 +33,23 @@ export async function middleware(request: NextRequest) {
         }
     )
 
+    // Check for 'pay' subdomain
+    const hostname = request.headers.get('host') || ''
+    // Allow both "pay." and "pay.dev." etc.
+    if (hostname.startsWith('pay.')) {
+        const url = request.nextUrl.clone()
+        // Determine the target path:
+        // pay.domain.com/123 -> /pay/123
+        // pay.domain.com/success -> /pay/success
+        // pay.domain.com/ -> /pay (optional, currently 404 but good for future)
+
+        // If the path already starts with /pay (unlikely but possible if proxied), keep it
+        if (!url.pathname.startsWith('/pay')) {
+            url.pathname = `/pay${url.pathname}`
+        }
+        return NextResponse.rewrite(url)
+    }
+
     const {
         data: { user },
     } = await supabase.auth.getUser()

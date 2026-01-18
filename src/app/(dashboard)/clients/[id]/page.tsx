@@ -16,6 +16,7 @@ import { ClientPaymentsList } from '@/components/clients/ClientPaymentsList'
 import { ClientDetailsCard } from '@/components/clients/ClientDetailsCard'
 import { ClientNotes } from '@/components/clients/ClientNotes'
 import { ClientActivityTimeline } from '@/components/clients/ClientActivityTimeline'
+import { ClientSalesCalls } from '@/components/clients/ClientSalesCalls'
 import { getClientPayments } from '@/lib/actions/payments'
 import { OnboardingTask } from '@/types/onboarding'
 import { Note } from '@/types/client'
@@ -119,9 +120,10 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
                 {/* Main Column: Journey & Timeline (6 cols) */}
                 <div className="lg:col-span-6 space-y-6 h-full flex flex-col">
                     <Tabs defaultValue="onboarding" className="w-full flex-1 flex flex-col">
-                        <TabsList className="grid w-full grid-cols-2">
-                            <TabsTrigger value="onboarding">Onboarding Timeline</TabsTrigger>
+                        <TabsList className="grid w-full grid-cols-3">
+                            <TabsTrigger value="onboarding">Onboarding</TabsTrigger>
                             <TabsTrigger value="notes">Notes</TabsTrigger>
+                            <TabsTrigger value="sales-calls">Sales Calls</TabsTrigger>
                         </TabsList>
                         <TabsContent value="onboarding" className="mt-4 flex-1">
                             <Card className="bg-card/40 border-primary/5 backdrop-blur-sm h-full">
@@ -136,6 +138,9 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
                         </TabsContent>
                         <TabsContent value="notes" className="mt-4 flex-1">
                             <ClientNotes notes={notes} clientId={client.id} />
+                        </TabsContent>
+                        <TabsContent value="sales-calls" className="mt-4 flex-1">
+                            <ClientSalesCalls clientId={client.id} />
                         </TabsContent>
                     </Tabs>
                 </div>

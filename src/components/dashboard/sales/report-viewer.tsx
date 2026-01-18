@@ -9,11 +9,13 @@ import { toast } from 'sonner'
 interface ReportViewerProps {
     reportHtml: string | null
     reportUrl?: string | null
+    pdfDownloadUrl?: string | null
     clientName: string
     date: string
+    trigger?: React.ReactNode
 }
 
-export function ReportViewer({ reportHtml, reportUrl, clientName, date }: ReportViewerProps) {
+export function ReportViewer({ reportHtml, reportUrl, pdfDownloadUrl, clientName, date, trigger }: ReportViewerProps) {
     const [isOpen, setIsOpen] = useState(false)
     const [iframeContent, setIframeContent] = useState('')
     const [isLoading, setIsLoading] = useState(false)
@@ -164,19 +166,17 @@ export function ReportViewer({ reportHtml, reportUrl, clientName, date }: Report
 
     const handleExportPDF = async () => {
         if (isExporting) return
-
-        // Open window immediately to bypass popup blockers
-        const loadWindow = window.open('', '_blank')
+        setIsExporting(true)
 
         // Check if we have a stored PDF URL first
-        if (reportUrl && reportUrl.toLowerCase().endsWith('.pdf')) {
-            if (loadWindow) {
-                loadWindow.document.write('<html><head><title>Downloading...</title><style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;background:#111;color:#fff;margin:0;}</style></head><body><div style="text-align:center"><h2>Downloading Stored PDF...</h2><p>Please wait...</p></div></body></html>')
-            }
+        if (pdfDownloadUrl) {
+            const toastId = toast.loading('Downloading stored PDF...')
 
             try {
-                // Fetch blob to force download
-                const response = await fetch(reportUrl)
+                // Attempt to fetch as blob for forced download
+                const response = await fetch(pdfDownloadUrl)
+                if (!response.ok) throw new Error('Fetch failed')
+
                 const blob = await response.blob()
                 const url = window.URL.createObjectURL(blob)
 
@@ -189,21 +189,30 @@ export function ReportViewer({ reportHtml, reportUrl, clientName, date }: Report
                 document.body.removeChild(link)
                 window.URL.revokeObjectURL(url)
 
-                if (loadWindow) loadWindow.close()
-                toast.success('Stored PDF downloaded successfully')
+                toast.success('PDF downloaded successfully', { id: toastId })
             } catch (error) {
-                console.error('Failed to download stored PDF:', error)
-                if (loadWindow) loadWindow.location.href = reportUrl
-                toast.success('Opening stored PDF...')
+                console.error('Failed to download stored PDF (blob):', error)
+                // Fallback: Just open it in a new tab
+                window.open(pdfDownloadUrl, '_blank')
+                toast.dismiss(toastId)
+            } finally {
+                setIsExporting(false)
             }
             return
         }
 
+        // Fallback: Generate on-the-fly (PDF.co)
+        // For generation, we use the "Sync Open" pattern because it takes longer 
+        // and we want to ensure the browser doesn't block the result window.
+        const loadWindow = window.open('', '_blank')
         if (loadWindow) {
             loadWindow.document.write('<html><head><title>Generating PDF...</title><style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;background:#111;color:#fff;margin:0;}</style></head><body><div style="text-align:center"><h2>Generating your PDF...</h2><p>Please wait (Server Generation)...</p></div></body></html>')
         }
 
-        setIsExporting(true)
+        // ... (rest of generation logic falls through to existing code below)
+        // Wait, need to ensure the existing code runs only if we haven't returned.
+        // The existing code below uses `loadWindow`, so we keep it.
+
 
         try {
             const { generatePdf } = await import('@/lib/actions/pdf')
@@ -245,9 +254,11 @@ export function ReportViewer({ reportHtml, reportUrl, clientName, date }: Report
     return (
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-400 hover:text-blue-300 transition-colors">
-                    <FileText className="h-4 w-4" />
-                </Button>
+                {trigger || (
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-400 hover:text-blue-300 transition-colors">
+                        <FileText className="h-4 w-4" />
+                    </Button>
+                )}
             </DialogTrigger>
             <DialogContent showCloseButton={false} className="w-screen h-screen max-w-none rounded-none border-0 left-1/2 sm:border sm:w-[70vw] sm:h-[90vh] sm:max-w-[70vw] sm:left-[calc(50%+9rem)] flex flex-col p-0 gap-0 bg-[#0a0a0a] border-white/10 shadow-2xl duration-200 sm:rounded-xl overflow-hidden">
                 {/* Screen Reader Title for Accessibility */}

@@ -34,9 +34,9 @@ export async function POST(req: Request) {
             .from('sales_call_logs')
             .insert({
                 meeting_url,
-                status: 'queued',
+                status: 'transcribing',
                 submitted_by: 'Austin Farwell', // Ideally from auth user context
-                client_name: 'Analysis Pending...', // Placeholder until analysis
+                client_name: 'Analyzing Call...', // Placeholder until analysis
             })
             .select()
             .single()

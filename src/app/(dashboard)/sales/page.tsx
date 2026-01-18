@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { deleteSalesCallLog } from '@/lib/actions/sales'
 import { format } from 'date-fns'
+import { cn } from '@/lib/utils'
 import {
     Table,
     TableBody,
@@ -14,7 +15,7 @@ import {
 } from '@/components/ui/table'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Search, ExternalLink, Calendar, CheckCircle2, User, Loader2, Clock, FileText, AlertCircle, Trash2 } from 'lucide-react'
+import { Search, ExternalLink, Calendar, CheckCircle2, User, Loader2, Clock, FileText, AlertCircle } from 'lucide-react'
 import { ReportViewer } from '@/components/dashboard/sales/report-viewer'
 import {
     Dialog,
@@ -28,6 +29,16 @@ import {
 import { Label } from '@/components/ui/label'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
+import { LinkClientDialog } from '@/components/dashboard/sales/link-client-dialog'
+import { UserPlus, MoreHorizontal, Link as LinkIcon, Trash2 } from 'lucide-react'
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 
 interface SalesCallLog {
@@ -36,9 +47,15 @@ interface SalesCallLog {
     client_name: string
     submitted_by: string
     meeting_url: string
-    report_html: string | null
     report_url?: string | null
+    report_html: string | null
+    pdf_download_url?: string | null
     status: string
+    client_id?: string | null
+    clients?: {
+        id: string
+        name: string
+    } | null
 }
 
 export default function SalesPage() {
@@ -50,6 +67,8 @@ export default function SalesPage() {
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [newUrl, setNewUrl] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const [linkClientDialogOpen, setLinkClientDialogOpen] = useState(false)
+    const [selectedLog, setSelectedLog] = useState<SalesCallLog | null>(null)
 
     const handleAnalyze = async () => {
         if (!newUrl) return
@@ -78,11 +97,11 @@ export default function SalesPage() {
             const newLog: SalesCallLog = {
                 id: data.id,
                 created_at: new Date().toISOString(),
-                client_name: 'Analysis Pending...',
+                client_name: 'Analyzing Call...',
                 submitted_by: 'You', // Or get actual user name if available
                 meeting_url: newUrl,
                 report_html: null,
-                status: 'queued'
+                status: 'transcribing'
             }
 
             setLogs(prev => [newLog, ...prev])
@@ -130,11 +149,29 @@ export default function SalesPage() {
                     table: 'sales_call_logs',
                 },
                 (payload) => {
-                    console.log('Real-time update received:', payload)
-                    fetchLogs()
+                    console.log('Realtime Event Received:', payload.eventType, payload)
+                    // Visual confirmation for the user/debugging
+                    toast('Debug: Realtime Event Received', { description: `${payload.eventType} - ID: ${(payload.new as any).id}` })
+
+                    if (payload.eventType === 'INSERT') {
+                        console.log('Inserting new log:', payload.new)
+                        setLogs(prev => [payload.new as SalesCallLog, ...prev])
+                    } else if (payload.eventType === 'UPDATE') {
+                        console.log('Updating log:', payload.new)
+                        setLogs(prev => prev.map(log =>
+                            log.id === payload.new.id ? { ...log, ...payload.new } : log
+                        ))
+                    } else if (payload.eventType === 'DELETE') {
+                        setLogs(prev => prev.filter(log => log.id !== payload.old.id))
+                    }
+                    // Optional: still fetch to ensure consistency, but state update should be enough
                 }
             )
-            .subscribe()
+            .subscribe((status) => {
+                console.log('Supabase Realtime Status:', status)
+                toast.dismiss() // Clean up previous status toasts
+                toast(`Realtime Connection: ${status}`)
+            })
 
         return () => {
             supabase.removeChannel(channel)
@@ -145,11 +182,20 @@ export default function SalesPage() {
         try {
             const { data, error } = await supabase
                 .from('sales_call_logs')
-                .select('id, created_at, client_name, submitted_by, meeting_url, status, report_url, report_html')
+                .select('id, created_at, client_name, submitted_by, meeting_url, status, report_url, report_html, pdf_download_url, client_id, clients(id, name)')
                 .order('created_at', { ascending: false })
 
             if (error) throw error
-            setLogs(data || [])
+
+            console.log('Fetched Logs Debug:', data?.map(l => ({ id: l.id, client_id: l.client_id })))
+
+            // Transform data to ensure clients is an object (Supabase sometimes returns array for 1:1)
+            const formattedData = data?.map(log => ({
+                ...log,
+                clients: Array.isArray(log.clients) ? log.clients[0] : log.clients
+            })) as unknown as SalesCallLog[]
+
+            setLogs(formattedData || [])
         } catch (error) {
             console.error('Error fetching logs:', error)
             setError(error instanceof Error ? error.message : 'An unknown error occurred')
@@ -159,8 +205,7 @@ export default function SalesPage() {
     }
 
     const filteredLogs = logs.filter(log =>
-        log.client_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        log.submitted_by?.toLowerCase().includes(searchQuery.toLowerCase())
+        log.client_name?.toLowerCase().includes(searchQuery.toLowerCase())
     )
 
     return (
@@ -226,7 +271,7 @@ export default function SalesPage() {
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
                         type="search"
-                        placeholder="Search by client or rep..."
+                        placeholder="Search"
                         className="pl-9 bg-[#1A1A1A] border-gray-800 text-white placeholder:text-gray-500 focus:ring-rose-500 focus:border-rose-500"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
@@ -328,22 +373,27 @@ export default function SalesPage() {
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <div className="flex items-center justify-end gap-2">
-                                            {log.meeting_url && (
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    asChild
-                                                    className="h-8 w-8 text-gray-400 hover:text-white hover:bg-gray-800"
-                                                >
-                                                    <a href={log.meeting_url} target="_blank" rel="noopener noreferrer">
-                                                        <ExternalLink className="h-4 w-4" />
-                                                    </a>
-                                                </Button>
-                                            )}
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => {
+                                                    setSelectedLog(log)
+                                                    setLinkClientDialogOpen(true)
+                                                }}
+                                                className={`h-8 w-8 transition-colors ${log.client_id
+                                                    ? 'text-emerald-500 hover:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20'
+                                                    : 'text-gray-500 hover:text-gray-400 hover:bg-white/5'
+                                                    }`}
+                                                title={log.client_id ? "Linked to Client" : "Link Client"}
+                                            >
+                                                <LinkIcon className="h-4 w-4" />
+                                            </Button>
+
                                             {log.report_html || log.report_url ? (
                                                 <ReportViewer
                                                     reportHtml={log.report_html}
                                                     reportUrl={log.report_url}
+                                                    pdfDownloadUrl={log.pdf_download_url}
                                                     clientName={log.client_name || 'Prospect'}
                                                     date={format(new Date(log.created_at), 'MMM d, yyyy')}
                                                 />
@@ -352,15 +402,57 @@ export default function SalesPage() {
                                                     <FileText className="h-4 w-4" />
                                                 </Button>
                                             )}
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                onClick={() => handleDelete(log.id)}
-                                                className="h-8 w-8 text-gray-500 hover:text-red-500 hover:bg-red-500/10"
-                                                title="Delete Log"
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
+
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-white">
+                                                        <MoreHorizontal className="h-4 w-4" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end" className="w-[180px] bg-[#1a1c1e] border-gray-800 text-gray-200">
+                                                    {log.meeting_url && (
+                                                        <>
+                                                            <DropdownMenuItem asChild>
+                                                                <a
+                                                                    href={log.meeting_url}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="cursor-pointer hover:bg-white/5 focus:bg-white/5 w-full flex items-center"
+                                                                >
+                                                                    <ExternalLink className="h-4 w-4 mr-2 text-blue-400" />
+                                                                    Fireflies.ai
+                                                                </a>
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuSeparator className="bg-gray-800" />
+                                                        </>
+                                                    )}
+
+                                                    <DropdownMenuItem
+                                                        onClick={() => {
+                                                            setSelectedLog(log)
+                                                            setLinkClientDialogOpen(true)
+                                                        }}
+                                                        className="cursor-pointer hover:bg-white/5 focus:bg-white/5 flex flex-col items-start gap-1"
+                                                    >
+                                                        <div className="flex items-center w-full">
+                                                            <LinkIcon className={cn("h-4 w-4 mr-2", log.client_id ? "text-emerald-500" : "text-gray-400")} />
+                                                            {log.client_id ? 'Update Link' : 'Link Client'}
+                                                        </div>
+                                                        {/* DEBUG: Remove after verifying */}
+                                                        <span className="text-[10px] text-gray-500 pl-6">ID: {String(log.client_id).substring(0, 8)}...</span>
+                                                    </DropdownMenuItem>
+
+                                                    <DropdownMenuSeparator className="bg-gray-800" />
+
+                                                    <DropdownMenuItem
+                                                        onClick={() => handleDelete(log.id)}
+                                                        className="text-red-500 cursor-pointer hover:bg-red-500/10 focus:bg-red-500/10 focus:text-red-500"
+                                                    >
+                                                        <Trash2 className="h-4 w-4 mr-2" />
+                                                        Delete Log
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                         </div>
                                     </TableCell>
                                 </TableRow>
@@ -408,41 +500,113 @@ export default function SalesPage() {
                                 {log.submitted_by || '-'}
                             </div>
 
-                            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-800/50">
-                                {log.meeting_url && (
-                                    <Button variant="outline" size="sm" asChild className="h-8 border-gray-700 bg-transparent text-gray-300 hover:text-white hover:bg-gray-800">
-                                        <a href={log.meeting_url} target="_blank" rel="noopener noreferrer">
-                                            <ExternalLink className="h-3.5 w-3.5 mr-1" /> View Call
-                                        </a>
-                                    </Button>
-                                )}
+                            <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-white/5">
+                                <div className="flex-1">
+                                    {(log.status === 'completed' && log.report_html) && (
+                                        <div onClick={(e) => e.stopPropagation()}>
+                                            <ReportViewer
+                                                reportHtml={log.report_html}
+                                                reportUrl={log.report_url}
+                                                pdfDownloadUrl={log.pdf_download_url}
+                                                clientName={log.client_name || 'Unknown'}
+                                                date={format(new Date(log.created_at), 'MMM d, yyyy')}
+                                                trigger={
+                                                    <Button variant="ghost" size="sm" className="h-8 text-xs text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 px-2 -ml-2">
+                                                        <FileText className="h-3.5 w-3.5 mr-1.5" />
+                                                        View Report
+                                                    </Button>
+                                                }
+                                            />
+                                        </div>
+                                    )}
+                                </div>
 
-                                {log.report_html || log.report_url ? (
-                                    <ReportViewer
-                                        reportHtml={log.report_html}
-                                        reportUrl={log.report_url}
-                                        clientName={log.client_name || 'Prospect'}
-                                        date={format(new Date(log.created_at), 'MMM d, yyyy')}
-                                    />
-                                ) : (
-                                    <Button variant="ghost" size="sm" disabled className="h-8 text-gray-600">
-                                        Generating...
+                                <div className="flex items-center gap-1">
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            setSelectedLog(log)
+                                            setLinkClientDialogOpen(true)
+                                        }}
+                                        className={cn(
+                                            "h-8 w-8 shrink-0 transition-colors",
+                                            log.client_id
+                                                ? 'text-emerald-500 hover:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20'
+                                                : 'text-gray-500 hover:text-gray-400 hover:bg-white/5'
+                                        )}
+                                    >
+                                        <LinkIcon className="h-4 w-4" />
                                     </Button>
-                                )}
 
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => handleDelete(log.id)}
-                                    className="h-8 w-8 text-gray-500 hover:text-red-500 hover:bg-red-500/10"
-                                >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-white shrink-0 hover:bg-white/5" onClick={(e) => e.stopPropagation()}>
+                                                <MoreHorizontal className="h-4 w-4" />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" className="w-[180px] bg-[#1a1c1e] border-gray-800 text-gray-200">
+                                            {log.meeting_url && (
+                                                <>
+                                                    <DropdownMenuItem asChild>
+                                                        <a
+                                                            href={log.meeting_url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="cursor-pointer hover:bg-white/5 focus:bg-white/5 w-full flex items-center"
+                                                        >
+                                                            <ExternalLink className="h-4 w-4 mr-2 text-blue-400" />
+                                                            Fireflies.ai
+                                                        </a>
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuSeparator className="bg-gray-800" />
+                                                </>
+                                            )}
+
+                                            <DropdownMenuItem
+                                                onClick={() => {
+                                                    setSelectedLog(log)
+                                                    setLinkClientDialogOpen(true)
+                                                }}
+                                                className="cursor-pointer hover:bg-white/5 focus:bg-white/5 flex flex-col items-start gap-1"
+                                            >
+                                                <div className="flex items-center w-full">
+                                                    <LinkIcon className={cn("h-4 w-4 mr-2", log.client_id ? "text-emerald-500" : "text-gray-400")} />
+                                                    {log.client_id ? 'Update Link' : 'Link Client'}
+                                                </div>
+                                                {/* DEBUG: Remove after verifying */}
+                                                <span className="text-[10px] text-gray-500 pl-6">ID: {String(log.client_id).substring(0, 8)}...</span>
+                                            </DropdownMenuItem>
+
+                                            <DropdownMenuSeparator className="bg-gray-800" />
+
+                                            <DropdownMenuItem
+                                                onClick={() => handleDelete(log.id)}
+                                                className="text-red-500 cursor-pointer hover:bg-red-500/10 focus:bg-red-500/10 focus:text-red-500"
+                                            >
+                                                <Trash2 className="h-4 w-4 mr-2" />
+                                                Delete Log
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
                             </div>
                         </div>
-                    ))
-                )}
+                    )))}
             </div>
+            <LinkClientDialog
+                open={linkClientDialogOpen}
+                onOpenChange={setLinkClientDialogOpen}
+                logId={selectedLog?.id || ''}
+                currentClientId={selectedLog?.client_id}
+                currentClientName={selectedLog?.clients?.name}
+                onSuccess={() => {
+                    console.log('LinkClientDialog: onSuccess triggered, refreshing logs...')
+                    fetchLogs()
+                    setLinkClientDialogOpen(false)
+                }}
+            />
         </div>
     )
 }

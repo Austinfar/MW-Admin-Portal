@@ -34,6 +34,10 @@ export async function POST(req: Request) {
             if (report_html) {
                 updateData.report_html = report_html;
             }
+            // Add support for the dedicated PDF URL
+            if (body.pdf_download_url) {
+                updateData.pdf_download_url = body.pdf_download_url;
+            }
         }
 
         if (client_name) {
