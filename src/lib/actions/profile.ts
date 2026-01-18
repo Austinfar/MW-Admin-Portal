@@ -26,6 +26,7 @@ export interface User {
     email: string
     role: 'admin' | 'coach' | 'sales_closer'
     permissions: UserPermissions
+    commission_config?: Record<string, number>
     is_active: boolean
     created_at: string
 }
@@ -324,5 +325,36 @@ export async function updateUserPermissions(userId: string, permissions: UserPer
     // Revalidate paths that depend on permissions
     revalidatePath('/')
 
+    return { success: true }
+}
+
+export async function updateUserCommissionConfig(userId: string, config: Record<string, number>) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) return { error: 'Not authenticated' }
+
+    const admin = createAdminClient()
+    const { data: requesterProfile } = await admin
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+    if (requesterProfile?.role !== 'admin') {
+        return { error: 'Unauthorized' }
+    }
+
+    const { error } = await admin
+        .from('users')
+        .update({
+            commission_config: config,
+            updated_at: new Date().toISOString()
+        })
+        .eq('id', userId)
+
+    if (error) return { error: error.message }
+
+    revalidatePath('/settings/team')
     return { success: true }
 }

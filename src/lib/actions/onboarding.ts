@@ -281,8 +281,10 @@ export async function createAdHocTask(clientId: string, taskTitle: string, dueDa
     return { success: true }
 }
 
+import { createAdminClient } from '@/lib/supabase/admin'
+
 export async function getOnboardingClients() {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { data, error } = await supabase
         .from('clients')
         .select(`

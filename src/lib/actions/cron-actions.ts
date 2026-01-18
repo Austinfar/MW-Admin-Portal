@@ -1,10 +1,8 @@
-'use server'
-
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { stripe } from '@/lib/stripe'
 
 export async function processScheduledCharges() {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     // 1. Fetch pending charges that are due
     const { data: charges, error } = await supabase
@@ -13,7 +11,7 @@ export async function processScheduledCharges() {
             id,
             amount,
             schedule_id,
-            payment_schedules (
+            payment_schedules!inner (
                 stripe_customer_id,
                 stripe_payment_method_id
             )

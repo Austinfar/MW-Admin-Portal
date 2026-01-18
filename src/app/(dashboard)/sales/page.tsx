@@ -37,6 +37,7 @@ interface SalesCallLog {
     submitted_by: string
     meeting_url: string
     report_html: string | null
+    report_url?: string | null
     status: string
 }
 
@@ -52,6 +53,12 @@ export default function SalesPage() {
 
     const handleAnalyze = async () => {
         if (!newUrl) return
+
+        // Validate URL
+        if (!newUrl.startsWith('https://app.fireflies.ai/')) {
+            toast.error('Invalid URL. Please use a valid Fireflies.ai meeting URL (https://app.fireflies.ai/...).')
+            return
+        }
 
         setIsSubmitting(true)
         try {
@@ -138,7 +145,7 @@ export default function SalesPage() {
         try {
             const { data, error } = await supabase
                 .from('sales_call_logs')
-                .select('*')
+                .select('id, created_at, client_name, submitted_by, meeting_url, status, report_url, report_html')
                 .order('created_at', { ascending: false })
 
             if (error) throw error
@@ -158,17 +165,17 @@ export default function SalesPage() {
 
     return (
         <div className="flex-1 space-y-4 p-8 pt-6">
-            <div className="flex items-center justify-between space-y-2">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 md:space-y-0">
                 <div>
                     <h2 className="text-3xl font-bold tracking-tight text-white mb-2">Sales Call Analyzer</h2>
                     <p className="text-muted-foreground">
                         Review AI-analyzed sales calls and generated reports.
                     </p>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2 w-full md:w-auto">
                     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                         <DialogTrigger asChild>
-                            <Button className="bg-rose-600 hover:bg-rose-700 text-white">
+                            <Button className="w-full md:w-auto bg-rose-600 hover:bg-rose-700 text-white">
                                 <Plus className="mr-2 h-4 w-4" /> New Analysis
                             </Button>
                         </DialogTrigger>
@@ -214,7 +221,7 @@ export default function SalesPage() {
                 </div>
             </div>
 
-            <div className="w-full max-w-sm mb-6">
+            <div className="w-full md:max-w-sm mb-6">
                 <div className="relative">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -227,7 +234,8 @@ export default function SalesPage() {
                 </div>
             </div>
 
-            <div className="rounded-xl border border-gray-800/60 bg-[#121212]/50 backdrop-blur-sm overflow-hidden">
+            {/* Desktop Table View */}
+            <div className="hidden md:block rounded-xl border border-gray-800/60 bg-[#121212]/50 backdrop-blur-sm overflow-hidden">
                 <Table>
                     <TableHeader className="bg-gray-900/50">
                         <TableRow className="border-gray-800 hover:bg-transparent">
@@ -332,9 +340,10 @@ export default function SalesPage() {
                                                     </a>
                                                 </Button>
                                             )}
-                                            {log.report_html ? (
+                                            {log.report_html || log.report_url ? (
                                                 <ReportViewer
                                                     reportHtml={log.report_html}
+                                                    reportUrl={log.report_url}
                                                     clientName={log.client_name || 'Prospect'}
                                                     date={format(new Date(log.created_at), 'MMM d, yyyy')}
                                                 />
@@ -359,6 +368,80 @@ export default function SalesPage() {
                         )}
                     </TableBody>
                 </Table>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-4">
+                {loading ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                        <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
+                        Loading logs...
+                    </div>
+                ) : filteredLogs.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground border border-dashed border-gray-800 rounded-lg">
+                        No call logs found.
+                    </div>
+                ) : (
+                    filteredLogs.map((log) => (
+                        <div key={log.id} className="bg-[#1A1A1A] border border-gray-800 rounded-lg p-4 space-y-3">
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <h3 className="text-white font-semibold text-lg">{log.client_name || 'Unknown'}</h3>
+                                    <div className="flex items-center text-xs text-gray-500 mt-1">
+                                        <Calendar className="h-3 w-3 mr-1" />
+                                        {format(new Date(log.created_at), 'MMM d, h:mm a')}
+                                    </div>
+                                </div>
+                                {(() => {
+                                    const s = log.status?.toLowerCase() || 'analyzed'
+                                    if (s === 'queued') return <span className="text-xs font-medium text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded border border-yellow-500/20">Queued</span>
+                                    if (s === 'transcribing') return <span className="text-xs font-medium text-blue-500 bg-blue-500/10 px-2 py-1 rounded border border-blue-500/20">Transcribing</span>
+                                    if (s === 'analyzing') return <span className="text-xs font-medium text-purple-500 bg-purple-500/10 px-2 py-1 rounded border border-purple-500/20">Analyzing</span>
+                                    if (s === 'failed') return <span className="text-xs font-medium text-red-500 bg-red-500/10 px-2 py-1 rounded border border-red-500/20">Failed</span>
+                                    return <span className="text-xs font-medium text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/20">Completed</span>
+                                })()}
+                            </div>
+
+                            <div className="flex items-center text-sm text-gray-400 bg-black/20 p-2 rounded">
+                                <User className="h-3.5 w-3.5 mr-2 text-gray-500" />
+                                <span className="text-xs uppercase tracking-wide text-gray-600 mr-2">Submitted By:</span>
+                                {log.submitted_by || '-'}
+                            </div>
+
+                            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-800/50">
+                                {log.meeting_url && (
+                                    <Button variant="outline" size="sm" asChild className="h-8 border-gray-700 bg-transparent text-gray-300 hover:text-white hover:bg-gray-800">
+                                        <a href={log.meeting_url} target="_blank" rel="noopener noreferrer">
+                                            <ExternalLink className="h-3.5 w-3.5 mr-1" /> View Call
+                                        </a>
+                                    </Button>
+                                )}
+
+                                {log.report_html || log.report_url ? (
+                                    <ReportViewer
+                                        reportHtml={log.report_html}
+                                        reportUrl={log.report_url}
+                                        clientName={log.client_name || 'Prospect'}
+                                        date={format(new Date(log.created_at), 'MMM d, yyyy')}
+                                    />
+                                ) : (
+                                    <Button variant="ghost" size="sm" disabled className="h-8 text-gray-600">
+                                        Generating...
+                                    </Button>
+                                )}
+
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleDelete(log.id)}
+                                    className="h-8 w-8 text-gray-500 hover:text-red-500 hover:bg-red-500/10"
+                                >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                            </div>
+                        </div>
+                    ))
+                )}
             </div>
         </div>
     )

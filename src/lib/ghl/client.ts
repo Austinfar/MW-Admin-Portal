@@ -1,3 +1,4 @@
+
 import { GHL_CONFIG } from './config'
 
 interface GHLResponse<T> {
@@ -6,21 +7,81 @@ interface GHLResponse<T> {
     meta?: any
 }
 
+interface GHLClientOptions {
+    refreshToken?: string
+    onTokenRefresh?: (tokens: { access_token: string; refresh_token: string; expires_in?: number }) => Promise<void>
+}
+
 // Basic wrapper for GHL API
 export class GHLClient {
     private accessToken: string
+    private refreshToken?: string
     private locationId: string
+    private onTokenRefresh?: (tokens: { access_token: string; refresh_token: string; expires_in?: number }) => Promise<void>
 
-    constructor(accessToken?: string, locationId?: string) {
+    constructor(accessToken?: string, locationId?: string, options?: GHLClientOptions) {
         this.accessToken = accessToken || GHL_CONFIG.ACCESS_TOKEN || ''
         this.locationId = locationId || GHL_CONFIG.LOCATION_ID || ''
+        this.refreshToken = options?.refreshToken
+        this.onTokenRefresh = options?.onTokenRefresh
 
         if (!this.accessToken) {
             console.warn('GHL Access Token is missing. API calls will fail.')
         }
     }
 
-    private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T | null> {
+    private async refreshTokens(): Promise<boolean> {
+        if (!this.refreshToken) {
+            console.error('[GHL Error] Cannot refresh token: No refresh token available.')
+            return false
+        }
+
+        try {
+            console.log('[GHL Info] Attempting to refresh access token...')
+            const body = new URLSearchParams({
+                client_id: GHL_CONFIG.CLIENT_ID || '',
+                client_secret: GHL_CONFIG.CLIENT_SECRET || '',
+                grant_type: 'refresh_token',
+                refresh_token: this.refreshToken,
+                user_type: 'Location',
+            })
+
+            const res = await fetch('https://services.leadconnectorhq.com/oauth/token', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Accept': 'application/json',
+                },
+                body
+            })
+
+            if (!res.ok) {
+                const text = await res.text()
+                console.error('[GHL Error] Token refresh failed:', text)
+                return false
+            }
+
+            const data = await res.json()
+
+            // Update local state
+            this.accessToken = data.access_token
+            this.refreshToken = data.refresh_token
+
+            // Notify callback to persist
+            if (this.onTokenRefresh) {
+                await this.onTokenRefresh(data)
+            }
+
+            console.log('[GHL Info] Token refreshed successfully.')
+            return true
+
+        } catch (error) {
+            console.error('[GHL Error] Exception during token refresh:', error)
+            return false
+        }
+    }
+
+    private async request<T>(endpoint: string, options: RequestInit = {}, retry = true): Promise<T | null> {
         if (!this.accessToken) {
             console.error('[GHL Error] No access token provided for request');
             return null;
@@ -39,6 +100,17 @@ export class GHLClient {
 
         try {
             const res = await fetch(url, { ...options, headers })
+
+            // Handle 401 Unauthorized (Expired Token)
+            if (res.status === 401 && retry) {
+                console.warn('[GHL Warning] 401 Unauthorized. Attempting refresh...')
+                const refreshed = await this.refreshTokens()
+                if (refreshed) {
+                    // Retry the request with new token
+                    return this.request<T>(endpoint, options, false) // false prevents infinite loop
+                }
+            }
+
             if (!res.ok) {
                 const text = await res.text();
                 console.error(`GHL API Error: ${res.statusText}`, text)
@@ -70,6 +142,13 @@ export class GHLClient {
         // GHL v2 endpoint for pipelines is often under opportunities module
         const response = await this.request<{ pipelines: any[] }>(`/opportunities/pipelines?locationId=${this.locationId}`);
         return response;
+    }
+
+    async getCustomFields() {
+        // Fetch all custom fields for the location
+        // NOTE: Standard endpoint is /locations/{locationId}/customFields or just /custom-fields/
+        // Per GHL 2.0 Docs: GET /locations/{locationId}/customFields
+        return this.request<{ customFields: any[] }>(`/locations/${this.locationId}/customFields`)
     }
 
     async getOpportunities(pipelineId: string) {

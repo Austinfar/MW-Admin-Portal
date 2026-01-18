@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { getInvitations, revokeInvitation, Invitation } from '@/lib/actions/invitations';
 import { getAllUsers, User } from '@/lib/actions/profile';
 import { InviteMemberDialog } from '@/components/team/InviteMemberDialog';
+import { UserEditModal } from '@/components/team/UserEditModal';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -105,6 +106,7 @@ export function TeamSettingsClient() {
                                             {expandedUser === user.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                                             <span className="ml-2">Permissions</span>
                                         </Button>
+                                        <UserEditModal user={user} onUpdate={fetchData} />
                                     </div>
                                 </div>
 
@@ -171,6 +173,6 @@ export function TeamSettingsClient() {
                     )}
                 </CardContent>
             </Card>
-        </div>
+        </div >
     );
 }

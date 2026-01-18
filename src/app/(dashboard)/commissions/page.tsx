@@ -1,33 +1,35 @@
-import { getWeeklyCommissions } from '@/lib/actions/reports'
-import { WeeklyReport } from '@/components/commissions/WeeklyReport'
-import { DownloadCommissionReportButton } from '@/components/commissions/DownloadCommissionReportButton'
-import { Button } from '@/components/ui/button'
-import Link from 'next/link'
+'use client';
 
-export default async function CommissionsPage() {
-    // Default to current week
-    // In a real app we'd parse searchParams for date range
-    const currentDate = new Date()
-    const reportData = await getWeeklyCommissions(currentDate)
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CommissionActiveView } from '@/components/commissions/CommissionActiveView';
+import { CommissionHistoryView } from '@/components/commissions/CommissionHistoryView';
 
+export default function CommissionDashboard() {
     return (
-        <div className="flex-1 space-y-6">
-            <div className="flex items-center justify-between space-y-2">
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                    <h2 className="text-3xl font-bold tracking-tight text-foreground">Commissions</h2>
-                    <p className="text-muted-foreground">
-                        Weekly payout reports and commission tracking.
-                    </p>
-                </div>
-                <div className="flex items-center space-x-2">
-                    <Link href="/commissions/settings">
-                        <Button variant="outline">Settings</Button>
-                    </Link>
-                    <DownloadCommissionReportButton data={reportData} currentDate={currentDate} />
+                    <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60">
+                        Commission Dashboard
+                    </h1>
+                    <p className="text-muted-foreground mt-1">Track earnings, manage payroll, and review history.</p>
                 </div>
             </div>
 
-            <WeeklyReport data={reportData} currentDate={currentDate} />
+            <Tabs defaultValue="active" className="w-full">
+                <TabsList className="bg-white/5 border border-white/10 p-1">
+                    <TabsTrigger value="active">Active Pay Period</TabsTrigger>
+                    <TabsTrigger value="history">Payroll History</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="active" className="mt-6">
+                    <CommissionActiveView />
+                </TabsContent>
+
+                <TabsContent value="history" className="mt-6">
+                    <CommissionHistoryView />
+                </TabsContent>
+            </Tabs>
         </div>
-    )
+    );
 }

@@ -2,7 +2,7 @@
 
 import { GHLClient } from '@/lib/ghl/client';
 import { syncGHLContact } from '@/lib/ghl/sync';
-import { getAppSettings } from '@/lib/actions/app-settings';
+import { getAppSettings, updateAppSetting } from '@/lib/actions/app-settings';
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
@@ -15,9 +15,23 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 async function getAuthenticatedGHLClient() {
     const settings = await getAppSettings();
     const token = settings['ghl_access_token'];
+    const refreshToken = settings['ghl_refresh_token'];
     const location = settings['ghl_location_id'];
+
     console.log('[GHL Info] Using credentials from DB:', { tokenExists: !!token, location });
-    return new GHLClient(token, location);
+
+    return new GHLClient(token, location, {
+        refreshToken,
+        onTokenRefresh: async (newTokens) => {
+            console.log('[GHL Action] Refreshing stored tokens via callback');
+            await updateAppSetting('ghl_access_token', newTokens.access_token);
+            await updateAppSetting('ghl_refresh_token', newTokens.refresh_token);
+            if (newTokens.expires_in) {
+                const expiresAt = new Date(Date.now() + newTokens.expires_in * 1000).toISOString();
+                await updateAppSetting('ghl_token_expires_at', expiresAt);
+            }
+        }
+    });
 }
 
 /**
@@ -127,6 +141,16 @@ export async function syncGHLPipeline(pipelineId: string) {
 
     console.log(`Starting sync for Pipeline ${pipelineId}. Found ${opportunities.length} opportunities, ${total} unique contacts.`);
 
+    // Fetch custom field definitions once for enrichment
+    let customFieldDefinitions: any[] = [];
+    try {
+        const cfRes = await client.getCustomFields();
+        customFieldDefinitions = cfRes?.customFields || [];
+        console.log(`[GHL Info] Fetched ${customFieldDefinitions.length} custom field definitions for sync enrichment.`);
+    } catch (e) {
+        console.warn('[GHL Warning] Failed to fetch custom definitions for sync, fields will not be enriched.', e);
+    }
+
     if (total === 0) {
         return { success: true, count: 0, errors: 0 };
     }
@@ -162,7 +186,7 @@ export async function syncGHLPipeline(pipelineId: string) {
         const contactIdForLog = typeof contactToSync === 'string' ? contactToSync : (contactToSync?.id || 'unknown');
 
         if (contactToSync) {
-            const syncResult = await syncGHLContact(contactToSync, client);
+            const syncResult = await syncGHLContact(contactToSync, client, customFieldDefinitions);
             if (syncResult.error) {
                 console.error(`Failed to sync contact ${contactIdForLog}:`, syncResult.error);
                 errorCount++;

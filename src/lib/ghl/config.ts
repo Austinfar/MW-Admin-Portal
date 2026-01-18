@@ -4,6 +4,8 @@ export const GHL_CONFIG = {
     // Locations can be loaded from DB or Env if single location
     LOCATION_ID: process.env.GHL_LOCATION_ID,
     ACCESS_TOKEN: process.env.GHL_ACCESS_TOKEN,
+    CLIENT_ID: process.env.GHL_CLIENT_ID,
+    CLIENT_SECRET: process.env.GHL_CLIENT_SECRET,
 }
 
 export const GHL_EVENTS = {

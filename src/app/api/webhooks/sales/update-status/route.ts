@@ -5,7 +5,7 @@ export async function POST(req: Request) {
     try {
         const supabase = createAdminClient();
         const body = await req.json();
-        const { record_id, status, report_html, error_message, client_name } = body;
+        const { record_id, status, report_html, report_url, error_message, client_name } = body;
 
         if (!record_id || !status) {
             return NextResponse.json(
@@ -27,8 +27,13 @@ export async function POST(req: Request) {
             status,
         };
 
-        if (status === 'completed' && report_html) {
-            updateData.report_html = report_html;
+        if (status === 'completed') {
+            if (report_url) {
+                updateData.report_url = report_url;
+            }
+            if (report_html) {
+                updateData.report_html = report_html;
+            }
         }
 
         if (client_name) {

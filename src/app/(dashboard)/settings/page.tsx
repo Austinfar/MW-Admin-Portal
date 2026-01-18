@@ -64,6 +64,7 @@ export default async function SettingsPage() {
                         {/* GoHighLevel Settings */}
                         <GHLConnectionSettings
                             initialAccessToken={settings['ghl_access_token']}
+                            initialRefreshToken={settings['ghl_refresh_token']}
                             initialLocationId={settings['ghl_location_id']}
                         />
                         <GHLSyncSettings pipelines={pipelines} />

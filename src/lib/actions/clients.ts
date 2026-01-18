@@ -15,7 +15,8 @@ async function _getClients() {
         .select(`
       *,
       client_type:client_types(name),
-      assigned_coach:users!clients_assigned_coach_id_fkey(name, email)
+      assigned_coach:users!clients_assigned_coach_id_fkey(name, email),
+      sold_by_user:users!clients_sold_by_user_id_fkey(name, email)
     `)
         .order('created_at', { ascending: false })
 
@@ -45,7 +46,8 @@ export async function getClient(id: string) {
         .select(`
       *,
       client_type:client_types(name),
-      assigned_coach:users!clients_assigned_coach_id_fkey(name, email)
+      assigned_coach:users!clients_assigned_coach_id_fkey(name, email),
+      sold_by_user:users!clients_sold_by_user_id_fkey(name, email)
     `)
         .eq('id', id)
         .single()
@@ -170,7 +172,10 @@ export async function updateClient(id: string, data: Partial<Client>) {
             contract_end_date: data.contract_end_date,
             client_type_id: data.client_type_id,
             assigned_coach_id: data.assigned_coach_id,
-            stripe_customer_id: data.stripe_customer_id
+            // assigned_coach_id: data.assigned_coach_id, // Removed duplicate
+            stripe_customer_id: data.stripe_customer_id,
+            sold_by_user_id: data.sold_by_user_id, // NEW
+            lead_source: data.lead_source // NEW
         })
         .eq('id', id)
 

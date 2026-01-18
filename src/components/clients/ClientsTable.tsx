@@ -138,7 +138,7 @@ export function ClientsTable({ data, clientTypes, coaches }: ClientsTableProps) 
                         placeholder="Search clients..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="max-w-sm bg-background border-border"
+                        className="w-full md:max-w-sm bg-background border-border"
                     />
                     <Popover open={isFilterOpen} onOpenChange={setIsFilterOpen}>
                         <PopoverTrigger asChild>
@@ -318,7 +318,8 @@ export function ClientsTable({ data, clientTypes, coaches }: ClientsTableProps) 
                 Showing {filteredData.length} of {data.length} clients
             </div>
 
-            <div className="rounded-md border bg-card/40 border-primary/5 shadow-sm overflow-hidden">
+            {/* Desktop Table View */}
+            <div className="hidden md:block rounded-md border bg-card/40 border-primary/5 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                     <Table>
                         <TableHeader>
@@ -385,13 +386,19 @@ export function ClientsTable({ data, clientTypes, coaches }: ClientsTableProps) 
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end">
                                                     <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                    <DropdownMenuItem onClick={() => navigator.clipboard.writeText(client.id)}>
+                                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(client.id) }}>
                                                         Copy ID
                                                     </DropdownMenuItem>
                                                     <DropdownMenuSeparator />
-                                                    <DropdownMenuItem>View details</DropdownMenuItem>
-                                                    <DropdownMenuItem>View payments</DropdownMenuItem>
-                                                    <DropdownMenuItem className="text-red-600">Archive client</DropdownMenuItem>
+                                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/clients/${client.id}`) }}>
+                                                        View details
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); }}>
+                                                        View payments
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem className="text-red-600" onClick={(e) => { e.stopPropagation(); }}>
+                                                        Archive client
+                                                    </DropdownMenuItem>
                                                 </DropdownMenuContent>
                                             </DropdownMenu>
                                         </TableCell>
@@ -401,6 +408,56 @@ export function ClientsTable({ data, clientTypes, coaches }: ClientsTableProps) 
                         </TableBody>
                     </Table>
                 </div>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-3">
+                {filteredData.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground border border-dashed rounded-lg">
+                        No results found.
+                    </div>
+                ) : (
+                    filteredData.map((client) => (
+                        <div
+                            key={client.id}
+                            onClick={() => router.push(`/clients/${client.id}`)}
+                            className="bg-card/40 border border-primary/5 rounded-lg p-4 active:bg-muted/50 transition-colors cursor-pointer space-y-3 shadow-sm"
+                        >
+                            <div className="flex items-start justify-between">
+                                <div className="space-y-0.5">
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-semibold text-card-foreground text-lg">{client.name}</span>
+                                        {client.stripe_customer_id && (
+                                            <CreditCard className="h-3.5 w-3.5 text-emerald-500" />
+                                        )}
+                                    </div>
+                                    <div className="text-sm text-muted-foreground">{client.email}</div>
+                                </div>
+                                <Badge variant="secondary" className={getStatusColor(client.status)}>
+                                    {client.status.toUpperCase()}
+                                </Badge>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-sm pt-2 border-t border-primary/5 text-muted-foreground">
+                                <div>
+                                    <span className="text-xs uppercase tracking-wide text-gray-500 block mb-0.5">Program</span>
+                                    <span className="font-medium text-foreground">{client.client_type?.name || 'Unassigned'}</span>
+                                </div>
+                                <div className="text-right">
+                                    <span className="text-xs uppercase tracking-wide text-gray-500 block mb-0.5">Start Date</span>
+                                    {format(new Date(client.start_date), 'MMM d, yyyy')}
+                                </div>
+                                <div className="col-span-2 pt-2">
+                                    <span className="text-xs uppercase tracking-wide text-gray-500 block mb-0.5">Coach</span>
+                                    <div className="flex items-center gap-2">
+                                        <div className="h-2 w-2 rounded-full bg-primary/40"></div>
+                                        <span className="font-medium text-foreground">{client.assigned_coach?.name || 'Unassigned'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ))
+                )}
             </div>
         </div>
     )

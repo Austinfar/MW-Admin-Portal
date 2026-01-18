@@ -1,4 +1,4 @@
-import { getClient } from '@/lib/actions/clients'
+import { getClient, getCoaches } from '@/lib/actions/clients'
 import { getClientTasks } from '@/lib/actions/onboarding'
 import { getClientNotes } from '@/lib/actions/notes'
 import { GHL_CONFIG } from '@/lib/ghl/config'
@@ -25,6 +25,7 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
     const client = await getClient(params.id)
     const tasksData = await getClientTasks(params.id)
     const tasks = (tasksData || []) as OnboardingTask[]
+    const users = await getCoaches() // Fetch potential sellers
     if (!client) {
         return (
             <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
@@ -93,7 +94,7 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-200px)]">
                 {/* Left Column: Identity & Contact (3 cols) */}
                 <div className="lg:col-span-3 space-y-6">
-                    <ClientDetailsCard client={client} ghlLocationId={GHL_CONFIG.LOCATION_ID} />
+                    <ClientDetailsCard client={client} ghlLocationId={GHL_CONFIG.LOCATION_ID} users={users} />
 
                     <Card className="bg-card/40 border-primary/5 backdrop-blur-sm">
                         <CardHeader>

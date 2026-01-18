@@ -28,10 +28,10 @@ export function EasterEgg({ isActive, onComplete }: EasterEggProps) {
             }
             playAudio()
 
-            // Auto dismiss after 10 seconds
+            // Auto dismiss after 11 seconds
             const timer = setTimeout(() => {
                 onComplete()
-            }, 10000)
+            }, 11000)
 
             return () => clearTimeout(timer)
         } else {
@@ -92,7 +92,7 @@ export function EasterEgg({ isActive, onComplete }: EasterEggProps) {
                     100% { transform: translateY(0); } /* Stay */
                 }
                 .animate-rise-and-bounce {
-                    animation: rise-and-bounce 10s ease-out forwards;
+                    animation: rise-and-bounce 11s ease-out forwards;
                 }
                 @keyframes fall {
                     0% { transform: translateY(0) rotate(0deg); opacity: 0; }

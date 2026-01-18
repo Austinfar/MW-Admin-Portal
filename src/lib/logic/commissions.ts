@@ -110,8 +110,12 @@ export async function calculateCommission(paymentId: string) {
 
     if (rate === 0) return
 
+    if (rate === 0) return
+
     // 4. Calculate Split Amount
-    const commissionAmount = Number(payment.amount) * rate
+    // Use Net Revenue (Amount - Fee)
+    const netBasis = Number(payment.amount) - (Number(payment.stripe_fee) || 0)
+    const commissionAmount = netBasis * rate
 
     // 5. Create Split Record
     // Default: 100% to assigned coach. Role = 'primary'
@@ -120,20 +124,63 @@ export async function calculateCommission(paymentId: string) {
         .from('commission_splits')
         .insert({
             payment_id: payment.id,
-            coach_id: client.assigned_coach_id,
-            role: 'primary',
-            amount: commissionAmount,
-            percentage: rate * 100 // Storing the effective rate as percentage (e.g. 50, 70) or split %?
-            // Schema comment said "percentage of the pool". 
-            // If the pool IS the full commissionAmount, then primary gets 100% of the pool.
-            // But here "rate" is the calculation of the pool itself derived from payment.
-            // Let's align: 
-            // - `amount` = actual dollars.
-            // - `percentage` = let's store the COMMISSION RATE used (e.g. 0.5 or 50). 
+            recipient_user_id: client.assigned_coach_id,
+            recipient_type: 'coach',
+            // amount removed as it is not in schema
+            split_percentage: rate * 100
             // This aids debugging "why did I get $50 on $100? Oh, rate was 50%".
         })
 
     if (splitError) {
         console.error('Commission Calc: Failed to insert split', splitError)
     }
+
+    // 6. Create Ledger Entry
+    // We also need to record this in the main ledger for easy payroll summing.
+    // The ledger entry typically corresponds to the PRIMARY earner or the specific split?
+    // The schema says: user_id FK, client_id FK, payment_id FK.
+    // So if there are multiple splits, there should ideally be multiple ledger entries?
+    // "commission_ledger: To store the calculated payout for each transaction for payroll reporting."
+    // Yes, one entry per recipient per transaction.
+
+    // Calculate Net Amount (Basis)
+    // const netAmount = Number(payment.amount) - (Number(payment.stripe_fee) || 0) // Already calc as netBasis
+
+    const { error: ledgerError } = await supabase
+        .from('commission_ledger')
+        .insert({
+            user_id: client.assigned_coach_id, // For now, only supporting 100% to primary. Future: Loop through splits.
+            client_id: client.id,
+            payment_id: payment.id,
+            gross_amount: payment.amount,
+            net_amount: netBasis,
+            commission_amount: commissionAmount,
+            status: 'pending',
+            payout_period_start: getPayoutPeriodStart(new Date(payment.created_at)).toISOString(),
+            calculation_basis: {
+                rate: rate,
+                lead_source: client.lead_source,
+                is_resign: client.is_resign,
+                stripe_fee: payment.stripe_fee
+            }
+        })
+
+    if (ledgerError) {
+        console.error('Commission Calc: Failed to insert ledger entry', ledgerError)
+    }
+}
+
+// Helper: Calculate Bi-Weekly Payout Period Start
+// Anchor: Jan 3, 2025 (First Friday/Payday of the year?).
+// Actually, let's just use ISO weeks or a simple 14-day modulo from a reference date.
+// Reference: Friday Jan 3, 2025.
+function getPayoutPeriodStart(date: Date): Date {
+    const anchor = new Date('2025-01-03T00:00:00Z')
+    const diffTime = date.getTime() - anchor.getTime()
+    const daysDiff = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+    const periodIndex = Math.floor(daysDiff / 14)
+
+    const periodStart = new Date(anchor)
+    periodStart.setDate(anchor.getDate() + (periodIndex * 14))
+    return periodStart
 }

@@ -19,15 +19,28 @@ import { useEffect, useState } from 'react'
 import { getCurrentUserProfile, UserProfile } from '@/lib/actions/profile'
 import { UserAccess } from '@/lib/auth-utils'
 import { useEasterEgg } from './EasterEggProvider'
+import { GlobalSearch } from './GlobalSearch'
 
 export function Header({ userAccess }: { userAccess?: UserAccess }) {
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [searchValue, setSearchValue] = useState('')
+    const [globalSearchOpen, setGlobalSearchOpen] = useState(false)
     const { triggerEasterEgg } = useEasterEgg()
 
     useEffect(() => {
         getCurrentUserProfile().then(setProfile);
     }, []);
+
+    useEffect(() => {
+        const down = (e: KeyboardEvent) => {
+            if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault()
+                setGlobalSearchOpen((open) => !open)
+            }
+        }
+        document.addEventListener('keydown', down)
+        return () => document.removeEventListener('keydown', down)
+    }, [])
 
     const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const val = e.target.value
@@ -74,16 +87,27 @@ export function Header({ userAccess }: { userAccess?: UserAccess }) {
 
 
             <div className="ml-auto flex items-center space-x-4">
-                <div className="relative hidden md:block w-64">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        type="search"
-                        placeholder="Search..."
-                        value={searchValue}
-                        onChange={handleSearchChange}
-                        className="w-full bg-secondary/50 border-transparent focus-visible:ring-primary rounded-full pl-9"
-                    />
-                </div>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="md:hidden"
+                    onClick={() => setGlobalSearchOpen(true)}
+                >
+                    <Search className="h-5 w-5 text-muted-foreground" />
+                </Button>
+                <GlobalSearch open={globalSearchOpen} onOpenChange={setGlobalSearchOpen} />
+
+                <Button
+                    variant="outline"
+                    className="relative hidden md:flex w-64 justify-start text-muted-foreground"
+                    onClick={() => setGlobalSearchOpen(true)}
+                >
+                    <Search className="mr-2 h-4 w-4" />
+                    <span>Search...</span>
+                    <kbd className="pointer-events-none absolute right-2 top-2 hidden h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100 sm:flex">
+                        <span className="text-xs">⌘</span>K
+                    </kbd>
+                </Button>
 
                 <Button variant="ghost" size="icon" className="relative hover:bg-secondary/50 rounded-full">
                     <Bell className="h-5 w-5 text-muted-foreground" />

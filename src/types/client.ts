@@ -14,6 +14,7 @@ export interface Client {
     lead_source: 'coach_driven' | 'company_driven' | null
     pipeline_stage: string | null
     stripe_customer_id?: string | null
+    sold_by_user_id?: string | null // NEW
     created_at: string
     // Joined fields
     client_type?: {
@@ -23,6 +24,10 @@ export interface Client {
         name: string
         email: string
     } | null
+    sold_by_user?: {
+        name: string
+        email: string
+    } | null // NEW
 }
 
 export interface ClientType {

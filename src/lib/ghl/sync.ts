@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { GHLClient } from './client'
 
-export async function syncGHLContact(contactOrId: any, client?: GHLClient) {
+export async function syncGHLContact(contactOrId: any, client?: GHLClient, customFieldDefinitions?: any[]) {
     // Use Admin Client to bypass RLS policies on 'clients' table during sync
     const supabase = createAdminClient()
     const ghl = client || new GHLClient()
@@ -22,6 +22,32 @@ export async function syncGHLContact(contactOrId: any, client?: GHLClient) {
         return { error: 'GHL Contact not found' }
     }
     contactData = response.contact;
+
+    // Enrich Custom Fields if definitions provided or fetch them if missing
+    let enrichedFields: Record<string, any> = {};
+    try {
+        let definitions = customFieldDefinitions;
+        if (!definitions) {
+            // If not provided by caller (e.g. bulk sync), fetch them for this single contact
+            const cfRes = await ghl.getCustomFields();
+            definitions = cfRes?.customFields || [];
+        }
+
+        if (definitions && Array.isArray(definitions) && contactData.customFields) {
+            const defMap = new Map(definitions.map((d: any) => [d.id, d.name]));
+
+            // Create a readable map: { "Field Name": "Value" }
+            enrichedFields = contactData.customFields.reduce((acc: any, field: any) => {
+                const name = defMap.get(field.id);
+                if (name) {
+                    acc[name] = field.value;
+                }
+                return acc;
+            }, {});
+        }
+    } catch (err) {
+        console.warn('Failed to enrich custom fields:', err);
+    }
 
     // Map GHL fields to Client Schema
     const fullName = contactData.name || `${contactData.firstName || ''} ${contactData.lastName || ''}`;
@@ -56,6 +82,12 @@ export async function syncGHLContact(contactOrId: any, client?: GHLClient) {
         .eq('ghl_contact_id', finalGhlId)
         .single();
 
+    // Prepare raw data with enriched fields
+    const ghlRawStored = {
+        ...contactData,
+        custom_fields_enriched: enrichedFields
+    };
+
     const clientData = {
         ghl_contact_id: finalGhlId,
         name: fullName.trim(),
@@ -64,7 +96,7 @@ export async function syncGHLContact(contactOrId: any, client?: GHLClient) {
         // Default to active if syncing
         status: 'active',
         // Store the full raw payload for future reference
-        ghl_raw: contactData,
+        ghl_raw: ghlRawStored,
         // Preserve existing start date, or default to today for new clients
         start_date: existingClient?.start_date || new Date().toISOString(),
         stripe_customer_id: stripeCustomerId
