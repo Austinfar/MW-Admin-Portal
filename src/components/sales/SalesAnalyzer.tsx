@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { deleteSalesCallLog } from '@/lib/actions/sales'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
+import { checkSalesCallLimit, type CreditCheckResult } from '@/lib/actions/credits'
 import {
     Table,
     TableBody,
@@ -15,7 +16,7 @@ import {
 } from '@/components/ui/table'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Search, ExternalLink, Calendar, CheckCircle2, User, Loader2, Clock, FileText, AlertCircle } from 'lucide-react'
+import { Search, ExternalLink, Calendar, CheckCircle2, User, Loader2, Clock, FileText, AlertCircle, Zap } from 'lucide-react'
 import { ReportViewer } from '@/components/dashboard/sales/report-viewer'
 import {
     Dialog,
@@ -68,6 +69,20 @@ export function SalesAnalyzer() {
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [linkClientDialogOpen, setLinkClientDialogOpen] = useState(false)
     const [selectedLog, setSelectedLog] = useState<SalesCallLog | null>(null)
+    const [creditStatus, setCreditStatus] = useState<CreditCheckResult | null>(null)
+
+    useEffect(() => {
+        checkCredits()
+    }, [logs.length]) // Re-check when logs change (e.g. after new analysis)
+
+    const checkCredits = async () => {
+        try {
+            const status = await checkSalesCallLimit()
+            setCreditStatus(status)
+        } catch (error) {
+            console.error('Failed to check credits:', error)
+        }
+    }
 
     const handleAnalyze = async () => {
         if (!newUrl) return
@@ -214,6 +229,21 @@ export function SalesAnalyzer() {
                     {/* Moved Header to Page Level */}
                 </div>
                 <div className="flex items-center space-x-2 w-full md:w-auto">
+                    {creditStatus && (
+                        <div className={cn(
+                            "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border mr-2",
+                            creditStatus.allowed
+                                ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                                : "bg-red-500/10 text-red-500 border-red-500/20"
+                        )}>
+                            <Zap className="h-3 w-3" />
+                            <span>
+                                {creditStatus.limit === Infinity
+                                    ? `Unlimited Credits`
+                                    : `Credits: ${creditStatus.used}/${creditStatus.limit}`}
+                            </span>
+                        </div>
+                    )}
                     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                         <DialogTrigger asChild>
                             <Button className="w-full md:w-auto bg-rose-600 hover:bg-rose-700 text-white">
@@ -227,6 +257,11 @@ export function SalesAnalyzer() {
                                     Paste the Fireflies.ai meeting URL below to start the analysis.
                                 </DialogDescription>
                             </DialogHeader>
+                            {!creditStatus?.allowed && creditStatus?.limit !== Infinity && (
+                                <div className="bg-red-500/10 border border-red-500/20 text-red-500 px-4 py-3 rounded-md text-sm mb-2">
+                                    You have reached your daily analysis limit of {creditStatus?.limit}. Please try again tomorrow or contact an admin to upgrade.
+                                </div>
+                            )}
                             <div className="grid gap-4 py-4">
                                 <div className="grid items-center gap-4">
                                     <Label htmlFor="url" className="text-right sr-only">
@@ -245,8 +280,8 @@ export function SalesAnalyzer() {
                                 <Button
                                     type="submit"
                                     onClick={handleAnalyze}
-                                    disabled={!newUrl || isSubmitting}
-                                    className="bg-rose-600 hover:bg-rose-700 text-white"
+                                    disabled={!newUrl || isSubmitting || (creditStatus ? !creditStatus.allowed : false)}
+                                    className="bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {isSubmitting ? (
                                         <>

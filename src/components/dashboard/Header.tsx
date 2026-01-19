@@ -17,15 +17,21 @@ import {
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { getCurrentUserProfile, UserProfile } from '@/lib/actions/profile'
-import { UserAccess } from '@/lib/auth-utils'
+import { stopImpersonation } from '@/lib/actions/impersonation'
+import { ImpersonationDialog } from '../admin/ImpersonationDialog'
+import { toast } from 'sonner'
+import { useRouter } from 'next/navigation'
 import { useEasterEgg } from './EasterEggProvider'
 import { GlobalSearch } from './GlobalSearch'
+import { UserAccess } from '@/lib/auth-utils'
 
-export function Header({ userAccess }: { userAccess?: UserAccess }) {
+export function Header({ userAccess, isImpersonating }: { userAccess?: UserAccess, isImpersonating?: boolean }) {
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [searchValue, setSearchValue] = useState('')
     const [globalSearchOpen, setGlobalSearchOpen] = useState(false)
+    const [impersonateOpen, setImpersonateOpen] = useState(false)
     const { triggerEasterEgg } = useEasterEgg()
+    const router = useRouter()
 
     useEffect(() => {
         getCurrentUserProfile().then(setProfile);
@@ -68,6 +74,17 @@ export function Header({ userAccess }: { userAccess?: UserAccess }) {
             default: return role;
         }
     };
+
+    const handleStopImpersonation = async () => {
+        const result = await stopImpersonation()
+        if (result.error) {
+            toast.error(result.error)
+        } else {
+            toast.success('Restoring admin session...')
+            // Force reload to ensure session is clean
+            window.location.reload()
+        }
+    }
 
     return (
         <div className="flex items-center p-6 border-b border-border/40 bg-background/50 backdrop-blur supports-[backdrop-filter]:bg-background/20 relative">
@@ -160,6 +177,24 @@ export function Header({ userAccess }: { userAccess?: UserAccess }) {
                                 <span>Settings</span>
                             </Link>
                         </DropdownMenuItem>
+                        {profile?.role === 'super_admin' && !isImpersonating && (
+                            <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => setImpersonateOpen(true)} className="cursor-pointer">
+                                    <User className="mr-2 h-4 w-4" />
+                                    <span>Log in as...</span>
+                                </DropdownMenuItem>
+                            </>
+                        )}
+                        {isImpersonating && (
+                            <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={handleStopImpersonation} className="cursor-pointer text-amber-500 focus:text-amber-500">
+                                    <LogOut className="mr-2 h-4 w-4 rotate-180" />
+                                    <span>Return to Admin</span>
+                                </DropdownMenuItem>
+                            </>
+                        )}
                         <DropdownMenuSeparator />
                         <DropdownMenuItem asChild>
                             <form action="/auth/signout" method="post" className="w-full">
@@ -172,6 +207,7 @@ export function Header({ userAccess }: { userAccess?: UserAccess }) {
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>
+            <ImpersonationDialog open={impersonateOpen} onOpenChange={setImpersonateOpen} />
         </div>
     )
 }

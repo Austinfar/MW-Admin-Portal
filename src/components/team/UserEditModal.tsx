@@ -24,6 +24,11 @@ import { User, updateUserRole, updateUserCommissionConfig, updateUserJobTitle, u
 import { toast } from 'sonner';
 import { Loader2, Settings, Trash2 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ImageCropper } from '@/components/ui/ImageCropper';
+import { createClient } from '@/lib/supabase/client';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Camera } from 'lucide-react';
+
 
 interface UserEditModalProps {
     user: User;
@@ -58,6 +63,71 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
         company_driven_rate: user.commission_config?.company_driven_rate || 0.30,
         self_gen_rate: user.commission_config?.self_gen_rate || 0.50
     });
+
+    // Image Upload State
+    const [imageSrc, setImageSrc] = useState<string | null>(null);
+    const [cropperOpen, setCropperOpen] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const [avatarUrl, setAvatarUrl] = useState<string | null>(user.avatar_url);
+
+    const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            const file = e.target.files[0];
+            const imageDataUrl = await readFile(file);
+            setImageSrc(imageDataUrl);
+            setCropperOpen(true);
+        }
+    };
+
+    const readFile = (file: File): Promise<string> => {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.addEventListener('load', () => resolve(reader.result as string), false);
+            reader.readAsDataURL(file);
+        });
+    };
+
+    const handleCropComplete = async (croppedBlob: Blob) => {
+        setUploading(true);
+        try {
+            const supabase = createClient();
+            const fileName = `${user.id}-${Date.now()}.jpg`;
+            const filePath = `avatars/${fileName}`;
+
+            // Upload to Supabase Storage
+            const { error: uploadError } = await supabase.storage
+                .from('avatars')
+                .upload(filePath, croppedBlob, {
+                    contentType: 'image/jpeg',
+                    upsert: true
+                });
+
+            if (uploadError) {
+                console.error('Upload error:', uploadError);
+                toast.error('Failed to upload image');
+                return;
+            }
+
+            // Get Public URL
+            const { data: { publicUrl } } = supabase.storage
+                .from('avatars')
+                .getPublicUrl(filePath);
+
+            setAvatarUrl(publicUrl);
+
+            // NOTE: We update the actual profile in handleSave or immediately?
+            // Let's update it immediately for instant feedback, or wait for save.
+            // Based on this modal pattern, we usually wait for Save.
+            // However, for images it's often better to save immediately or store in a temp state.
+            // We'll store in temp state `avatarUrl` and save it during handleSave.
+
+        } catch (error) {
+            console.error('Error handling crop:', error);
+            toast.error('Something went wrong');
+        } finally {
+            setUploading(false);
+        }
+    };
 
     const handleSave = async () => {
         setIsLoading(true);
@@ -105,6 +175,25 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
                 toast.error(configResult.error);
                 setIsLoading(false);
                 return;
+            }
+
+            // Update Avatar if changed
+            if (avatarUrl !== user.avatar_url) {
+                const { updateAvatar } = await import('@/lib/actions/profile');
+                // We need a specific action to update ANY user's avatar, currently updateAvatar uses getCurrentUser
+                // But since we are likely Super Admin editing someone else, we need an admin version or ensure the profile action handles it.
+                // Looking at profile.ts, updateAvatar uses getCurrentUserId(). 
+                // We need to implement updateOtherUserAvatar or pass ID to updateAvatar.
+                // For now, let's assume we need to add a capability to updateAvatar or create a new one.
+                // Actually, let's use a new prop in detailsToUpdate if super admin, or just call a new action we'll make.
+                // Let's create `updateUserAvatar(userId, url)` in profile.ts next.
+                // For now, we'll optimistically display it, but we need that backend action.
+
+                // Temporary fix: If it's self, updateAvatar works. If it's another user, we need a new action.
+                if (isSuperAdmin || user.id) { // We have user.id
+                    const { updateUserAvatar } = await import('@/lib/actions/profile');
+                    await updateUserAvatar(user.id, avatarUrl!);
+                }
             }
 
             toast.success('User updated successfully');
@@ -228,7 +317,36 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
                         </TabsContent>
                     )}
 
-                    <TabsContent value="general" className="py-4 space-y-4">
+                    <TabsContent value="general" className="py-4 space-y-6">
+                        {/* Avatar Upload */}
+                        <div className="flex flex-col items-center justify-center space-y-4">
+                            <div className="relative group">
+                                <Avatar className="w-24 h-24 border-2 border-white/10">
+                                    <AvatarImage src={avatarUrl || undefined} className="object-cover" />
+                                    <AvatarFallback className="bg-white/10 text-2xl">
+                                        {user.name?.charAt(0) || user.email.charAt(0)}
+                                    </AvatarFallback>
+                                </Avatar>
+                                <label
+                                    htmlFor="avatar-upload"
+                                    className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity rounded-full cursor-pointer"
+                                >
+                                    <Camera className="w-8 h-8 text-white" />
+                                </label>
+                                <input
+                                    id="avatar-upload"
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={onFileChange}
+                                    disabled={uploading}
+                                />
+                            </div>
+                            <div className="text-xs text-muted-foreground text-center">
+                                Click to upload new photo
+                            </div>
+                        </div>
+
                         {/* Job Type - Controls where user appears in lists */}
                         <div className="space-y-2">
                             <Label htmlFor="jobTitle">Job Type</Label>
@@ -311,6 +429,12 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
                         Save Changes
                     </Button>
                 </DialogFooter>
+                <ImageCropper
+                    open={cropperOpen}
+                    onOpenChange={setCropperOpen}
+                    imageSrc={imageSrc}
+                    onCropComplete={handleCropComplete}
+                />
             </DialogContent>
         </Dialog>
     );

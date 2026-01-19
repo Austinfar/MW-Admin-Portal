@@ -11,9 +11,10 @@ import { UserAccess } from '@/lib/auth-utils'
 interface DashboardContentProps {
     children: React.ReactNode
     userAccess?: UserAccess
+    isImpersonating?: boolean
 }
 
-export function DashboardContent({ children, userAccess }: DashboardContentProps) {
+export function DashboardContent({ children, userAccess, isImpersonating }: DashboardContentProps) {
     const { isCollapsed } = useSidebar()
 
     return (
@@ -28,7 +29,7 @@ export function DashboardContent({ children, userAccess }: DashboardContentProps
                 "transition-all duration-300",
                 isCollapsed ? "md:pl-[72px]" : "md:pl-72"
             )}>
-                <Header userAccess={userAccess} />
+                <Header userAccess={userAccess} isImpersonating={isImpersonating} />
                 <div className="p-4 md:p-8 min-h-[calc(100vh-64px)]">
                     {children}
                 </div>

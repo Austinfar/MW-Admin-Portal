@@ -5,7 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { LayoutDashboard, Users, CheckSquare, DollarSign, LogOut, ChevronLeft, ChevronRight, CreditCard, PhoneCall, Calendar } from 'lucide-react'
+import { LayoutDashboard, Users, CheckSquare, DollarSign, LogOut, ChevronLeft, ChevronRight, CreditCard, BrainCircuit, Calendar } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useSidebar } from './SidebarContext'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -62,8 +62,8 @@ const routes = [
         color: 'text-blue-500',
     },
     {
-        label: 'Sales Call Analyzer',
-        icon: PhoneCall,
+        label: 'AI Sales Call Analyzer',
+        icon: BrainCircuit,
         href: '/sales',
         color: 'text-rose-500',
     },
