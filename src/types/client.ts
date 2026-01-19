@@ -15,6 +15,7 @@ export interface Client {
     pipeline_stage: string | null
     stripe_customer_id?: string | null
     sold_by_user_id?: string | null // NEW
+    check_in_day?: string | null // NEW
     created_at: string
     // Joined fields
     client_type?: {

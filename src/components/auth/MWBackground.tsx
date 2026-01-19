@@ -1,28 +1,35 @@
+import Image from 'next/image'
+
 export function MWBackground() {
     return (
-        <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none select-none flex items-center justify-center opacity-[0.03]">
-            <svg
-                viewBox="0 0 400 300"
-                fill="currentColor"
-                className="w-[150vw] h-[150vw] text-white opacity-100"
-                xmlns="http://www.w3.org/2000/svg"
-            >
-                {/* 
-                   Geometric MW Monogram Construction 
-                   M: Two vertical pillars, connected by a V in the middle.
-                   W: Similar but inverted? Or just M W side by side?
-                   User said "MW block letters". Often intertwined or adjacent.
-                   Let's do a sharp, angular, blocky M W.
-                */}
-                <path
-                    d="M50 250 V50 L125 150 L200 50 V250 H160 V120 L125 170 L90 120 V250 Z"
-                    fill="currentColor"
+        <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none select-none">
+            {/* Gradient Background Base */}
+            <div className="absolute inset-0 bg-gradient-to-br from-black via-[#051005] to-black z-0" />
+
+            {/* Asset 3 SVG - Increased visibility */}
+            {/* SVG is dark grey #333. Invert makes it light grey #CCC. 
+                Opacity 0.15 makes it subtle but visible against black. 
+                mix-blend-screen helps it glow on top of the dark gradients. */}
+            <div className="absolute inset-0 z-0 flex items-center justify-center opacity-[0.2] invert mix-blend-screen scale-[1.5] animate-pulse-slow">
+                <Image
+                    src="/asset-3.svg"
+                    alt=""
+                    width={800}
+                    height={600}
+                    className="w-full h-full object-cover opacity-80"
+                    priority
                 />
-                <path
-                    d="M220 50 V250 L295 150 L370 250 V50 H330 V180 L295 130 L260 180 V50 Z"
-                    fill="currentColor"
-                />
-            </svg>
+            </div>
+
+            {/* Texture Layer - Subtle grain */}
+            <div className="absolute inset-0 opacity-[0.1] bg-[url('/asset-3.svg')] bg-repeat bg-[length:200px_auto] mix-blend-overlay invert scale-110" />
+
+            {/* Vignette & Color Overlay */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-black/90 z-10" />
+            <div className="absolute inset-0 bg-green-500/5 mix-blend-screen z-10" />
+
+            {/* Radial Spotlight */}
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.8)_100%)] z-20" />
         </div>
     )
 }

@@ -14,7 +14,7 @@ export interface UserProfile {
     last_name: string | null;
     phone: string | null;
     avatar_url: string | null;
-    role: 'admin' | 'coach' | 'sales_closer';
+    role: 'super_admin' | 'admin' | 'user';
     commission_rate: number | null;
     is_active: boolean;
     created_at: string;
@@ -24,7 +24,8 @@ export interface User {
     id: string
     name: string | null
     email: string
-    role: 'admin' | 'coach' | 'sales_closer'
+    role: 'super_admin' | 'admin' | 'user'
+    job_title: 'coach' | 'head_coach' | 'closer' | 'admin_staff' | 'operations' | null
     permissions: UserPermissions
     commission_config?: Record<string, number>
     is_active: boolean
@@ -210,9 +211,12 @@ export async function updateAvatar(avatarUrl: string) {
 }
 
 /**
- * Update user's role (admin only)
+ * Update user's role (super_admin only for role changes)
+ * CRITICAL: super_admin is locked to austin@mwfitnesscoaching.com ONLY
  */
-export async function updateUserRole(userId: string, role: 'admin' | 'coach' | 'sales_closer') {
+const SUPER_ADMIN_EMAIL = 'austin@mwfitnesscoaching.com';
+
+export async function updateUserRole(userId: string, role: 'super_admin' | 'admin' | 'user') {
     const supabase = await createClient();
 
     const { data: { user } } = await supabase.auth.getUser();
@@ -221,16 +225,30 @@ export async function updateUserRole(userId: string, role: 'admin' | 'coach' | '
         return { error: 'Not authenticated' };
     }
 
-    // Check if current user is admin
     const adminClient = createAdminClient();
+
+    // Get current user's role and email
     const { data: currentUser } = await adminClient
         .from('users')
-        .select('role')
+        .select('role, email')
         .eq('id', user.id)
         .single();
 
-    if (currentUser?.role !== 'admin') {
-        return { error: 'Only admins can change user roles' };
+    // Only super_admin can change roles
+    if (currentUser?.role !== 'super_admin') {
+        return { error: 'Only Super Admin can change user roles' };
+    }
+
+    // Get target user's email to validate super_admin assignment
+    const { data: targetUser } = await adminClient
+        .from('users')
+        .select('email')
+        .eq('id', userId)
+        .single();
+
+    // CRITICAL: super_admin can ONLY be assigned to austin@mwfitnesscoaching.com
+    if (role === 'super_admin' && targetUser?.email?.toLowerCase() !== SUPER_ADMIN_EMAIL.toLowerCase()) {
+        return { error: 'Super Admin role is restricted to austin@mwfitnesscoaching.com only' };
     }
 
     const { error } = await adminClient
@@ -247,6 +265,7 @@ export async function updateUserRole(userId: string, role: 'admin' | 'coach' | '
     }
 
     revalidatePath('/profile');
+    revalidatePath('/settings/team');
     return { success: true };
 }
 
@@ -270,7 +289,7 @@ export async function getAllUsers() {
         .eq('id', user.id)
         .single()
 
-    if (requesterProfile?.role !== 'admin') {
+    if (requesterProfile?.role !== 'admin' && requesterProfile?.role !== 'super_admin') {
         return { error: 'Unauthorized: Admin access required' }
     }
 
@@ -306,7 +325,7 @@ export async function updateUserPermissions(userId: string, permissions: UserPer
         .eq('id', user.id)
         .single()
 
-    if (requesterProfile?.role !== 'admin') {
+    if (requesterProfile?.role !== 'admin' && requesterProfile?.role !== 'super_admin') {
         return { error: 'Unauthorized' }
     }
 
@@ -328,6 +347,46 @@ export async function updateUserPermissions(userId: string, permissions: UserPer
     return { success: true }
 }
 
+/**
+ * Update user job title (admin only)
+ */
+export async function updateUserJobTitle(userId: string, jobTitle: string) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+        return { error: 'Not authenticated' }
+    }
+
+    const admin = createAdminClient()
+
+    // Verify requesting user is admin
+    const { data: requesterProfile } = await admin
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+    if (requesterProfile?.role !== 'admin' && requesterProfile?.role !== 'super_admin') {
+        return { error: 'Unauthorized' }
+    }
+
+    const { error } = await admin
+        .from('users')
+        .update({
+            job_title: jobTitle,
+            updated_at: new Date().toISOString()
+        })
+        .eq('id', userId)
+
+    if (error) {
+        return { error: error.message }
+    }
+
+    revalidatePath('/settings/team')
+    return { success: true }
+}
+
 export async function updateUserCommissionConfig(userId: string, config: Record<string, number>) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -341,7 +400,7 @@ export async function updateUserCommissionConfig(userId: string, config: Record<
         .eq('id', user.id)
         .single()
 
-    if (requesterProfile?.role !== 'admin') {
+    if (requesterProfile?.role !== 'admin' && requesterProfile?.role !== 'super_admin') {
         return { error: 'Unauthorized' }
     }
 
@@ -357,4 +416,201 @@ export async function updateUserCommissionConfig(userId: string, config: Record<
 
     revalidatePath('/settings/team')
     return { success: true }
+}
+
+/**
+ * Create a new user (super admin only)
+ * Uses Supabase Admin API to create auth user and profile in one go
+ */
+export async function createUser(data: {
+    email: string
+    password: string
+    name: string
+    role: 'admin' | 'user'
+    jobTitle: string
+}) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) return { error: 'Not authenticated' }
+
+    const admin = createAdminClient()
+
+    // Verify requester is super_admin
+    const { data: requesterProfile } = await admin
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+    if (requesterProfile?.role !== 'super_admin') {
+        return { error: 'Unauthorized: Super Admin access required' }
+    }
+
+    try {
+        // 1. Create auth user via Admin API
+        const { data: authData, error: authError } = await admin.auth.admin.createUser({
+            email: data.email,
+            password: data.password,
+            email_confirm: true, // Auto-confirm email
+        })
+
+        if (authError || !authData.user) {
+            console.error('Auth user creation failed:', authError)
+            return { error: authError?.message || 'Failed to create user' }
+        }
+
+        // 2. Create user profile in users table
+        const { error: profileError } = await admin
+            .from('users')
+            .insert({
+                id: authData.user.id,
+                email: data.email,
+                name: data.name,
+                role: data.role,
+                job_title: data.jobTitle,
+                is_active: true,
+                permissions: {
+                    dashboard: true,
+                    clients: false,
+                    leads: false,
+                    commissions: false,
+                    sales: false,
+                    onboarding: false,
+                    payment_links: false,
+                    settings: false,
+                    business: false,
+                    sales_floor: false,
+                },
+            })
+
+        if (profileError) {
+            console.error('Profile creation failed:', profileError)
+            // Try to clean up auth user
+            await admin.auth.admin.deleteUser(authData.user.id)
+            return { error: profileError.message }
+        }
+
+        revalidatePath('/settings/team')
+        return { success: true, userId: authData.user.id }
+    } catch (error: any) {
+        console.error('User creation error:', error)
+        return { error: error?.message || 'Failed to create user' }
+    }
+}
+
+/**
+ * Update user details including name, email, and password (super admin only)
+ */
+export async function updateUserDetails(userId: string, data: {
+    name?: string
+    email?: string
+    password?: string
+}) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) return { error: 'Not authenticated' }
+
+    const admin = createAdminClient()
+
+    // Verify requester is super_admin
+    const { data: requesterProfile } = await admin
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+    if (requesterProfile?.role !== 'super_admin') {
+        return { error: 'Unauthorized: Super Admin access required' }
+    }
+
+    try {
+        // 1. Update auth user if email or password changed
+        if (data.email || data.password) {
+            const authUpdate: { email?: string; password?: string } = {}
+            if (data.email) authUpdate.email = data.email
+            if (data.password) authUpdate.password = data.password
+
+            const { error: authError } = await admin.auth.admin.updateUserById(userId, authUpdate)
+            if (authError) {
+                console.error('Auth update failed:', authError)
+                return { error: authError.message }
+            }
+        }
+
+        // 2. Update users table
+        const profileUpdate: Record<string, any> = { updated_at: new Date().toISOString() }
+        if (data.name) profileUpdate.name = data.name
+        if (data.email) profileUpdate.email = data.email
+
+        const { error: profileError } = await admin
+            .from('users')
+            .update(profileUpdate)
+            .eq('id', userId)
+
+        if (profileError) {
+            return { error: profileError.message }
+        }
+
+        revalidatePath('/settings/team')
+        revalidatePath('/profile')
+        return { success: true }
+    } catch (error: any) {
+        console.error('User update error:', error)
+        return { error: error?.message || 'Failed to update user' }
+    }
+}
+
+/**
+ * Delete a user (super admin only)
+ */
+export async function deleteUser(userId: string) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) return { error: 'Not authenticated' }
+
+    const admin = createAdminClient()
+
+    // Verify requester is super_admin
+    const { data: requesterProfile } = await admin
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+    if (requesterProfile?.role !== 'super_admin') {
+        return { error: 'Unauthorized: Super Admin access required' }
+    }
+
+    // Prevent deleting self
+    if (userId === user.id) {
+        return { error: 'Cannot delete your own account' }
+    }
+
+    try {
+        // Delete from auth (this will cascade or just remove auth access)
+        const { error: authError } = await admin.auth.admin.deleteUser(userId)
+        if (authError) {
+            console.error('Auth deletion failed:', authError)
+            return { error: authError.message }
+        }
+
+        // Mark as inactive in users table (soft delete) or hard delete
+        const { error: profileError } = await admin
+            .from('users')
+            .update({ is_active: false, updated_at: new Date().toISOString() })
+            .eq('id', userId)
+
+        if (profileError) {
+            console.error('Profile deactivation failed:', profileError)
+        }
+
+        revalidatePath('/settings/team')
+        return { success: true }
+    } catch (error: any) {
+        console.error('User deletion error:', error)
+        return { error: error?.message || 'Failed to delete user' }
+    }
 }

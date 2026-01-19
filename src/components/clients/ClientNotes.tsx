@@ -2,12 +2,12 @@
 
 import { useState } from 'react'
 import { Note } from '@/types/client'
-import { createNote, deleteNote, togglePinNote } from '@/lib/actions/notes'
+import { createNote, deleteNote, togglePinNote, updateNote } from '@/lib/actions/notes'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Check, Pin, PinOff, Trash2, Plus, Loader2 } from 'lucide-react'
+import { Check, Pin, PinOff, Trash2, Plus, Loader2, Pencil, X } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -21,6 +21,8 @@ export function ClientNotes({ notes, clientId }: ClientNotesProps) {
     const [isAdding, setIsAdding] = useState(false)
     const [newNoteContent, setNewNoteContent] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
+    const [editContent, setEditContent] = useState('')
 
     const handleAddNote = async () => {
         if (!newNoteContent.trim()) return
@@ -56,12 +58,35 @@ export function ClientNotes({ notes, clientId }: ClientNotesProps) {
         }
     }
 
+    const handleStartEdit = (note: Note) => {
+        setEditingNoteId(note.id)
+        setEditContent(note.content)
+    }
+
+    const handleCancelEdit = () => {
+        setEditingNoteId(null)
+        setEditContent('')
+    }
+
+    const handleSaveEdit = async () => {
+        if (!editContent.trim() || !editingNoteId) return
+
+        try {
+            await updateNote(editingNoteId, clientId, editContent)
+            toast.success('Note updated')
+            setEditingNoteId(null)
+            setEditContent('')
+        } catch (error) {
+            toast.error('Failed to update note')
+        }
+    }
+
     return (
         <Card className="bg-card/40 border-primary/5 backdrop-blur-sm h-full flex flex-col">
             <CardHeader className="flex flex-row items-center justify-between pb-4">
                 <div>
                     <CardTitle>Notes</CardTitle>
-                    <CardDescription>Internal team notes.</CardDescription>
+                    <CardDescription>Internal team notes. (2-way sync with GHL @sarah ;))</CardDescription>
                 </div>
                 {!isAdding && (
                     <Button size="sm" onClick={() => setIsAdding(true)} variant="outline">
@@ -116,7 +141,7 @@ export function ClientNotes({ notes, clientId }: ClientNotesProps) {
                                     <span className="text-xs font-medium opacity-70">
                                         {note.author?.name || 'Unknown'}
                                     </span>
-                                    <span className="text-[10px] text-muted-foreground">
+                                    <span className="text-[10px] text-muted-foreground" suppressHydrationWarning>
                                         {formatDistanceToNow(new Date(note.created_at), { addSuffix: true })}
                                     </span>
                                 </div>
@@ -133,17 +158,49 @@ export function ClientNotes({ notes, clientId }: ClientNotesProps) {
                                     <Button
                                         variant="ghost"
                                         size="icon"
+                                        className="h-6 w-6 text-muted-foreground hover:text-primary"
+                                        onClick={() => handleStartEdit(note)}
+                                        title="Edit"
+                                        disabled={!!editingNoteId}
+                                    >
+                                        <Pencil className="h-3 w-3" />
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
                                         className="h-6 w-6 text-muted-foreground hover:text-destructive"
                                         onClick={() => handleDelete(note.id)}
                                         title="Delete"
+                                        disabled={!!editingNoteId}
                                     >
                                         <Trash2 className="h-3 w-3" />
                                     </Button>
                                 </div>
                             </div>
-                            <p className="text-sm whitespace-pre-wrap leading-relaxed text-foreground/90 pl-1">
-                                {note.content}
-                            </p>
+                            {editingNoteId === note.id ? (
+                                <div className="space-y-2 mt-2">
+                                    <Textarea
+                                        value={editContent}
+                                        onChange={(e) => setEditContent(e.target.value)}
+                                        className="min-h-[100px] resize-none bg-background"
+                                        autoFocus
+                                    />
+                                    <div className="flex justify-end gap-2">
+                                        <Button size="sm" variant="ghost" onClick={handleCancelEdit}>
+                                            <X className="h-3 w-3 mr-1" />
+                                            Cancel
+                                        </Button>
+                                        <Button size="sm" onClick={handleSaveEdit} disabled={!editContent.trim()}>
+                                            <Check className="h-3 w-3 mr-1" />
+                                            vSave
+                                        </Button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <p className="text-sm whitespace-pre-wrap leading-relaxed text-foreground/90 pl-1">
+                                    {note.content}
+                                </p>
+                            )}
                         </div>
                     ))}
                 </div>

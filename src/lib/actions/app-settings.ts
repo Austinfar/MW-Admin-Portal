@@ -69,14 +69,21 @@ export async function updateAppSetting(key: string, value: string) {
 
 export async function getSyncStatus(): Promise<SyncStatus> {
     unstable_noStore(); // Prevent caching for real-time updates
+    const supabase = createAdminClient();
 
-    try {
-        if (existsSync(SYNC_STATUS_FILE)) {
-            const content = readFileSync(SYNC_STATUS_FILE, 'utf-8');
-            return JSON.parse(content);
+    const { data } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'ghl_sync_status')
+        .single();
+
+    if (data?.value) {
+        try {
+            // value is text/json string in DB
+            return JSON.parse(data.value);
+        } catch (e) {
+            console.error('Failed to parse sync status from DB:', e);
         }
-    } catch (e) {
-        // File doesn't exist or is invalid
     }
 
     return {
@@ -92,9 +99,17 @@ export async function getSyncStatus(): Promise<SyncStatus> {
 }
 
 export async function updateSyncStatus(status: SyncStatus) {
+    const supabase = createAdminClient();
+
     try {
-        writeFileSync(SYNC_STATUS_FILE, JSON.stringify(status), 'utf-8');
+        await supabase
+            .from('app_settings')
+            .upsert({
+                key: 'ghl_sync_status',
+                value: JSON.stringify(status),
+                updated_at: new Date().toISOString()
+            });
     } catch (e) {
-        console.error('[Sync Status] Failed to write status file:', e);
+        console.error('[Sync Status] Failed to update status in DB:', e);
     }
 }

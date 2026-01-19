@@ -47,15 +47,18 @@ export async function findStripeCustomer(email: string): Promise<string | null> 
     if (!email) return null;
 
     try {
+        console.log(`[Stripe API] querying customers.list for email: ${email}`);
         const customers = await stripe.customers.list({
             email: email,
             limit: 1,
         });
 
         if (customers.data.length > 0) {
+            console.log(`[Stripe API] Found customer: ${customers.data[0].id}`);
             return customers.data[0].id;
         }
 
+        console.log(`[Stripe API] No customer found for email: ${email}`);
         return null;
     } catch (error) {
         console.error('Error finding Stripe customer:', error);

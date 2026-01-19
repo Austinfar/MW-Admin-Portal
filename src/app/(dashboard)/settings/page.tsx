@@ -67,7 +67,10 @@ export default async function SettingsPage() {
                             initialRefreshToken={settings['ghl_refresh_token']}
                             initialLocationId={settings['ghl_location_id']}
                         />
-                        <GHLSyncSettings pipelines={pipelines} />
+                        <GHLSyncSettings
+                            pipelines={pipelines}
+                            initialPipelineId={settings['ghl_sync_pipeline_id']}
+                        />
 
                         {/* Stripe Settings */}
                         <StripeSyncSettings />

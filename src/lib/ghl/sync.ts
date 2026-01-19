@@ -1,6 +1,13 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { GHLClient } from './client'
 
+
+// Helper to strip HTML tags
+function stripHtml(html: string): string {
+    if (!html) return '';
+    return html.replace(/<[^>]*>?/gm, '').trim();
+}
+
 export async function syncGHLContact(contactOrId: any, client?: GHLClient, customFieldDefinitions?: any[]) {
     // Use Admin Client to bypass RLS policies on 'clients' table during sync
     const supabase = createAdminClient()
@@ -65,7 +72,10 @@ export async function syncGHLContact(contactOrId: any, client?: GHLClient, custo
     let stripeCustomerId = null;
     try {
         const { findStripeCustomer } = await import('@/lib/actions/stripe-sync');
-        stripeCustomerId = await findStripeCustomer(contactData.email);
+        const searchEmail = contactData.email.trim().toLowerCase();
+        console.log(`[Stripe Lookup] Searching for customer with email: '${searchEmail}' (Original: '${contactData.email}')`);
+
+        stripeCustomerId = await findStripeCustomer(searchEmail);
         if (stripeCustomerId) {
             console.log(`[Stripe Match] Linked ${contactData.email} to ${stripeCustomerId}`);
         } else {
@@ -114,5 +124,79 @@ export async function syncGHLContact(contactOrId: any, client?: GHLClient, custo
         return { error: `DB Error: ${error.message}` }
     }
 
+    // Sync Notes
+    try {
+        const notesRes = await ghl.getNotes(finalGhlId);
+        if (notesRes && notesRes.notes) {
+            console.log(`[GHL Info] Found ${notesRes.notes.length} notes for contact ${finalGhlId}`);
+
+            for (const note of notesRes.notes) {
+                // Upsert note based on ghl_note_id
+                const { error: noteError } = await supabase
+                    .from('client_notes')
+                    .upsert({
+                        client_id: data.id,
+                        ghl_note_id: note.id,
+                        content: stripHtml(note.body),
+                        created_at: note.dateAdded || new Date().toISOString(),
+                        last_synced_at: new Date().toISOString(),
+                        // Leave author_id null as user might not exist locally
+                        is_pinned: false
+                    }, {
+                        onConflict: 'ghl_note_id',
+                        ignoreDuplicates: false
+                    });
+
+                if (noteError) {
+                    console.error('[Sync Error] Failed to upsert note:', noteError);
+                }
+            }
+        }
+    } catch (noteSyncError) {
+        console.error('[Sync Error] Failed to sync notes:', noteSyncError);
+    }
+
     return { success: true, client: data, stripeLinked: !!stripeCustomerId }
+}
+
+export async function syncGHLLead(contactId: string, client?: GHLClient) {
+    const supabase = createAdminClient()
+    const ghl = client || new GHLClient()
+
+    if (!contactId) return { error: 'Missing Contact ID' }
+
+    // 1. Fetch Contact from GHL
+    const response = await ghl.getContact(contactId)
+    if (!response?.contact) {
+        console.error(`[Lead Sync Error] GHL Contact not found: ${contactId}`)
+        return { error: 'GHL Contact not found' }
+    }
+    const contact = response.contact
+
+    // 2. Map Data
+    const leadData = {
+        first_name: contact.firstName || contact.name?.split(' ')[0] || 'Unknown',
+        last_name: contact.lastName || contact.name?.split(' ').slice(1).join(' ') || '',
+        email: contact.email,
+        phone: contact.phone,
+        ghl_contact_id: contact.id,
+        source: 'GHL Pipeline', // Or parse from tags/source
+        status: 'New', // Default status
+        updated_at: new Date().toISOString()
+    }
+
+    // 3. Upsert into Leads table
+    const { data, error } = await supabase
+        .from('leads')
+        .upsert(leadData, { onConflict: 'ghl_contact_id' })
+        .select()
+        .single()
+
+    if (error) {
+        console.error('[Lead Sync Error] DB Upsert failed:', error)
+        return { error: error.message }
+    }
+
+    console.log(`[Lead Sync] Successfully synced lead: ${data.first_name} (${data.id})`)
+    return { success: true, lead: data }
 }

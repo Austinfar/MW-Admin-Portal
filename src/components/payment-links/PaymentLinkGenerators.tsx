@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { CalendarIcon, Check, Copy, CreditCard, ExternalLink, Loader2, Repeat, Split } from 'lucide-react'
-import { format } from 'date-fns'
+import { CalendarIcon, Check, Copy, CreditCard, ExternalLink, Loader2, Repeat, Split, User, ChevronsUpDown, Trash2 } from 'lucide-react'
+import { format, addDays, startOfMonth, addMonths } from 'date-fns'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -10,9 +10,28 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
-import { createPaymentLink, createStandardPaymentRef } from '@/lib/actions/stripe-actions'
+import { createStandardPaymentRef } from '@/lib/actions/stripe-actions'
+import {
+    Command,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+} from "@/components/ui/command"
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog"
+import { Slider } from "@/components/ui/slider"
 import { CreateSplitPaymentDialog } from './CreateSplitPaymentDialog'
 import { cn } from '@/lib/utils'
+import { Label } from '@/components/ui/label'
 
 interface ProductPrice {
     id: string
@@ -27,60 +46,460 @@ interface ProductPrice {
 interface Coach {
     id: string
     name: string | null
-    avatar_url: string | null
+}
+
+interface SalesCloser {
+    id: string
+    name: string | null
+}
+
+export interface CommissionSplit {
+    userId: string
+    role: 'Closer' | 'Referrer'
+    percentage: number
+}
+
+interface Client {
+    id: string
+    name: string
+    email: string
+    stripe_customer_id: string | null
+}
+
+interface Lead {
+    id: string
+    first_name: string
+    last_name: string | null
+    email: string | null
+    phone: string | null
 }
 
 interface PaymentLinkGeneratorsProps {
     prices: ProductPrice[]
     isTestMode: boolean
     coaches: Coach[]
+    closers: SalesCloser[]
+    clients: Client[]
+    leads: Lead[]
 }
 
-export function PaymentLinkGenerators({ prices, isTestMode, coaches }: PaymentLinkGeneratorsProps) {
+export interface LinkConfig {
+    startDate: Date | undefined
+    coachId: string
+    salesCloserId: string
+    clientId: string
+    leadId: string
+    commissionSplits: CommissionSplit[]
+    programTerm: '6' | '12'
+}
+
+export function PaymentLinkGenerators({ prices, isTestMode, coaches, closers, clients, leads }: PaymentLinkGeneratorsProps) {
+    // Global Config State
+    const [startDate, setStartDate] = useState<Date | undefined>(new Date())
+    const [selectedCoachId, setSelectedCoachId] = useState<string>('') // Start unselected
+    const [selectedCloserId, setSelectedCloserId] = useState<string>('')
+    const [selectedClientId, setSelectedClientId] = useState<string>('')
+    const [selectedLeadId, setSelectedLeadId] = useState<string>('')
+    const [programTerm, setProgramTerm] = useState<'6' | '12'>('6') // Default to 6 months
+    const [commissionSplits, setCommissionSplits] = useState<CommissionSplit[]>([])
+    // Dialog State for Splits
+    const [isSplitDialogOpen, setIsSplitDialogOpen] = useState(false)
+    const [tempAppenderUserId, setTempAppenderUserId] = useState<string>('')
+    const [tempAppenderRole, setTempAppenderRole] = useState<'Closer' | 'Referrer'>('Closer')
+    const [tempAppenderPercent, setTempAppenderPercent] = useState<number>(50)
+    const [isClientOpen, setIsClientOpen] = useState(false)
+
     const oneTimePrices = prices.filter(p => p.type === 'one_time' && p.unit_amount !== null)
     const recurringPrices = prices.filter(p => p.type === 'recurring' && p.unit_amount !== null && p.recurring?.interval === 'month')
 
-    // For "Split", we ideally look for products named "Split" or just allow any one-time price users might use for installments
-    // For now, we'll reuse oneTimePrices but with a different visual context
-    const splitPrices = oneTimePrices
+    const config: LinkConfig = {
+        startDate,
+        coachId: selectedCoachId,
+        salesCloserId: selectedCloserId,
+        clientId: selectedClientId,
+        leadId: selectedLeadId,
+        commissionSplits: commissionSplits,
+        programTerm: programTerm
+    }
+
+    // Require either a lead OR a client, AND a coach to be selected
+    const isConfigValid = !!startDate && (!!selectedClientId || !!selectedLeadId) && !!selectedCoachId
+
+    // Helper to get selected person's display name
+    const getSelectedPersonName = () => {
+        if (selectedLeadId) {
+            const lead = leads.find(l => l.id === selectedLeadId)
+            return lead ? `${lead.first_name} ${lead.last_name || ''}`.trim() : null
+        }
+        if (selectedClientId) {
+            const client = clients.find(c => c.id === selectedClientId)
+            return client?.name || null
+        }
+        return null
+    }
+
+    // Helper for date presets
+    const setDatePreset = (preset: 'today' | 'tomorrow' | 'next_month') => {
+        const today = new Date()
+        if (preset === 'today') setStartDate(today)
+        if (preset === 'tomorrow') setStartDate(addDays(today, 1))
+        if (preset === 'next_month') setStartDate(startOfMonth(addMonths(today, 1)))
+    }
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <GeneratorCard
-                title="Pay in Full"
-                description="Generate a link for a single, up-front payment."
-                icon={<CreditCard className="w-10 h-10 text-blue-500 mb-2" />}
-                prices={oneTimePrices}
-                buttonLabel="Generate Full Payment Link"
-                coaches={coaches}
-            />
-
-            <CreateSplitPaymentDialog prices={oneTimePrices} coaches={coaches}>
-                <Card className="flex flex-col h-full border-2 border-border/50 hover:border-primary/20 transition-all duration-300 cursor-pointer group">
-                    <CardHeader>
-                        <div className="mb-2"><Split className="w-10 h-10 text-purple-500 mb-2" /></div>
-                        <CardTitle className="text-xl">Custom Split Plan</CardTitle>
-                        <CardDescription>Generate a custom installment plan (e.g. $1000 now, $1500 later).</CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex-1">
-                        <div className="h-full flex items-center justify-center text-muted-foreground text-sm border-2 border-dashed rounded-md bg-muted/10 group-hover:bg-muted/30 transition-colors py-8">
-                            Click to configure dates & amounts
+        <div className="space-y-8">
+            {/* Top Global Configuration Card */}
+            <Card className="border-2 border-border/50 bg-card/50 backdrop-blur-sm">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <User className="h-5 w-5 text-primary" />
+                        Link Configuration & Attribution
+                    </CardTitle>
+                    <CardDescription>
+                        Set the default parameters for the payment link. These fields are required to unlock the generators.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {/* 1. Lead/Client Selector (Leads on top) */}
+                        <div className="space-y-2">
+                            <Label className="text-primary font-medium">Lead / Client (Required)</Label>
+                            <Popover open={isClientOpen} onOpenChange={setIsClientOpen}>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        role="combobox"
+                                        aria-expanded={isClientOpen}
+                                        className={cn(
+                                            "w-full justify-between",
+                                            !selectedClientId && !selectedLeadId && "text-muted-foreground border-primary/20",
+                                            (selectedClientId || selectedLeadId) && "border-primary/50 bg-primary/5"
+                                        )}
+                                    >
+                                        {getSelectedPersonName() || "Select Lead or Client..."}
+                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[350px] p-0">
+                                    <Command>
+                                        <CommandInput placeholder="Search leads and clients..." />
+                                        <CommandList>
+                                            <CommandEmpty>No results found.</CommandEmpty>
+                                            {leads.length > 0 && (
+                                                <CommandGroup heading="Leads">
+                                                    {leads.map((lead) => (
+                                                        <CommandItem
+                                                            key={`lead-${lead.id}`}
+                                                            value={`${lead.first_name} ${lead.last_name || ''} ${lead.email || ''}`}
+                                                            onSelect={() => {
+                                                                setSelectedLeadId(lead.id)
+                                                                setSelectedClientId('') // Clear client if lead selected
+                                                                setIsClientOpen(false)
+                                                            }}
+                                                        >
+                                                            <Check
+                                                                className={cn(
+                                                                    "mr-2 h-4 w-4",
+                                                                    selectedLeadId === lead.id ? "opacity-100" : "opacity-0"
+                                                                )}
+                                                            />
+                                                            <div className="flex flex-col">
+                                                                <span>{lead.first_name} {lead.last_name}</span>
+                                                                {lead.email && <span className="text-xs text-muted-foreground">{lead.email}</span>}
+                                                            </div>
+                                                        </CommandItem>
+                                                    ))}
+                                                </CommandGroup>
+                                            )}
+                                            <CommandGroup heading="Clients">
+                                                {clients.map((client) => (
+                                                    <CommandItem
+                                                        key={`client-${client.id}`}
+                                                        value={`${client.name} ${client.email}`}
+                                                        onSelect={() => {
+                                                            setSelectedClientId(client.id)
+                                                            setSelectedLeadId('') // Clear lead if client selected
+                                                            setIsClientOpen(false)
+                                                        }}
+                                                    >
+                                                        <Check
+                                                            className={cn(
+                                                                "mr-2 h-4 w-4",
+                                                                selectedClientId === client.id ? "opacity-100" : "opacity-0"
+                                                            )}
+                                                        />
+                                                        <div className="flex flex-col">
+                                                            <span>{client.name}</span>
+                                                            {client.email && <span className="text-xs text-muted-foreground">{client.email}</span>}
+                                                        </div>
+                                                    </CommandItem>
+                                                ))}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
                         </div>
-                    </CardContent>
-                    <CardFooter>
-                        <Button className="w-full" variant="secondary">Configure Schedule</Button>
-                    </CardFooter>
-                </Card>
-            </CreateSplitPaymentDialog>
 
-            <GeneratorCard
-                title="Monthly Recurring"
-                description="Generate a subscription link for monthly billing."
-                icon={<Repeat className="w-10 h-10 text-green-500 mb-2" />}
-                prices={recurringPrices}
-                buttonLabel="Generate Subscription Link"
-                coaches={coaches}
-            />
+                        {/* 2. Start Date */}
+                        <div className="space-y-2">
+                            <Label>Start Date & Billing Anchor</Label>
+                            <div className="flex flex-col gap-2">
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button
+                                            variant={"outline"}
+                                            className={cn(
+                                                "w-full justify-start text-left font-normal h-10",
+                                                !startDate && "text-muted-foreground"
+                                            )}
+                                        >
+                                            <CalendarIcon className="mr-2 h-4 w-4" />
+                                            {startDate ? format(startDate, "PPP") : <span>Pick a start date</span>}
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0" align="start">
+                                        <div className="flex">
+                                            <div className="border-r p-3 space-y-2">
+                                                <Label className="text-xs text-muted-foreground mb-2 block">Quick Select</Label>
+                                                <Button variant="ghost" size="sm" className="w-full justify-start text-xs" onClick={() => setDatePreset('today')}>Today</Button>
+                                                <Button variant="ghost" size="sm" className="w-full justify-start text-xs" onClick={() => setDatePreset('tomorrow')}>Tomorrow</Button>
+                                                <Button variant="ghost" size="sm" className="w-full justify-start text-xs" onClick={() => setDatePreset('next_month')}>1st of Next Month</Button>
+                                            </div>
+                                            <div className="p-3">
+                                                <Calendar
+                                                    mode="single"
+                                                    selected={startDate}
+                                                    onSelect={setStartDate}
+                                                    disabled={(date) =>
+                                                        date < new Date(new Date().setHours(0, 0, 0, 0))
+                                                    }
+                                                    initialFocus
+                                                />
+                                            </div>
+                                        </div>
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
+                        </div>
+
+                        {/* 3. Assigned Coach */}
+                        <div className="space-y-2">
+                            <Label className="text-primary font-medium">Assigned Coach (Required)</Label>
+                            <Select
+                                value={selectedCoachId}
+                                onValueChange={setSelectedCoachId}
+                            >
+                                <SelectTrigger className={cn(
+                                    "h-10",
+                                    !selectedCoachId && "text-muted-foreground border-primary/20",
+                                    selectedCoachId && "border-primary/50 bg-primary/5"
+                                )}>
+                                    <SelectValue placeholder="Select Coach..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="tbd">TBD / No Preference</SelectItem>
+                                    {coaches.map((coach) => (
+                                        <SelectItem key={coach.id} value={coach.id}>
+                                            {coach.name || 'Unnamed Coach'}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {/* 4. Program Term - Toggle Switch Style */}
+                        <div className="space-y-2">
+                            <Label>Program Term</Label>
+                            <div className="flex rounded-lg border border-white/10 overflow-hidden h-10">
+                                <button
+                                    type="button"
+                                    onClick={() => setProgramTerm('6')}
+                                    className={cn(
+                                        "flex-1 px-4 text-sm font-medium transition-colors",
+                                        programTerm === '6'
+                                            ? "bg-primary text-primary-foreground"
+                                            : "bg-white/5 text-muted-foreground hover:bg-white/10"
+                                    )}
+                                >
+                                    6 Months
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setProgramTerm('12')}
+                                    className={cn(
+                                        "flex-1 px-4 text-sm font-medium transition-colors",
+                                        programTerm === '12'
+                                            ? "bg-primary text-primary-foreground"
+                                            : "bg-white/5 text-muted-foreground hover:bg-white/10"
+                                    )}
+                                >
+                                    12 Months
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* 5. Split Commission / Sales Config */}
+                        <div className="space-y-2">
+                            <Label>Commission & Attribution</Label>
+                            <Dialog open={isSplitDialogOpen} onOpenChange={setIsSplitDialogOpen}>
+                                <DialogTrigger asChild>
+                                    <Button variant="outline" className="w-full justify-between h-10">
+                                        {commissionSplits.length > 0
+                                            ? `${commissionSplits.length} Split(s) Configured`
+                                            : "Configure Splits (Optional)"}
+                                        <Split className="w-4 h-4 ml-2 opacity-50" />
+                                    </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                    <DialogHeader>
+                                        <DialogTitle>Configure Commission Splits</DialogTitle>
+                                        <DialogDescription>
+                                            Add up to 2 additional beneficiaries for this sale. The assigned coach is automatically tracked; use this for Sales Closers or Referrers.
+                                        </DialogDescription>
+                                    </DialogHeader>
+
+                                    <div className="space-y-4 py-4">
+                                        {/* List of current splits */}
+                                        <div className="space-y-2">
+                                            {commissionSplits.map((split, idx) => (
+                                                <div key={idx} className="flex items-center gap-2 p-2 bg-muted rounded-md text-sm">
+                                                    <span className="font-medium flex-1">
+                                                        {closers.find(c => c.id === split.userId)?.name || 'Unknown User'}
+                                                    </span>
+                                                    <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded">
+                                                        {split.role}
+                                                    </span>
+                                                    <span className="font-mono text-muted-foreground w-12 text-right">
+                                                        {split.percentage}%
+                                                    </span>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                                                        onClick={() => {
+                                                            setCommissionSplits(prev => prev.filter((_, i) => i !== idx))
+                                                        }}
+                                                    >
+                                                        <Trash2 className="w-3 h-3" />
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                            {commissionSplits.length === 0 && (
+                                                <p className="text-sm text-muted-foreground italic text-center py-2">No splits added yet.</p>
+                                            )}
+                                        </div>
+
+                                        {/* Adder Form (Disable if >= 2) */}
+                                        {commissionSplits.length < 2 && (
+                                            <div className="grid gap-3 pt-4 border-t border-border/50">
+                                                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Add New Split</Label>
+                                                <div className="grid grid-cols-[1fr_100px] gap-2">
+                                                    <Select onValueChange={setTempAppenderUserId} value={tempAppenderUserId}>
+                                                        <SelectTrigger>
+                                                            <SelectValue placeholder="Select User..." />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {closers.map(user => (
+                                                                <SelectItem
+                                                                    key={user.id}
+                                                                    value={user.id}
+                                                                    disabled={commissionSplits.some(s => s.userId === user.id)}
+                                                                >
+                                                                    {user.name}
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <Select onValueChange={(val: any) => setTempAppenderRole(val)} value={tempAppenderRole}>
+                                                        <SelectTrigger>
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="Closer">Closer</SelectItem>
+                                                            <SelectItem value="Referrer">Referrer</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div className="flex items-center gap-4">
+                                                    <Label className="w-24 shrink-0">Split %</Label>
+                                                    <Slider
+                                                        defaultValue={[50]}
+                                                        max={100}
+                                                        step={5}
+                                                        value={[tempAppenderPercent]}
+                                                        onValueChange={([val]) => setTempAppenderPercent(val)}
+                                                        className="flex-1"
+                                                    />
+                                                    <span className="w-12 text-right font-mono text-sm">{tempAppenderPercent}%</span>
+                                                </div>
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() => {
+                                                        if (!tempAppenderUserId) return
+                                                        setCommissionSplits(prev => [...prev, {
+                                                            userId: tempAppenderUserId,
+                                                            role: tempAppenderRole,
+                                                            percentage: tempAppenderPercent
+                                                        }])
+                                                        setTempAppenderUserId('') // Reset
+                                                        setTempAppenderPercent(50)
+                                                    }}
+                                                    disabled={!tempAppenderUserId}
+                                                >
+                                                    Add Split
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <DialogFooter>
+                                        <Button onClick={() => setIsSplitDialogOpen(false)}>Done</Button>
+                                    </DialogFooter>
+                                </DialogContent>
+                            </Dialog>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            <div className={cn("grid grid-cols-1 md:grid-cols-3 gap-6 transition-opacity duration-300", !isConfigValid && "opacity-50 pointer-events-none grayscale")}>
+                <GeneratorCard
+                    title="Pay in Full"
+                    description="Generate a link for a single, up-front payment."
+                    icon={<CreditCard className="w-10 h-10 text-blue-500 mb-2" />}
+                    prices={oneTimePrices}
+                    buttonLabel="Generate Full Payment Link"
+                    config={config}
+                />
+
+                <CreateSplitPaymentDialog prices={oneTimePrices} coaches={coaches} globalConfig={config}>
+                    <Card className="flex flex-col h-full border-2 border-border/50 hover:border-primary/20 transition-all duration-300 cursor-pointer group">
+                        <CardHeader>
+                            <div className="mb-2"><Split className="w-10 h-10 text-purple-500 mb-2" /></div>
+                            <CardTitle className="text-xl">Custom Split Plan</CardTitle>
+                            <CardDescription>Generate a custom installment plan (e.g. $1000 now, $1500 later).</CardDescription>
+                        </CardHeader>
+                        <CardContent className="flex-1">
+                            <div className="h-full flex items-center justify-center text-muted-foreground text-sm border-2 border-dashed rounded-md bg-muted/10 group-hover:bg-muted/30 transition-colors py-8">
+                                Click to configure amounts
+                            </div>
+                        </CardContent>
+                        <CardFooter>
+                            <Button className="w-full" variant="secondary">Configure Schedule</Button>
+                        </CardFooter>
+                    </Card>
+                </CreateSplitPaymentDialog>
+
+                <GeneratorCard
+                    title="Monthly Recurring"
+                    description="Generate a subscription link for monthly billing."
+                    icon={<Repeat className="w-10 h-10 text-green-500 mb-2" />}
+                    prices={recurringPrices}
+                    buttonLabel="Generate Subscription Link"
+                    config={config}
+                />
+            </div>
         </div>
     )
 }
@@ -91,19 +510,17 @@ function GeneratorCard({
     icon,
     prices,
     buttonLabel,
-    coaches
+    config
 }: {
     title: string
     description: string
     icon: React.ReactNode
     prices: ProductPrice[]
     buttonLabel: string
-    coaches: Coach[]
+    config: LinkConfig
 }) {
     const [selectedProductId, setSelectedProductId] = useState<string>('')
     const [selectedPriceId, setSelectedPriceId] = useState<string>('')
-    const [selectedCoachId, setSelectedCoachId] = useState<string>('tbd')
-    const [startDate, setStartDate] = useState<Date | undefined>(new Date()) // Default to today
 
     const [isLoading, setIsLoading] = useState(false)
     const [lastLink, setLastLink] = useState<string | null>(null)
@@ -141,8 +558,12 @@ function GeneratorCard({
                 selectedPrice.product_name,
                 selectedPrice.unit_amount || 0,
                 {
-                    coachId: selectedCoachId === 'tbd' ? undefined : selectedCoachId,
-                    startDate: startDate ? startDate.toISOString() : undefined
+                    coachId: config.coachId === 'tbd' ? undefined : config.coachId,
+                    salesCloserId: config.salesCloserId,
+                    startDate: config.startDate ? config.startDate.toISOString() : undefined,
+                    clientId: config.clientId,
+                    leadId: config.leadId,
+                    programTerm: config.programTerm
                 }
             )
 
@@ -195,7 +616,7 @@ function GeneratorCard({
 
                 {/* Step 1: Select Product */}
                 <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted-foreground">1. Select Product</label>
+                    <label className="text-sm font-medium text-muted-foreground">Select Product</label>
                     <Select
                         value={selectedProductId}
                         onValueChange={(val) => {
@@ -223,7 +644,7 @@ function GeneratorCard({
                 {/* Step 2: Select Price Option (Only show if product selected) */}
                 <div className="space-y-2">
                     <label className={cn("text-sm font-medium text-muted-foreground transition-opacity", !selectedProductId && "opacity-50")}>
-                        2. Select Price Option
+                        Select Price Option
                     </label>
                     <Select
                         value={selectedPriceId}
@@ -248,60 +669,6 @@ function GeneratorCard({
                             ))}
                         </SelectContent>
                     </Select>
-                </div>
-
-                {/* Step 3: Select Coach */}
-                <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted-foreground">3. Assign Coach (Optional)</label>
-                    <Select
-                        value={selectedCoachId}
-                        onValueChange={setSelectedCoachId}
-                    >
-                        <SelectTrigger>
-                            <SelectValue placeholder="Select Coach" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="tbd">TBD / No Preference</SelectItem>
-                            {coaches.map((coach) => (
-                                <SelectItem key={coach.id} value={coach.id}>
-                                    {coach.name || 'Unnamed Coach'}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
-
-                {/* Step 4: Select Start Date */}
-                <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted-foreground">4. Start Date</label>
-                    <Popover>
-                        <PopoverTrigger asChild>
-                            <Button
-                                variant={"outline"}
-                                className={cn(
-                                    "w-full justify-start text-left font-normal",
-                                    !startDate && "text-muted-foreground"
-                                )}
-                            >
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {startDate ? format(startDate, "PPP") : <span>Pick a start date</span>}
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                                mode="single"
-                                selected={startDate}
-                                onSelect={setStartDate}
-                                disabled={(date) =>
-                                    date < new Date(new Date().setHours(0, 0, 0, 0))
-                                }
-                                initialFocus
-                            />
-                        </PopoverContent>
-                    </Popover>
-                    <p className="text-[0.65rem] text-muted-foreground">
-                        For recurring plans, billing cycles will anchor to this day of the month after the initial payment.
-                    </p>
                 </div>
 
                 {lastLink && (

@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { getInvitations, revokeInvitation, Invitation } from '@/lib/actions/invitations';
-import { getAllUsers, User } from '@/lib/actions/profile';
-import { InviteMemberDialog } from '@/components/team/InviteMemberDialog';
+import { getAllUsers, User, getCurrentUserProfile } from '@/lib/actions/profile';
+import { CreateUserDialog } from '@/components/team/CreateUserDialog';
 import { UserEditModal } from '@/components/team/UserEditModal';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,9 +19,14 @@ export function TeamSettingsClient() {
     const [users, setUsers] = useState<User[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [expandedUser, setExpandedUser] = useState<string | null>(null);
+    const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
     const fetchData = async () => {
         setIsLoading(true);
+
+        // Fetch current user to check if super admin
+        const currentUser = await getCurrentUserProfile();
+        setIsSuperAdmin(currentUser?.role === 'super_admin');
 
         // Fetch Invitations
         const invResult = await getInvitations();
@@ -71,7 +76,7 @@ export function TeamSettingsClient() {
                     <h3 className="text-lg font-medium">Team Members</h3>
                     <p className="text-sm text-muted-foreground">Manage your team, roles, and permissions.</p>
                 </div>
-                <InviteMemberDialog />
+                {isSuperAdmin && <CreateUserDialog onSuccess={fetchData} />}
             </div>
 
             {/* Active Team List */}
@@ -95,9 +100,17 @@ export function TeamSettingsClient() {
                                         </div>
                                     </div>
                                     <div className="flex items-center space-x-2">
-                                        <Badge variant="outline" className="capitalize">
-                                            {user.role}
+                                        <Badge variant="outline" className={`capitalize ${user.role === 'super_admin' ? 'bg-purple-500/20 text-purple-400 border-purple-500/50' :
+                                            user.role === 'admin' ? 'bg-amber-500/20 text-amber-400 border-amber-500/50' : ''
+                                            }`}>
+                                            {user.role === 'super_admin' ? 'Super Admin' :
+                                                user.role === 'admin' ? 'Admin' : 'Standard'}
                                         </Badge>
+                                        {user.job_title && (
+                                            <Badge variant="secondary" className="capitalize bg-cyan-500/20 text-cyan-400">
+                                                {user.job_title.replace('_', ' ')}
+                                            </Badge>
+                                        )}
                                         <Button
                                             variant="ghost"
                                             size="sm"
@@ -106,7 +119,7 @@ export function TeamSettingsClient() {
                                             {expandedUser === user.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                                             <span className="ml-2">Permissions</span>
                                         </Button>
-                                        <UserEditModal user={user} onUpdate={fetchData} />
+                                        <UserEditModal user={user} onUpdate={fetchData} isSuperAdmin={isSuperAdmin} />
                                     </div>
                                 </div>
 

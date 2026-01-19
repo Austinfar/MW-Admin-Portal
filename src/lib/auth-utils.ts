@@ -5,7 +5,9 @@ import { createAdminClient } from '@/lib/supabase/admin';
 export interface UserPermissions {
     can_view_dashboard?: boolean;
     can_view_clients?: boolean;
+    can_view_leads?: boolean;
     can_view_sales?: boolean;
+    can_view_sales_floor?: boolean;
     can_view_onboarding?: boolean;
     can_view_business?: boolean;
     can_view_payment_links?: boolean;
@@ -36,17 +38,20 @@ export async function getCurrentUserAccess(): Promise<UserAccess | null> {
 
     if (error || !data) return null;
 
-    const role = data.role || 'coach';
+    const role = data.role || 'user';
     const first_name = data.first_name || '';
     const last_name = data.last_name || '';
     let permissions = (data.permissions || {}) as UserPermissions;
 
-    // If admin, grant all permissions implicitly
-    if (role === 'admin') {
+    // ONLY super_admin bypasses all permissions
+    // Admins must still respect their individual permission toggles
+    if (role === 'super_admin') {
         permissions = {
             can_view_dashboard: true,
             can_view_clients: true,
+            can_view_leads: true,
             can_view_sales: true,
+            can_view_sales_floor: true,
             can_view_onboarding: true,
             can_view_business: true,
             can_view_payment_links: true,

@@ -35,6 +35,17 @@ interface ScheduledCharge {
     date: Date
 }
 
+interface LinkConfig {
+    startDate: Date | undefined
+    coachId: string
+    salesCloserId: string
+    clientId: string
+    leadId: string
+    commissionSplits: { userId: string; role: string; percentage: number }[]
+    programTerm: '6' | '12'
+}
+
+
 interface Coach {
     id: string
     name: string | null
@@ -45,12 +56,14 @@ export function CreateSplitPaymentDialog({
     children,
     defaultPriceName = "1:1 Coaching (Split Payment)",
     prices = [],
-    coaches = []
+    coaches = [],
+    globalConfig
 }: {
     children: React.ReactNode
     defaultPriceName?: string
     prices?: { id: string; product_id: string; product_name: string }[]
     coaches?: Coach[]
+    globalConfig?: LinkConfig
 }) {
     const [open, setOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
@@ -60,16 +73,18 @@ export function CreateSplitPaymentDialog({
     const [downPayment, setDownPayment] = useState<number>(1000)
     const [futurePayments, setFuturePayments] = useState<ScheduledCharge[]>([])
 
-    // Config State
-    const [startDate, setStartDate] = useState<Date | undefined>(new Date())
-    const [selectedCoachId, setSelectedCoachId] = useState<string>('tbd')
-
     // Result State
     const [generatedLink, setGeneratedLink] = useState<string | null>(null)
 
     const addPayment = () => {
-        const nextMonth = new Date()
-        nextMonth.setMonth(nextMonth.getMonth() + 1 + futurePayments.length)
+        const currentStart = globalConfig?.startDate || new Date()
+        // If we are adding payments, they should be relative to the START DATE, not "today",
+        // OR relative to the last payment.
+        // Let's assume relative to start date + length
+        const baseDate = futurePayments.length > 0 ? futurePayments[futurePayments.length - 1].date : currentStart
+
+        const nextMonth = new Date(baseDate)
+        nextMonth.setMonth(nextMonth.getMonth() + 1)
 
         setFuturePayments([
             ...futurePayments,
@@ -108,8 +123,13 @@ export function CreateSplitPaymentDialog({
                     dueDate: p.date.toISOString(),
                 })),
                 productId, // Pass the linked ID
-                coachId: selectedCoachId,
-                startDate: startDate?.toISOString()
+                coachId: globalConfig?.coachId,
+                salesCloserId: globalConfig?.salesCloserId,
+                startDate: globalConfig?.startDate ? globalConfig.startDate.toISOString() : undefined,
+                clientId: globalConfig?.clientId,
+                leadId: globalConfig?.leadId,
+                commissionSplits: globalConfig?.commissionSplits,
+                programTerm: globalConfig?.programTerm || '6'
             }
 
             const result = await createSplitPaymentDraft(payload)
@@ -157,80 +177,28 @@ export function CreateSplitPaymentDialog({
 
                 {!generatedLink ? (
                     <div className="grid gap-6 py-4">
-                        {/* 1. Product & Coach Config */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="grid gap-2">
-                                <Label htmlFor="planName">Select Product</Label>
-                                {prices.length > 0 ? (
-                                    <Select
-                                        value={planName}
-                                        onValueChange={(val) => setPlanName(val)}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select a product..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {prices.map(p => (
-                                                <SelectItem key={p.id} value={p.product_name}>
-                                                    {p.product_name}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                ) : (
-                                    <p className="text-sm text-destructive">No products found.</p>
-                                )}
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label>Assign Coach (Optional)</Label>
+                        {/* 1. Product Config */}
+                        <div className="grid gap-2">
+                            <Label htmlFor="planName">Select Product</Label>
+                            {prices.length > 0 ? (
                                 <Select
-                                    value={selectedCoachId}
-                                    onValueChange={setSelectedCoachId}
+                                    value={planName}
+                                    onValueChange={(val) => setPlanName(val)}
                                 >
                                     <SelectTrigger>
-                                        <SelectValue placeholder="Select Coach" />
+                                        <SelectValue placeholder="Select a product..." />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="tbd">TBD / No Preference</SelectItem>
-                                        {coaches.map((coach) => (
-                                            <SelectItem key={coach.id} value={coach.id}>
-                                                {coach.name || 'Unnamed Coach'}
+                                        {prices.map(p => (
+                                            <SelectItem key={p.id} value={p.product_name}>
+                                                {p.product_name}
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>
-                            </div>
-                        </div>
-
-                        {/* 2. Start Date */}
-                        <div className="grid gap-2">
-                            <Label>Start Date</Label>
-                            <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button
-                                        variant={"outline"}
-                                        className={cn(
-                                            "w-full justify-start text-left font-normal",
-                                            !startDate && "text-muted-foreground"
-                                        )}
-                                    >
-                                        <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {startDate ? format(startDate, "PPP") : <span>Pick a start date</span>}
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0" align="start">
-                                    <Calendar
-                                        mode="single"
-                                        selected={startDate}
-                                        onSelect={setStartDate}
-                                        disabled={(date) =>
-                                            date < new Date(new Date().setHours(0, 0, 0, 0))
-                                        }
-                                        initialFocus
-                                    />
-                                </PopoverContent>
-                            </Popover>
+                            ) : (
+                                <p className="text-sm text-destructive">No products found.</p>
+                            )}
                         </div>
 
                         <div className="grid gap-2">

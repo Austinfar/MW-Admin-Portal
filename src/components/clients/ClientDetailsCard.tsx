@@ -22,9 +22,10 @@ interface ClientDetailsCardProps {
     client: Client;
     ghlLocationId?: string;
     users?: Coach[]; // Optional list of coaches/admins for selection
+    isAdmin?: boolean;
 }
 
-export function ClientDetailsCard({ client, ghlLocationId, users = [] }: ClientDetailsCardProps) {
+export function ClientDetailsCard({ client, ghlLocationId, users = [], isAdmin = false }: ClientDetailsCardProps) {
     const [isEditing, setIsEditing] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const router = useRouter();
@@ -37,7 +38,8 @@ export function ClientDetailsCard({ client, ghlLocationId, users = [] }: ClientD
         status: client.status,
         sold_by_user_id: client.sold_by_user_id || 'none',
         assigned_coach_id: client.assigned_coach_id || 'none',
-        lead_source: client.lead_source || 'company_driven'
+        lead_source: client.lead_source || 'company_driven',
+        check_in_day: client.check_in_day || 'none'
     });
 
     const handleSave = async () => {
@@ -169,6 +171,8 @@ export function ClientDetailsCard({ client, ghlLocationId, users = [] }: ClientD
                                 value={formData.stripe_customer_id}
                                 onChange={(e) => setFormData({ ...formData, stripe_customer_id: e.target.value })}
                                 placeholder="cus_..."
+                                disabled={!isAdmin}
+                                className={!isAdmin ? "opacity-60 cursor-not-allowed" : ""}
                             />
                         </div>
                         <div className="space-y-1">
@@ -200,20 +204,54 @@ export function ClientDetailsCard({ client, ghlLocationId, users = [] }: ClientD
                     </div>
                 ) : (
                     <>
+                        {/* Contact Buttons */}
+                        <div className="grid grid-cols-2 gap-2 pb-2 border-b border-primary/5">
+                            <a
+                                href={`mailto:${client.email}`}
+                                className="flex items-center justify-center gap-2 p-2 rounded-md bg-primary/10 hover:bg-primary/20 text-primary transition-colors text-xs font-medium"
+                            >
+                                <Mail className="h-3.5 w-3.5" />
+                                Email
+                            </a>
+                            {client.phone ? (
+                                <a
+                                    href={`tel:${client.phone}`}
+                                    className="flex items-center justify-center gap-2 p-2 rounded-md bg-primary/10 hover:bg-primary/20 text-primary transition-colors text-xs font-medium"
+                                >
+                                    <Phone className="h-3.5 w-3.5" />
+                                    Call/SMS
+                                </a>
+                            ) : (
+                                <div className="flex items-center justify-center gap-2 p-2 rounded-md bg-muted text-muted-foreground text-xs font-medium opacity-50 cursor-not-allowed">
+                                    <Phone className="h-3.5 w-3.5" />
+                                    No Phone
+                                </div>
+                            )}
+                        </div>
+
                         <div className="space-y-1 group">
                             <label className="text-xs font-medium text-muted-foreground group-hover:text-primary transition-colors">Email</label>
                             <div className="flex items-center gap-2 text-sm truncate">
-                                <Mail className="h-3 w-3 text-primary shrink-0" />
                                 <span className="truncate" title={client.email}>{client.email}</span>
                             </div>
                         </div>
                         <div className="space-y-1 group">
                             <label className="text-xs font-medium text-muted-foreground group-hover:text-primary transition-colors">Phone</label>
                             <div className="flex items-center gap-2 text-sm">
-                                <Phone className="h-3 w-3 text-primary shrink-0" />
                                 {client.phone || <span className="text-muted-foreground italic">N/A</span>}
                             </div>
                         </div>
+
+
+                        {client.check_in_day && (
+                            <div className="pt-2 border-t border-primary/5 space-y-1">
+                                <label className="text-xs font-medium text-muted-foreground">Check-in Day</label>
+                                <div className="text-sm font-medium flex items-center gap-2">
+                                    <Activity className="h-3 w-3 text-primary" />
+                                    {client.check_in_day}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Sales Info Display */}
                         {(client.sold_by_user || client.lead_source) && (

@@ -105,10 +105,14 @@ export async function syncGHLPipeline(pipelineId: string) {
         last_updated: new Date().toISOString()
     });
 
-    const result = await client.getOpportunities(pipelineId);
 
-    if (!result || !result.opportunities) {
-        console.error('[GHL Error] Failed to fetch opportunities for pipeline:', pipelineId, result);
+
+    // Use the new getAllContacts method which handles pagination properly
+    // Note: This relies on the GHL API supporting pipelineId filter on /contacts/
+    const result = await client.getAllContacts(undefined, pipelineId);
+
+    if (!result || !result.contacts) {
+        console.error('[GHL Error] Failed to fetch contacts for pipeline:', pipelineId, result);
         await updateSyncStatus({
             state: 'error',
             total: 0,
@@ -119,27 +123,23 @@ export async function syncGHLPipeline(pipelineId: string) {
             errors: 1,
             last_updated: new Date().toISOString()
         });
-        return { error: 'Failed to fetch opportunities', count: 0 };
+        return { error: 'Failed to fetch contacts', count: 0 };
     }
 
-    const opportunities = result.opportunities;
+    const contacts = result.contacts;
 
-    // Deduplicate by Contact ID to avoid redundant syncs
+    // Deduplicate by ID just in case
     const uniqueContacts = new Map();
-    for (const opp of opportunities) {
-        const contactId = typeof opp.contact === 'string'
-            ? opp.contact
-            : (opp.contact?.id || opp.contactId || opp.contact_id);
-
-        if (contactId && !uniqueContacts.has(contactId)) {
-            uniqueContacts.set(contactId, opp);
+    for (const contact of contacts) {
+        if (contact.id && !uniqueContacts.has(contact.id)) {
+            uniqueContacts.set(contact.id, contact);
         }
     }
 
-    const uniqueOpps = Array.from(uniqueContacts.values());
-    const total = uniqueOpps.length;
+    const uniqueContactList = Array.from(uniqueContacts.values());
+    const total = uniqueContactList.length;
 
-    console.log(`Starting sync for Pipeline ${pipelineId}. Found ${opportunities.length} opportunities, ${total} unique contacts.`);
+    console.log(`Starting sync for Pipeline ${pipelineId}. Found ${contacts.length} total fetched, ${total} unique contacts.`);
 
     // Fetch custom field definitions once for enrichment
     let customFieldDefinitions: any[] = [];
@@ -172,23 +172,25 @@ export async function syncGHLPipeline(pipelineId: string) {
         last_updated: new Date().toISOString()
     });
 
-    // Log the first opportunity to see the structure
-    if (opportunities.length > 0) {
-        console.log('[DEBUG] First Opportunity Structure:', JSON.stringify(opportunities[0], null, 2));
+    // Log the first contact to see the structure
+    if (uniqueContactList.length > 0) {
+        console.log('[DEBUG] First Contact Structure:', JSON.stringify(uniqueContactList[0], null, 2));
     }
 
     // Small delay helper to avoid rate limiting
     const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
     // Loop through unique contacts
-    for (const [index, opp] of uniqueOpps.entries()) {
-        const contactToSync = opp.contact || opp.contactId || opp.contact_id;
-        const contactIdForLog = typeof contactToSync === 'string' ? contactToSync : (contactToSync?.id || 'unknown');
+    for (const [index, contact] of uniqueContactList.entries()) {
+        const contactId = contact.id;
 
-        if (contactToSync) {
-            const syncResult = await syncGHLContact(contactToSync, client, customFieldDefinitions);
+        if (contactId) {
+            // We pass the Full Contact Object if available to save a fetch?
+            // Actually syncGHLContact logic (in sync.ts) might re-fetch to ensure full fields.
+            // Let's passed ID as expected by current signature.
+            const syncResult = await syncGHLContact(contactId, client, customFieldDefinitions);
             if (syncResult.error) {
-                console.error(`Failed to sync contact ${contactIdForLog}:`, syncResult.error);
+                console.error(`Failed to sync contact ${contactId}:`, syncResult.error);
                 errorCount++;
             } else {
                 syncedCount++;
@@ -212,11 +214,11 @@ export async function syncGHLPipeline(pipelineId: string) {
             last_updated: new Date().toISOString()
         });
 
-        // Small delay between requests to avoid rate limiting (100ms)
+        // Small delay between requests to avoid rate limiting (50ms)
         await delay(50);
     }
 
-    const debugData = opportunities.length > 0 ? opportunities[0] : null;
+    const debugData = uniqueContactList.length > 0 ? uniqueContactList[0] : null;
 
     // Final Success Status
     await updateSyncStatus({

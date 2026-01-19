@@ -21,9 +21,14 @@ import { getClientPayments } from '@/lib/actions/payments'
 import { OnboardingTask } from '@/types/onboarding'
 import { Note } from '@/types/client'
 
+import { getCurrentUserAccess } from '@/lib/auth-utils'
+
 export default async function ClientPage(props: { params: Promise<{ id: string }> }) {
     const params = await props.params;
     const client = await getClient(params.id)
+    const userAccess = await getCurrentUserAccess()
+    const isAdmin = userAccess?.role === 'admin'
+
     const tasksData = await getClientTasks(params.id)
     const tasks = (tasksData || []) as OnboardingTask[]
     const users = await getCoaches() // Fetch potential sellers
@@ -95,7 +100,7 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-200px)]">
                 {/* Left Column: Identity & Contact (3 cols) */}
                 <div className="lg:col-span-3 space-y-6">
-                    <ClientDetailsCard client={client} ghlLocationId={GHL_CONFIG.LOCATION_ID} users={users} />
+                    <ClientDetailsCard client={client} ghlLocationId={GHL_CONFIG.LOCATION_ID} users={users} isAdmin={isAdmin} />
 
                     <Card className="bg-card/40 border-primary/5 backdrop-blur-sm">
                         <CardHeader>

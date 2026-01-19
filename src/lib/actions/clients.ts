@@ -6,7 +6,7 @@ import { revalidatePath, unstable_cache, revalidateTag } from 'next/cache'
 
 import { createAdminClient } from '@/lib/supabase/admin'
 
-async function _getClients() {
+export async function getClients() {
     // Using Admin Client to ensure all clients are visible regardless of complex RLS on joined tables
     const supabase = createAdminClient()
 
@@ -27,15 +27,6 @@ async function _getClients() {
 
     return data as Client[]
 }
-
-export const getClients = unstable_cache(
-    _getClients,
-    ['all-clients'],
-    {
-        revalidate: 3600, // 1 hour (invalidated by mutations)
-        tags: ['clients']
-    }
-);
 
 export async function getClient(id: string) {
     // Use Admin Client to bypass RLS for detailed view, matching list view behavior
@@ -83,6 +74,7 @@ export interface Coach {
     name: string
     email: string
     role: string
+    job_title: string
 }
 
 export async function getCoaches(): Promise<Coach[]> {
@@ -90,9 +82,9 @@ export async function getCoaches(): Promise<Coach[]> {
 
     const { data, error } = await supabase
         .from('users')
-        .select('id, name, email, role')
+        .select('id, name, email, role, job_title')
         .eq('is_active', true)
-        .in('role', ['coach', 'admin'])
+        .in('job_title', ['coach', 'head_coach'])
         .order('name', { ascending: true })
 
     if (error) {
@@ -175,7 +167,8 @@ export async function updateClient(id: string, data: Partial<Client>) {
             // assigned_coach_id: data.assigned_coach_id, // Removed duplicate
             stripe_customer_id: data.stripe_customer_id,
             sold_by_user_id: data.sold_by_user_id, // NEW
-            lead_source: data.lead_source // NEW
+            lead_source: data.lead_source, // NEW
+            check_in_day: data.check_in_day // NEW
         })
         .eq('id', id)
 

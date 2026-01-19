@@ -81,6 +81,45 @@ interface SplitPaymentPayload {
     productId?: string // Optional link to Stripe Price/Product
     startDate?: string
     coachId?: string
+    salesCloserId?: string
+    clientId?: string
+    leadId?: string
+    commissionSplits?: any[]
+    programTerm?: '6' | '12'
+}
+
+// Helper to ensure Stripe Customer exists for a generic client
+async function ensureStripeCustomer(supabase: any, clientId: string) {
+    // 1. Fetch Client
+    const { data: client, error } = await supabase
+        .from('clients')
+        .select('id, email, name, stripe_customer_id')
+        .eq('id', clientId)
+        .single()
+
+    if (error || !client) {
+        throw new Error("Client not found")
+    }
+
+    // 2. Return existing ID if present
+    if (client.stripe_customer_id) {
+        return client.stripe_customer_id
+    }
+
+    // 3. Create new Stripe Customer
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-12-15.clover' as any })
+    const customer = await stripe.customers.create({
+        email: client.email,
+        name: client.name,
+        metadata: {
+            supabase_client_id: client.id
+        }
+    })
+
+    // 4. Save back to Supabase
+    await supabase.from('clients').update({ stripe_customer_id: customer.id }).eq('id', clientId)
+
+    return customer.id
 }
 
 // ... existing helper methods ...
@@ -93,17 +132,70 @@ export async function getCoaches() {
     // Fetch users with role 'coach' or 'admin' (if admins also coach)
     const { data: coaches, error } = await supabase
         .from('users')
-        .select('id, name, avatar_url')
+        .select('id, name')
         .in('role', ['coach', 'admin'])
         .eq('is_active', true)
         .order('name')
 
     if (error) {
-        console.error('Error fetching coaches:', error)
+        console.error('Error fetching coaches:', error instanceof Error ? error.message : error)
         return []
     }
     return coaches || []
 }
+
+// 0.1 Fetch Sales Closers for Selector
+export async function getSalesClosers() {
+    const supabase = createAdminClient()
+
+    const { data: closers, error } = await supabase
+        .from('users')
+        .select('id, name')
+        .in('role', ['sales_closer', 'admin'])
+        .eq('is_active', true)
+        .order('name')
+
+    if (error) {
+        console.error('Error fetching sales closers:', error instanceof Error ? error.message : error)
+        return []
+    }
+    return closers || []
+}
+
+// 0.2 Fetch Clients for Selector
+export async function getClients() {
+    const supabase = createAdminClient()
+
+    const { data: clients, error } = await supabase
+        .from('clients')
+        .select('id, name, email, stripe_customer_id')
+        .order('name')
+
+    if (error) {
+        console.error('Error fetching clients:', error.message)
+        return []
+    }
+    return clients || []
+}
+
+// 0.3 Fetch Leads for Payment Links Selector
+export async function getLeadsForPaymentLinks() {
+    const supabase = createAdminClient()
+
+    const { data: leads, error } = await supabase
+        .from('leads')
+        .select('id, first_name, last_name, email, phone')
+        .in('status', ['New', 'Contacted', 'Qualified']) // Only show active leads
+        .order('created_at', { ascending: false })
+
+    if (error) {
+        console.error('Error fetching leads:', error.message)
+        return []
+    }
+    return leads || []
+}
+
+
 
 // 0.5 Update Schedule Details (Called before payment)
 export async function updateScheduleDetails(id: string, details: { startDate?: string; coachId?: string }) {
@@ -128,7 +220,7 @@ export async function updateScheduleDetails(id: string, details: { startDate?: s
 
 // 1. Fetch Schedule Helper
 export async function getPaymentSchedule(id: string) {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { data, error } = await supabase
         .from('payment_schedules')
         .select('*, scheduled_charges(*), coach:users!assigned_coach_id(name)') // Join users table to get coach name
@@ -142,12 +234,12 @@ export async function getPaymentSchedule(id: string) {
 
 // 2. Create Embedded Checkout Session (Called by Client on Page Load or after Update)
 export async function createCheckoutSessionForSchedule(scheduleId: string) {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
-    // Fetch Schedule
+    // Fetch Schedule with Client Relation
     const { data: schedule } = await supabase
         .from('payment_schedules')
-        .select('*')
+        .select('*, client:clients(stripe_customer_id)')
         .eq('id', scheduleId)
         .single()
 
@@ -161,7 +253,11 @@ export async function createCheckoutSessionForSchedule(scheduleId: string) {
             ui_mode: 'embedded',
             mode: isSetupMode ? 'setup' : (isSubscription ? 'subscription' : 'payment'),
             payment_method_types: ['card'],
-            return_url: `${process.env.NEXT_PUBLIC_PAYMENT_URL || process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')}/success?session_id={CHECKOUT_SESSION_ID}`,
+            return_url: `${process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')}/pay/success?session_id={CHECKOUT_SESSION_ID}`,
+            // PRE-LINK TO STRIPE CUSTOMER IF AVAILABLE
+            customer: schedule.client?.stripe_customer_id,
+            submit_type: isSubscription ? undefined : 'pay',
+            billing_address_collection: 'auto',
             metadata: {
                 scheduleId: schedule.id,
                 planName: schedule.plan_name,
@@ -293,9 +389,9 @@ export async function createCheckoutSessionForSchedule(scheduleId: string) {
 
         return { clientSecret: session.client_secret }
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error creating embedded session:', error)
-        return { error: 'Failed to initialize payment' }
+        return { error: error?.message || 'Failed to initialize payment' }
     }
 }
 
@@ -310,10 +406,25 @@ export async function createStandardPaymentRef(
     amount: number,
     options?: {
         coachId?: string,
-        startDate?: string
+        salesCloserId?: string,
+        clientId?: string,
+        leadId?: string,
+        startDate?: string,
+        commissionSplits?: any[],
+        programTerm?: '6' | '12'
     }
 ) {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
+
+    // 1. Handle Client / Stripe Customer Pre-Check
+    if (options?.clientId && options.clientId !== 'new') {
+        try {
+            await ensureStripeCustomer(createAdminClient(), options.clientId)
+        } catch (e) {
+            console.error("Failed to ensure stripe customer", e)
+            return { error: "Failed to link client to Stripe" }
+        }
+    }
 
     try {
         const payload: any = {
@@ -323,11 +434,27 @@ export async function createStandardPaymentRef(
             status: 'draft',
             payment_type: type,
             stripe_price_id: priceId,
+            program_term: options?.programTerm || '6', // Default to 6 months
         }
 
         if (options?.coachId && options.coachId !== 'tbd') {
             payload.assigned_coach_id = options.coachId
         }
+        if (options?.salesCloserId && options.salesCloserId !== 'tbd') {
+            payload.sales_closer_id = options.salesCloserId
+        }
+        if (options?.clientId) {
+            payload.client_id = options.clientId
+        }
+        if (options?.leadId) {
+            payload.lead_id = options.leadId
+        }
+
+        // Add commission splits
+        if (options?.commissionSplits && options.commissionSplits.length > 0) {
+            payload.commission_splits = options.commissionSplits
+        }
+
         if (options?.startDate) {
             payload.start_date = options.startDate
         }
@@ -340,19 +467,29 @@ export async function createStandardPaymentRef(
 
         if (error) {
             console.error('Error creating standard payment ref:', error)
-            return { error: 'Database error' }
+            return { error: error.message }
         }
 
         return { id: schedule.id }
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error creating standard payment ref:', error)
-        return { error: 'Failed to create reference' }
+        return { error: error?.message || 'Failed to create reference' }
     }
 }
 
 // 3. Create Draft Schedule (Called by Admin)
 export async function createSplitPaymentDraft(payload: SplitPaymentPayload) {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
+
+    // 1. Handle Client / Stripe Customer Pre-Check
+    if (payload.clientId && payload.clientId !== 'new') {
+        try {
+            await ensureStripeCustomer(createAdminClient(), payload.clientId)
+        } catch (e) {
+            console.error("Failed to ensure stripe customer", e)
+            return { error: "Failed to link client to Stripe" }
+        }
+    }
 
     try {
         const insertData: any = {
@@ -360,15 +497,35 @@ export async function createSplitPaymentDraft(payload: SplitPaymentPayload) {
             amount: payload.downPayment,
             currency: 'usd',
             status: 'draft',
+            payment_type: 'split',
+            schedule_json: payload.schedule,
             stripe_price_id: payload.productId, // Link to original product/price if provided
         }
 
         if (payload.coachId && payload.coachId !== 'tbd') {
             insertData.assigned_coach_id = payload.coachId
         }
+        if (payload.salesCloserId && payload.salesCloserId !== 'tbd') {
+            insertData.sales_closer_id = payload.salesCloserId
+        }
+        if (payload.clientId) {
+            insertData.client_id = payload.clientId
+        }
+        if (payload.leadId) {
+            insertData.lead_id = payload.leadId
+        }
+
+        // Add commission splits
+        if (payload.commissionSplits && payload.commissionSplits.length > 0) {
+            insertData.commission_splits = payload.commissionSplits
+        }
+
         if (payload.startDate) {
             insertData.start_date = payload.startDate
         }
+
+        // Add program term
+        insertData.program_term = payload.programTerm || '6'
 
         // Create Draft Schedule
         const { data: schedule, error: scheduleError } = await supabase
@@ -379,7 +536,7 @@ export async function createSplitPaymentDraft(payload: SplitPaymentPayload) {
 
         if (scheduleError) {
             console.error('Error saving payment schedule:', scheduleError)
-            return { error: 'Database error creating schedule' }
+            return { error: scheduleError.message }
         }
 
         // Save Future Charges
@@ -397,14 +554,29 @@ export async function createSplitPaymentDraft(payload: SplitPaymentPayload) {
 
             if (chargesError) {
                 console.error('Error saving scheduled charges:', chargesError)
-                return { error: 'Database error saving charges' }
+                return { error: chargesError.message }
             }
         }
 
         return { id: schedule.id }
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error creating split payment draft:', error)
-        return { error: 'Failed to create plan' }
+        return { error: error?.message || 'Failed to create plan' }
     }
 }
+
+export async function retrieveCheckoutSession(sessionId: string) {
+    try {
+        const session = await stripe.checkout.sessions.retrieve(sessionId)
+        return {
+            status: session.status,
+            customer_details: session.customer_details,
+            metadata: session.metadata,
+        }
+    } catch (error) {
+        console.error('Error retrieving session:', error)
+        return { error: 'Failed to retrieve session' }
+    }
+}
+

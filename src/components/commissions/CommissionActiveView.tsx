@@ -39,11 +39,16 @@ export function CommissionActiveView() {
             try {
                 const { getAllUsers, getCurrentUserProfile } = await import('@/lib/actions/profile');
                 const profile = await getCurrentUserProfile();
-                if (profile?.role === 'admin') {
+                if (profile?.role === 'super_admin' || profile?.role === 'admin') {
                     setIsAdmin(true);
                     const { users } = await getAllUsers();
                     if (users) {
-                        setCoaches(users.filter(u => u.role === 'coach' || u.role === 'sales_closer').map(u => ({ id: u.id, name: u.name })));
+                        // Filter by job_title for coaches/closers (people who earn commissions)
+                        setCoaches(users.filter(u =>
+                            u.job_title === 'coach' ||
+                            u.job_title === 'head_coach' ||
+                            u.job_title === 'closer'
+                        ).map(u => ({ id: u.id, name: u.name })));
                     }
                 }
             } catch (e) {

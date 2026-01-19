@@ -17,7 +17,9 @@ interface PermissionTogglesProps {
 const PERMISSION_LABELS: Record<keyof UserPermissions, string> = {
     can_view_dashboard: 'View Dashboard',
     can_view_clients: 'View Clients Tab',
+    can_view_leads: 'View Leads Tab',
     can_view_sales: 'View Sales Analyzer',
+    can_view_sales_floor: 'View Sales Floor',
     can_view_onboarding: 'View Onboarding',
     can_view_business: 'View Business/Commisions',
     can_view_payment_links: 'View Payment Links',

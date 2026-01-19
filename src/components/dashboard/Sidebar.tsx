@@ -5,7 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { LayoutDashboard, Users, CheckSquare, DollarSign, LogOut, ChevronLeft, ChevronRight, CreditCard, PhoneCall } from 'lucide-react'
+import { LayoutDashboard, Users, CheckSquare, DollarSign, LogOut, ChevronLeft, ChevronRight, CreditCard, PhoneCall, Calendar } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useSidebar } from './SidebarContext'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -17,6 +17,18 @@ const routes = [
         icon: LayoutDashboard,
         href: '/dashboard',
         color: 'text-sky-500',
+    },
+    {
+        label: 'Sales Floor',
+        icon: Calendar,
+        href: '/sales-floor',
+        color: 'text-yellow-500',
+    },
+    {
+        label: 'Leads',
+        icon: Users, // Using Users for now, or maybe UserPlus?
+        href: '/leads',
+        color: 'text-cyan-500',
     },
     {
         label: 'Clients',
@@ -79,8 +91,12 @@ export function Sidebar({ className, isMobile = false, userAccess }: { className
                 return !!permissions.can_view_onboarding
             case '/sales':
                 return !!permissions.can_view_sales
+            case '/sales-floor':
+                return !!permissions.can_view_sales_floor
             case '/payment-links':
                 return !!permissions.can_view_payment_links
+            case '/leads':
+                return !!permissions.can_view_leads
             case '/settings':
                 return true // Always allow settings root
             case '/commissions':

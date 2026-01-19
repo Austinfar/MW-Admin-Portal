@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
+import { createClient } from '@/lib/supabase/client';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
@@ -17,6 +18,7 @@ interface Pipeline {
 
 interface GHLSyncSettingsProps {
     pipelines: Pipeline[];
+    initialPipelineId?: string;
 }
 
 interface SyncStatus {
@@ -30,8 +32,23 @@ interface SyncStatus {
     last_updated: string;
 }
 
-export function GHLSyncSettings({ pipelines }: GHLSyncSettingsProps) {
-    const [selectedPipeline, setSelectedPipeline] = useState<string>('');
+export function GHLSyncSettings({ pipelines, initialPipelineId }: GHLSyncSettingsProps) {
+    const [selectedPipeline, setSelectedPipeline] = useState<string>(initialPipelineId || '');
+    const [isSaving, setIsSaving] = useState(false);
+
+    // Auto-save pipeline selection
+    useEffect(() => {
+        if (selectedPipeline && selectedPipeline !== initialPipelineId) {
+            const save = async () => {
+                setIsSaving(true);
+                const { updateAppSetting } = await import('@/lib/actions/app-settings');
+                await updateAppSetting('ghl_sync_pipeline_id', selectedPipeline);
+                setIsSaving(false);
+                toast.success('Sync pipeline saved');
+            };
+            save();
+        }
+    }, [selectedPipeline, initialPipelineId]);
     const [isSyncing, setIsSyncing] = useState(false);
     const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
     const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -47,26 +64,48 @@ export function GHLSyncSettings({ pipelines }: GHLSyncSettingsProps) {
         }
     };
 
-    // Start polling when syncing begins
+    // Realtime subscription for sync status
     useEffect(() => {
-        if (isSyncing) {
-            // Poll every 500ms for more responsive updates
-            pollIntervalRef.current = setInterval(checkStatus, 500);
-            // Initial check
-            checkStatus();
-        } else {
-            if (pollIntervalRef.current) {
-                clearInterval(pollIntervalRef.current);
-                pollIntervalRef.current = null;
-            }
-        }
+        const supabase = createClient();
+
+        // Initial fetch
+        checkStatus();
+
+        const channel = supabase
+            .channel('ghl_sync_status')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'app_settings',
+                    filter: 'key=eq.ghl_sync_status'
+                },
+                (payload: any) => {
+                    const newValue = (payload.new as any).value;
+                    if (newValue) {
+                        try {
+                            const status = JSON.parse(newValue);
+                            setSyncStatus(status);
+
+                            // Update local syncing state based on remote status
+                            if (status.state === 'syncing') {
+                                setIsSyncing(true);
+                            } else if (status.state === 'completed' || status.state === 'error') {
+                                setIsSyncing(false);
+                            }
+                        } catch (e) {
+                            console.error('Failed to parse realtime sync status:', e);
+                        }
+                    }
+                }
+            )
+            .subscribe();
 
         return () => {
-            if (pollIntervalRef.current) {
-                clearInterval(pollIntervalRef.current);
-            }
+            supabase.removeChannel(channel);
         };
-    }, [isSyncing]);
+    }, []);
 
     const handleSync = async () => {
         if (!selectedPipeline) {

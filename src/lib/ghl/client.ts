@@ -135,7 +135,103 @@ export class GHLClient {
     }
 
     async searchContacts(query: string) {
-        return this.request<{ contacts: any[] }>(`/contacts/?query=${query}&locationId=${this.locationId}`)
+        // Simple search wrapper
+        return this.getAllContacts(query);
+    }
+
+    /**
+     * Fetches contacts with pagination and optional filtering by pipeline.
+     */
+    async getAllContacts(query?: string, pipelineId?: string, pipelineStageId?: string) {
+        // If filtering by pipeline, we MUST use the opportunities endpoint as /contacts doesn't support pipelineId
+        if (pipelineId) {
+            console.log(`[GHL Info] Pipeline filter detected (${pipelineId}). Delegating to getOpportunities...`);
+            const { opportunities } = await this.getOpportunities(pipelineId);
+
+            // Extract unique contacts from opportunities
+            const contactMap = new Map();
+            opportunities.forEach(op => {
+                if (op.contact && op.contact.id) {
+                    contactMap.set(op.contact.id, op.contact);
+                }
+            });
+
+            const contacts = Array.from(contactMap.values());
+            console.log(`[GHL Info] Extracted ${contacts.length} unique contacts from ${opportunities.length} opportunities.`);
+            return { contacts };
+        }
+
+        const allContacts: any[] = [];
+        let startAfterId: string | null = null;
+        const MAX_PAGES = 100; // Safety limit
+        let page = 1;
+        let runningStartAfterId = ''; // Keep track to prevent loops
+
+        while (page <= MAX_PAGES) {
+            // Build URL with optional filters
+            const params = new URLSearchParams({
+                locationId: this.locationId,
+                limit: '100'
+            });
+
+            if (query) params.append('query', query);
+            // pipelineId is handled above via getOpportunities
+            // pipelineStageId might not work on /contacts either, but leaving for now if user tries it without pipelineId
+            if (pipelineStageId) params.append('pipelineStageId', pipelineStageId);
+            if (startAfterId) params.append('startAfterId', startAfterId);
+
+            const url = `/contacts/?${params.toString()}`;
+
+            console.log(`[GHL Info] Fetching contacts page ${page}: ${url}`);
+
+            const response = await this.request<{
+                contacts: any[],
+                meta?: {
+                    startAfterId?: string,
+                    startAfter?: string,
+                    nextPageUrl?: string,
+                    total?: number
+                }
+            }>(url);
+
+            if (!response || !response.contacts || response.contacts.length === 0) {
+                console.log(`[GHL Info] No more contacts found on page ${page}`);
+                break;
+            }
+
+            allContacts.push(...response.contacts);
+            console.log(`[GHL Info] Page ${page}: Got ${response.contacts.length} contacts. Total: ${allContacts.length}`);
+
+            // Check for next page cursor
+            const nextCursor = response.meta?.startAfterId || response.meta?.startAfter;
+
+            if (nextCursor) {
+                if (nextCursor === runningStartAfterId) {
+                    console.warn('[GHL Loop] Next cursor is same as previous. Breaking.');
+                    break;
+                }
+                startAfterId = nextCursor;
+                runningStartAfterId = nextCursor;
+                page++;
+            } else if (response.contacts.length >= 100) {
+                // Fallback: use last contact's ID as cursor
+                const lastContact = response.contacts[response.contacts.length - 1];
+                if (lastContact?.id && lastContact.id !== startAfterId) {
+                    console.log(`[GHL Info] No meta cursor, using last contact ID: ${lastContact.id}`);
+                    startAfterId = lastContact.id;
+                    runningStartAfterId = lastContact.id;
+                    page++;
+                } else {
+                    break;
+                }
+            } else {
+                // Got less than 100, we're done
+                break;
+            }
+        }
+
+        console.log(`[GHL Info] Finished fetching contacts. Total: ${allContacts.length}`);
+        return { contacts: allContacts };
     }
 
     async getPipelines() {
@@ -146,8 +242,6 @@ export class GHLClient {
 
     async getCustomFields() {
         // Fetch all custom fields for the location
-        // NOTE: Standard endpoint is /locations/{locationId}/customFields or just /custom-fields/
-        // Per GHL 2.0 Docs: GET /locations/{locationId}/customFields
         return this.request<{ customFields: any[] }>(`/locations/${this.locationId}/customFields`)
     }
 
@@ -155,7 +249,7 @@ export class GHLClient {
         const allOpportunities: any[] = [];
         let page = 1;
         // Safety break to prevent infinite loops
-        const MAX_PAGES = 50;
+        const MAX_PAGES = 100;
 
         // Initial Request
         let url = `/opportunities/search?location_id=${this.locationId}&pipeline_id=${pipelineId}&limit=100`;
@@ -167,52 +261,61 @@ export class GHLClient {
                 break;
             }
 
+            const count = response.opportunities.length;
             allOpportunities.push(...response.opportunities);
 
-            // Check for next page indication (GHL V2 usually provides 'meta.nextPageUrl' or just 'nextPageUrl')
-            // Trying standard GHL pagination patterns
-            const nextUrl = response.meta?.nextPageUrl || response.meta?.nextPage || (response as any).nextPageUrl;
+            console.log(`[GHL Info] Page ${page} received ${count} opportunities.`);
+            if (response.meta) {
+                console.log(`[GHL debug] Page ${page} meta:`, JSON.stringify(response.meta));
+            }
 
-            if (nextUrl) {
-                console.log(`[GHL DEBUG] Page ${page} received. Meta:`, response.meta);
-
-                let nextRequestUrl = '';
-
-                if (response.meta?.startAfterId) {
-                    nextRequestUrl = `/opportunities/search?location_id=${this.locationId}&pipeline_id=${pipelineId}&limit=100&startAfterId=${response.meta.startAfterId}`;
-                } else if (response.meta?.nextPageUrl) {
-                    const nextUrlObj = new URL(response.meta.nextPageUrl);
-                    nextRequestUrl = `${nextUrlObj.pathname}${nextUrlObj.search}`;
-                } else if (response.opportunities.length === 100) {
-                    // Fallback: If we got a full page but no meta, try using the last item's ID as startAfterId
-                    const lastItem = response.opportunities[response.opportunities.length - 1];
-                    console.log('[GHL DEBUG] Page full (100 items), no meta.next. LastItem ID:', lastItem?.id);
-
-                    if (lastItem && lastItem.id) {
-                        console.log('[GHL DEBUG] Constructing manual next page URL using startAfterId:', lastItem.id);
-                        nextRequestUrl = `/opportunities/search?location_id=${this.locationId}&pipeline_id=${pipelineId}&limit=100&startAfterId=${lastItem.id}`;
-                    }
-                }
-
-                // If no next URL found, or if it's the exact same URL as before (infinite loop), break
-                if (!nextRequestUrl) {
-                    console.warn('[GHL Warning] No next page URL could be determined. Stopping.');
-                    break;
-                }
-
-                if (nextRequestUrl === url) {
-                    console.warn('[GHL Warning] Pagination loop detected (URL did not change). Stopping.', { current: url, next: nextRequestUrl });
-                    break;
-                }
-
-                console.log('[GHL Info] Advancing to next page:', nextRequestUrl);
-                url = nextRequestUrl;
-            } else {
-                console.log(`[GHL Info] No nextUrl trigger found for Page ${page}. Stopping.`);
+            // STRICT CHECK: Only fetch next page if we received a full page of 100 items.
+            if (count < 100) {
+                console.log(`[GHL Info] Page ${page} has less than 100 items (${count}). Finished fetching.`);
                 break;
             }
 
-            page++;
+            const metaNext = response.meta?.nextPageUrl || response.meta?.nextPage || (response as any).nextPageUrl;
+            const metaStartAfter = response.meta?.startAfterId || response.meta?.startAfter || response.meta?.start_after;
+
+            let nextRequestUrl = '';
+
+            // STRATEGY CHANGE: Prioritize the explicit next URL provided by API.
+            // This avoids guessing parameter names (startAfter vs start_after).
+            if (metaNext) {
+                // API gives us a direct link
+                const nextUrlObj = new URL(metaNext);
+                // Ensure we keep the relative path structure used by our request method
+                // GHL might return full absolute URL, we just need path + query
+                nextRequestUrl = `${nextUrlObj.pathname}${nextUrlObj.search}`;
+                console.log(`[GHL Info] Using meta.nextPageUrl: ${nextRequestUrl}`);
+            } else if (metaStartAfter) {
+                // Use explicit start_after param
+                nextRequestUrl = `/opportunities/search?location_id=${this.locationId}&pipeline_id=${pipelineId}&limit=100&start_after=${metaStartAfter}`;
+                console.log(`[GHL Info] Using meta.startAfterId: ${nextRequestUrl}`);
+            } else {
+                // Fallback: We know we have 100 items but no meta cursor.
+                const lastItem = response.opportunities[count - 1];
+                if (lastItem?.id) {
+                    console.log(`[GHL Info] Page ${page} full but no meta next. Using fallback cursor: ${lastItem.id}`);
+                    nextRequestUrl = `/opportunities/search?location_id=${this.locationId}&pipeline_id=${pipelineId}&limit=100&start_after=${lastItem.id}`;
+                }
+            }
+
+            if (nextRequestUrl) {
+                // Safety check to prevent infinite loops (same URL)
+                if (nextRequestUrl === url) {
+                    console.warn('[GHL Warning] Pagination loop detected (Next URL same as Current). Stopping.', { current: url, next: nextRequestUrl });
+                    break;
+                }
+
+                console.log(`[GHL Info] Advancing to Page ${page + 1}: ${nextRequestUrl}`);
+                url = nextRequestUrl;
+                page++;
+            } else {
+                console.log(`[GHL Info] No next page indicator found after Page ${page}. Stopping.`);
+                break;
+            }
         }
 
         return { opportunities: allOpportunities };
@@ -226,5 +329,35 @@ export class GHLClient {
                 message
             })
         });
+    }
+
+    // Notes
+    async getNotes(contactId: string) {
+        return this.request<{ notes: any[] }>(`/contacts/${contactId}/notes`)
+    }
+
+    async createNote(contactId: string, content: string, userId?: string) {
+        return this.request<{ note: any }>(`/contacts/${contactId}/notes`, {
+            method: 'POST',
+            body: JSON.stringify({
+                body: content,
+                userId // Optional: specific user ID if needed
+            })
+        })
+    }
+
+    async updateNote(contactId: string, noteId: string, content: string) {
+        return this.request<{ note: any }>(`/contacts/${contactId}/notes/${noteId}`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                body: content
+            })
+        })
+    }
+
+    async deleteNote(contactId: string, noteId: string) {
+        return this.request<{ success: boolean }>(`/contacts/${contactId}/notes/${noteId}`, {
+            method: 'DELETE'
+        })
     }
 }

@@ -20,7 +20,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { MoreHorizontal, Filter, X, Check, CreditCard } from 'lucide-react'
+import { MoreHorizontal, Filter, X, Check, CreditCard, ArrowUpDown } from 'lucide-react'
 import { Client, ClientType } from '@/types/client'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
@@ -35,13 +35,18 @@ interface ClientsTableProps {
     data: Client[]
     clientTypes: ClientType[]
     coaches: Coach[]
+    currentUserId?: string
 }
+
+type SortField = 'name' | 'status' | 'program' | 'coach' | 'start_date'
+type SortOrder = 'asc' | 'desc'
 
 interface Filters {
     statuses: string[]
     programs: string[]
     coaches: string[]
     leadSources: string[]
+    onlyMyClients: boolean
 }
 
 const STATUSES = [
@@ -55,19 +60,22 @@ const LEAD_SOURCES = [
     { value: 'company_driven', label: 'Company Driven' },
 ]
 
-export function ClientsTable({ data, clientTypes, coaches }: ClientsTableProps) {
+export function ClientsTable({ data, clientTypes, coaches, currentUserId }: ClientsTableProps) {
     const [searchTerm, setSearchTerm] = useState('')
+    const [sortField, setSortField] = useState<SortField>('start_date')
+    const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
     const [filters, setFilters] = useState<Filters>({
         statuses: [],
         programs: [],
         coaches: [],
         leadSources: [],
+        onlyMyClients: false
     })
     const [isFilterOpen, setIsFilterOpen] = useState(false)
     const router = useRouter()
 
     const activeFilterCount = useMemo(() => {
-        return filters.statuses.length + filters.programs.length + filters.coaches.length + filters.leadSources.length
+        return filters.statuses.length + filters.programs.length + filters.coaches.length + filters.leadSources.length + (filters.onlyMyClients ? 1 : 0)
     }, [filters])
 
     const filteredData = useMemo(() => {
@@ -95,16 +103,59 @@ export function ClientsTable({ data, clientTypes, coaches }: ClientsTableProps) 
             const matchesLeadSource = filters.leadSources.length === 0 ||
                 (client.lead_source && filters.leadSources.includes(client.lead_source))
 
-            return matchesSearch && matchesStatus && matchesProgram && matchesCoach && matchesLeadSource
-        })
-    }, [data, searchTerm, filters])
+            // My Clients filter
+            const matchesMyClients = !filters.onlyMyClients || (currentUserId && client.assigned_coach_id === currentUserId)
 
-    const toggleFilter = (category: keyof Filters, value: string) => {
+            return matchesSearch && matchesStatus && matchesProgram && matchesCoach && matchesLeadSource && matchesMyClients
+        }).sort((a, b) => {
+            let compareA: any = ''
+            let compareB: any = ''
+
+            switch (sortField) {
+                case 'name':
+                    compareA = a.name.toLowerCase()
+                    compareB = b.name.toLowerCase()
+                    break
+                case 'status':
+                    compareA = a.status
+                    compareB = b.status
+                    break
+                case 'program':
+                    compareA = a.client_type?.name || ''
+                    compareB = b.client_type?.name || ''
+                    break
+                case 'coach':
+                    compareA = a.assigned_coach?.name || ''
+                    compareB = b.assigned_coach?.name || ''
+                    break
+                case 'start_date':
+                    compareA = new Date(a.start_date).getTime()
+                    compareB = new Date(b.start_date).getTime()
+                    break
+            }
+
+            if (compareA < compareB) return sortOrder === 'asc' ? -1 : 1
+            if (compareA > compareB) return sortOrder === 'asc' ? 1 : -1
+            return 0
+        })
+    }, [data, searchTerm, filters, sortField, sortOrder, currentUserId])
+
+    const handleSort = (field: SortField) => {
+        if (sortField === field) {
+            setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+        } else {
+            setSortField(field)
+            setSortOrder('asc')
+        }
+    }
+
+    const toggleFilter = (category: Exclude<keyof Filters, 'onlyMyClients'>, value: string) => {
         setFilters(prev => ({
             ...prev,
             [category]: prev[category].includes(value)
-                ? prev[category].filter(v => v !== value)
-                : [...prev[category], value]
+                // @ts-ignore - TS doesn't know for sure it's an array despite Exclude, but we know
+                ? (prev[category] as string[]).filter(v => v !== value)
+                : [...(prev[category] as string[]), value]
         }))
     }
 
@@ -114,6 +165,7 @@ export function ClientsTable({ data, clientTypes, coaches }: ClientsTableProps) 
             programs: [],
             coaches: [],
             leadSources: [],
+            onlyMyClients: false
         })
     }
 
@@ -161,6 +213,22 @@ export function ClientsTable({ data, clientTypes, coaches }: ClientsTableProps) 
                                         </Button>
                                     )}
                                 </div>
+
+                                {currentUserId && (
+                                    <>
+                                        <div className="flex items-center space-x-2 bg-secondary/20 p-2 rounded-md">
+                                            <Checkbox
+                                                id="my-clients"
+                                                checked={filters.onlyMyClients}
+                                                onCheckedChange={(checked) => setFilters(prev => ({ ...prev, onlyMyClients: checked as boolean }))}
+                                            />
+                                            <label htmlFor="my-clients" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer">
+                                                My Clients Only
+                                            </label>
+                                        </div>
+                                        <Separator />
+                                    </>
+                                )}
 
                                 {/* Status Filter */}
                                 <div className="space-y-2">
@@ -309,6 +377,14 @@ export function ClientsTable({ data, clientTypes, coaches }: ClientsTableProps) 
                             ))}
                         </div>
                     )}
+                    {filters.onlyMyClients && (
+                        <Badge variant="secondary" className="gap-1 pr-1 border-primary/20 bg-primary/5 text-primary">
+                            My Clients Only
+                            <button onClick={() => setFilters(prev => ({ ...prev, onlyMyClients: false }))} className="ml-1 hover:bg-primary/10 rounded">
+                                <X className="h-3 w-3" />
+                            </button>
+                        </Badge>
+                    )}
                 </div>
                 <AddClientDialog clientTypes={clientTypes} />
             </div>
@@ -324,11 +400,21 @@ export function ClientsTable({ data, clientTypes, coaches }: ClientsTableProps) 
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead className="w-[250px]">Client</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead>Program</TableHead>
-                                <TableHead>Assigned Coach</TableHead>
-                                <TableHead>Start Date</TableHead>
+                                <TableHead className="w-[250px] cursor-pointer hover:text-foreground" onClick={() => handleSort('name')}>
+                                    Client {sortField === 'name' && <ArrowUpDown className="ml-1 h-3 w-3 inline" />}
+                                </TableHead>
+                                <TableHead className="cursor-pointer hover:text-foreground" onClick={() => handleSort('status')}>
+                                    Status {sortField === 'status' && <ArrowUpDown className="ml-1 h-3 w-3 inline" />}
+                                </TableHead>
+                                <TableHead className="cursor-pointer hover:text-foreground" onClick={() => handleSort('program')}>
+                                    Program {sortField === 'program' && <ArrowUpDown className="ml-1 h-3 w-3 inline" />}
+                                </TableHead>
+                                <TableHead className="cursor-pointer hover:text-foreground" onClick={() => handleSort('coach')}>
+                                    Assigned Coach {sortField === 'coach' && <ArrowUpDown className="ml-1 h-3 w-3 inline" />}
+                                </TableHead>
+                                <TableHead className="cursor-pointer hover:text-foreground" onClick={() => handleSort('start_date')}>
+                                    Start Date {sortField === 'start_date' && <ArrowUpDown className="ml-1 h-3 w-3 inline" />}
+                                </TableHead>
                                 <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>

@@ -1,7 +1,11 @@
 import { getClients, getClientTypes, getCoaches } from '@/lib/actions/clients'
+import { createClient } from '@/lib/supabase/server'
 import { ClientsTable } from '@/components/clients/ClientsTable'
 
 export default async function ClientsPage() {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
     const [clients, clientTypes, coaches] = await Promise.all([
         getClients(),
         getClientTypes(),
@@ -18,7 +22,12 @@ export default async function ClientsPage() {
                     </p>
                 </div>
             </div>
-            <ClientsTable data={clients} clientTypes={clientTypes} coaches={coaches} />
+            <ClientsTable
+                data={clients}
+                clientTypes={clientTypes}
+                coaches={coaches}
+                currentUserId={user?.id}
+            />
         </div>
     )
 }
