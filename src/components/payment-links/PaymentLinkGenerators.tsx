@@ -1,15 +1,32 @@
-'use client'
+'use client';
 
-import { useState } from 'react'
-import { CalendarIcon, Check, Copy, CreditCard, ExternalLink, Loader2, Repeat, Split, User, ChevronsUpDown, Trash2 } from 'lucide-react'
+import React, { useState } from 'react'
 import { format, addDays, startOfMonth, addMonths } from 'date-fns'
+import { Calendar as CalendarIcon, Check, ChevronsUpDown, CreditCard, Repeat, Split, Trash2, User, Copy, ExternalLink, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Calendar } from '@/components/ui/calendar'
+import { Button } from "@/components/ui/button"
+import { Calendar } from "@/components/ui/calendar"
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardFooter,
+    CardHeader,
+    CardTitle,
+} from "@/components/ui/card"
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 import { createStandardPaymentRef } from '@/lib/actions/stripe-actions'
 import {
     Command,
@@ -93,7 +110,25 @@ export interface LinkConfig {
     programTerm: '6' | '12'
 }
 
+// Helper to deduplicate products (if we only want to show one price option per product or just unique product names - user asked to fix "repeating projects" which implies products appearing multiple times)
+// Assuming we want to show unique products. If multiple prices exist for same product, we might want to handle that differently (e.g. variants). 
+// For now, let's just make sure we don't show exact duplicates and sort by price.
 export function PaymentLinkGenerators({ prices, isTestMode, coaches, closers, clients, leads }: PaymentLinkGeneratorsProps) {
+    // Deduplicate prices by ID to avoid strict duplicates
+    const uniquePrices = prices.filter((price, index, self) =>
+        index === self.findIndex((p) => (
+            p.id === price.id
+        ))
+    );
+
+    // Sort prices: lowest to highest unit_amount
+    const sortedPrices = uniquePrices.sort((a, b) => {
+        const priceA = a.unit_amount || 0;
+        const priceB = b.unit_amount || 0;
+        return priceA - priceB;
+    });
+
+    // Let's ensure we use sortedPrices everywhere.
     // Global Config State
     const [startDate, setStartDate] = useState<Date | undefined>(new Date())
     const [selectedCoachId, setSelectedCoachId] = useState<string>('') // Start unselected
@@ -102,6 +137,7 @@ export function PaymentLinkGenerators({ prices, isTestMode, coaches, closers, cl
     const [selectedLeadId, setSelectedLeadId] = useState<string>('')
     const [programTerm, setProgramTerm] = useState<'6' | '12'>('6') // Default to 6 months
     const [commissionSplits, setCommissionSplits] = useState<CommissionSplit[]>([])
+
     // Dialog State for Splits
     const [isSplitDialogOpen, setIsSplitDialogOpen] = useState(false)
     const [tempAppenderUserId, setTempAppenderUserId] = useState<string>('')
@@ -109,8 +145,9 @@ export function PaymentLinkGenerators({ prices, isTestMode, coaches, closers, cl
     const [tempAppenderPercent, setTempAppenderPercent] = useState<number>(50)
     const [isClientOpen, setIsClientOpen] = useState(false)
 
-    const oneTimePrices = prices.filter(p => p.type === 'one_time' && p.unit_amount !== null)
-    const recurringPrices = prices.filter(p => p.type === 'recurring' && p.unit_amount !== null && p.recurring?.interval === 'month')
+    // USE sortedPrices HERE
+    const oneTimePrices = sortedPrices.filter(p => p.type === 'one_time' && p.unit_amount !== null)
+    const recurringPrices = sortedPrices.filter(p => p.type === 'recurring' && p.unit_amount !== null && p.recurring?.interval === 'month')
 
     const config: LinkConfig = {
         startDate,
@@ -193,7 +230,7 @@ export function PaymentLinkGenerators({ prices, isTestMode, coaches, closers, cl
                                                             value={`${lead.first_name} ${lead.last_name || ''} ${lead.email || ''}`}
                                                             onSelect={() => {
                                                                 setSelectedLeadId(lead.id)
-                                                                setSelectedClientId('') // Clear client if lead selected
+                                                                setSelectedClientId('')
                                                                 setIsClientOpen(false)
                                                             }}
                                                         >
@@ -218,7 +255,7 @@ export function PaymentLinkGenerators({ prices, isTestMode, coaches, closers, cl
                                                         value={`${client.name} ${client.email}`}
                                                         onSelect={() => {
                                                             setSelectedClientId(client.id)
-                                                            setSelectedLeadId('') // Clear lead if client selected
+                                                            setSelectedLeadId('')
                                                             setIsClientOpen(false)
                                                         }}
                                                     >
@@ -631,11 +668,18 @@ function GeneratorCard({
                             {Object.entries(products).length === 0 ? (
                                 <div className="p-2 text-sm text-center text-muted-foreground">No products found.</div>
                             ) : (
-                                Object.entries(products).map(([prodId, { name }]) => (
-                                    <SelectItem key={prodId} value={prodId}>
-                                        {name}
-                                    </SelectItem>
-                                ))
+                                Object.entries(products)
+                                    .sort(([, a], [, b]) => {
+                                        // Sort by lowest price
+                                        const minA = Math.min(...a.prices.map(p => p.unit_amount || 0))
+                                        const minB = Math.min(...b.prices.map(p => p.unit_amount || 0))
+                                        return minA - minB
+                                    })
+                                    .map(([prodId, { name }]) => (
+                                        <SelectItem key={prodId} value={prodId}>
+                                            {name}
+                                        </SelectItem>
+                                    ))
                             )}
                         </SelectContent>
                     </Select>

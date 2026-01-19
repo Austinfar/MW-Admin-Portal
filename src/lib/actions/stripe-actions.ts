@@ -239,7 +239,7 @@ export async function createCheckoutSessionForSchedule(scheduleId: string) {
     // Fetch Schedule with Client Relation
     const { data: schedule } = await supabase
         .from('payment_schedules')
-        .select('*, client:clients(stripe_customer_id)')
+        .select('*, client:clients(stripe_customer_id, email), lead:leads(email)')
         .eq('id', scheduleId)
         .single()
 
@@ -254,8 +254,6 @@ export async function createCheckoutSessionForSchedule(scheduleId: string) {
             mode: isSetupMode ? 'setup' : (isSubscription ? 'subscription' : 'payment'),
             payment_method_types: ['card'],
             return_url: `${process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')}/pay/success?session_id={CHECKOUT_SESSION_ID}`,
-            // PRE-LINK TO STRIPE CUSTOMER IF AVAILABLE
-            customer: schedule.client?.stripe_customer_id,
             submit_type: isSubscription ? undefined : 'pay',
             billing_address_collection: 'auto',
             metadata: {
@@ -266,6 +264,17 @@ export async function createCheckoutSessionForSchedule(scheduleId: string) {
                 assignedCoachId: schedule.assigned_coach_id || 'TBD',
                 startDate: schedule.start_date || 'Not Set'
             },
+        }
+
+        // Logic to determine Customer vs Customer Email
+        if (schedule.client?.stripe_customer_id) {
+            sessionConfig.customer = schedule.client.stripe_customer_id
+        } else {
+            // Pre-fill email from Client or Lead record
+            const userEmail = schedule.client?.email || schedule.lead?.email
+            if (userEmail) {
+                sessionConfig.customer_email = userEmail
+            }
         }
 
         if (!isSetupMode) {

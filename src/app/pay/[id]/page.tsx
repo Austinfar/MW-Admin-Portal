@@ -86,14 +86,14 @@ export default function PayPage({ params }: { params: Promise<{ id: string }> })
             <div className="fixed bottom-[-10%] right-[-5%] w-[300px] h-[300px] bg-neon-green/5 blur-[80px] rounded-full pointer-events-none" />
 
             {/* Trust/Verification Header */}
-            <div className="relative z-10 w-full bg-zinc-900/30 border-b border-white/5 backdrop-blur-md py-2">
+            <div className="fixed top-0 left-0 right-0 z-50 w-full bg-zinc-900/90 border-b border-white/5 backdrop-blur-md py-2">
                 <div className="max-w-5xl mx-auto px-4 flex items-center justify-center text-[10px] sm:text-xs tracking-widest uppercase text-neon-green font-medium gap-2">
                     <ShieldCheck className="w-3.5 h-3.5" />
                     <span>Secure Payment via Stripe</span>
                 </div>
             </div>
 
-            <div className="relative z-10 max-w-5xl mx-auto px-6 py-8 md:py-12">
+            <div className="relative z-10 max-w-5xl mx-auto px-6 py-8 md:py-12 mt-8">
                 {isLoading ? (
                     <div className="flex flex-col items-center justify-center py-20 space-y-6">
                         <Loader2 className="w-10 h-10 animate-spin text-neon-green" />
@@ -102,7 +102,7 @@ export default function PayPage({ params }: { params: Promise<{ id: string }> })
                 ) : (
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
                         {/* LEFT COLUMN: Brand & Order Context */}
-                        <div className="lg:col-span-5 space-y-8 lg:sticky lg:top-8 h-fit">
+                        <div className="lg:col-span-5 space-y-8 lg:sticky lg:top-28 h-fit">
 
                             {/* Brand Logo */}
                             <div className="relative w-40 h-auto">
@@ -178,7 +178,7 @@ export default function PayPage({ params }: { params: Promise<{ id: string }> })
                                                 <span className="text-sm">Program Term</span>
                                             </div>
                                             <span className="text-white text-sm font-medium">
-                                                {getProgramTerm(schedule?.plan_name) || "Custom Term"}
+                                                {schedule?.program_term ? `${schedule.program_term} Months` : (getProgramTerm(schedule?.plan_name) || "Custom Term")}
                                             </span>
                                         </div>
 
