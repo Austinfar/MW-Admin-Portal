@@ -12,8 +12,12 @@ export async function processScheduledCharges() {
             amount,
             schedule_id,
             payment_schedules!inner (
+                id,
                 stripe_customer_id,
-                stripe_payment_method_id
+                stripe_payment_method_id,
+                plan_name,
+                amount,
+                stripe_price_id
             )
         `)
         .eq('status', 'pending')
@@ -44,6 +48,29 @@ export async function processScheduledCharges() {
                 continue
             }
 
+            // 2b. Calculate Payment Index and Total
+            // Need to know position in schedule. 
+            // Fetch all charges for this schedule to compare
+            const { data: allScheduleCharges } = await supabase
+                .from('scheduled_charges')
+                .select('id, due_date')
+                .eq('schedule_id', schedule.id)
+                .order('due_date', { ascending: true })
+
+            // Determine if there was a down payment (amount > 0)
+            // If so, all scheduled charges are shifted by +1 index
+            const hasDownPayment = (schedule.amount && schedule.amount > 0)
+            const downPaymentOffset = hasDownPayment ? 1 : 0
+
+            const totalScheduled = allScheduleCharges?.length || 0
+            const totalPayments = totalScheduled + downPaymentOffset
+
+            // Find index of current charge
+            const currentChargeIndex = allScheduleCharges?.findIndex(c => c.id === charge.id) ?? -1
+            const paymentNumber = currentChargeIndex + 1 + downPaymentOffset
+
+            const paymentDescription = `${schedule.plan_name || 'Payment Plan'}: Payment ${paymentNumber} of ${totalPayments}`
+
             const paymentIntent = await stripe.paymentIntents.create({
                 amount: charge.amount, // already in cents
                 currency: 'usd',
@@ -51,6 +78,15 @@ export async function processScheduledCharges() {
                 payment_method: schedule.stripe_payment_method_id,
                 off_session: true,
                 confirm: true,
+                description: paymentDescription,
+                metadata: {
+                    scheduleId: schedule.id,
+                    planName: schedule.plan_name,
+                    paymentIndex: String(paymentNumber),
+                    totalPayments: String(totalPayments),
+                    type: 'scheduled_charge',
+                    productId: schedule.stripe_price_id || 'custom_split' // Link to product if possible
+                }
             })
 
             // Update charge status

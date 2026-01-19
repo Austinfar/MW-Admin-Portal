@@ -1,10 +1,11 @@
 import { PaymentLinkGenerators } from '@/components/payment-links/PaymentLinkGenerators'
-import { getStripeProducts } from '@/lib/actions/stripe-actions'
+import { getStripeProducts, getCoaches } from '@/lib/actions/stripe-actions'
 
 export const dynamic = 'force-dynamic'
 
 export default async function PaymentLinksPage() {
     const { products, isTestMode } = await getStripeProducts()
+    const coaches = await getCoaches()
 
     return (
         <div className="p-8 space-y-8 max-w-7xl mx-auto">
@@ -22,7 +23,7 @@ export default async function PaymentLinksPage() {
                 )}
             </div>
 
-            <PaymentLinkGenerators prices={products} isTestMode={isTestMode} />
+            <PaymentLinkGenerators prices={products} isTestMode={isTestMode} coaches={coaches} />
         </div>
     )
 }

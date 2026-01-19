@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
         // NOTE: This must match exactly what was registered in the GHL App
         const protocol = request.headers.get('x-forwarded-proto') || 'http';
         const host = request.headers.get('host');
-        const redirectUri = `${protocol}://${host}/api/ghl/oauth/callback`;
+        const redirectUri = `${protocol}://${host}/api/crm/oauth/callback`;
 
         console.log('[GHL OAuth] Exchanging code...', { redirectUri });
 

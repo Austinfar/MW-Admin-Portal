@@ -7,6 +7,15 @@ export function getAuthorizationUrl(redirectUri: string) {
     const scopes = [
         'contacts.readonly',
         'contacts.write',
+        'opportunities.readonly',
+        'opportunities.write',
+        'conversations.readonly',
+        'conversations.write',
+        'conversations/message.readonly',
+        'conversations/message.write',
+        'calendars.readonly',
+        'calendars.write',
+        'users.readonly',
         'locations.readonly',
         'offline_access'
     ].join(' ')

@@ -25,6 +25,8 @@ import {
     PopoverTrigger,
 } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Check } from 'lucide-react'
 
 import { createSplitPaymentDraft } from '@/lib/actions/stripe-actions'
 
@@ -33,12 +35,22 @@ interface ScheduledCharge {
     date: Date
 }
 
+interface Coach {
+    id: string
+    name: string | null
+    avatar_url?: string | null
+}
+
 export function CreateSplitPaymentDialog({
     children,
-    defaultPriceName = "1:1 Coaching (Split Payment)"
+    defaultPriceName = "1:1 Coaching (Split Payment)",
+    prices = [],
+    coaches = []
 }: {
     children: React.ReactNode
     defaultPriceName?: string
+    prices?: { id: string; product_id: string; product_name: string }[]
+    coaches?: Coach[]
 }) {
     const [open, setOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
@@ -47,6 +59,10 @@ export function CreateSplitPaymentDialog({
     const [planName, setPlanName] = useState(defaultPriceName)
     const [downPayment, setDownPayment] = useState<number>(1000)
     const [futurePayments, setFuturePayments] = useState<ScheduledCharge[]>([])
+
+    // Config State
+    const [startDate, setStartDate] = useState<Date | undefined>(new Date())
+    const [selectedCoachId, setSelectedCoachId] = useState<string>('tbd')
 
     // Result State
     const [generatedLink, setGeneratedLink] = useState<string | null>(null)
@@ -79,6 +95,10 @@ export function CreateSplitPaymentDialog({
         setIsLoading(true)
         setGeneratedLink(null)
         try {
+            // Find price ID (productId)
+            const selectedPrice = prices.find(p => p.product_name === planName)
+            const productId = selectedPrice?.product_id // Use Product ID explicitly to allow custom amount
+
             // Convert to cents and serializable dates
             const payload = {
                 planName,
@@ -86,7 +106,10 @@ export function CreateSplitPaymentDialog({
                 schedule: futurePayments.map(p => ({
                     amount: Math.round(p.amount * 100),
                     dueDate: p.date.toISOString(),
-                }))
+                })),
+                productId, // Pass the linked ID
+                coachId: selectedCoachId,
+                startDate: startDate?.toISOString()
             }
 
             const result = await createSplitPaymentDraft(payload)
@@ -134,13 +157,80 @@ export function CreateSplitPaymentDialog({
 
                 {!generatedLink ? (
                     <div className="grid gap-6 py-4">
+                        {/* 1. Product & Coach Config */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid gap-2">
+                                <Label htmlFor="planName">Select Product</Label>
+                                {prices.length > 0 ? (
+                                    <Select
+                                        value={planName}
+                                        onValueChange={(val) => setPlanName(val)}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select a product..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {prices.map(p => (
+                                                <SelectItem key={p.id} value={p.product_name}>
+                                                    {p.product_name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                ) : (
+                                    <p className="text-sm text-destructive">No products found.</p>
+                                )}
+                            </div>
+
+                            <div className="grid gap-2">
+                                <Label>Assign Coach (Optional)</Label>
+                                <Select
+                                    value={selectedCoachId}
+                                    onValueChange={setSelectedCoachId}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select Coach" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="tbd">TBD / No Preference</SelectItem>
+                                        {coaches.map((coach) => (
+                                            <SelectItem key={coach.id} value={coach.id}>
+                                                {coach.name || 'Unnamed Coach'}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+
+                        {/* 2. Start Date */}
                         <div className="grid gap-2">
-                            <Label htmlFor="planName">Plan Name (Seen by Client)</Label>
-                            <Input
-                                id="planName"
-                                value={planName}
-                                onChange={(e) => setPlanName(e.target.value)}
-                            />
+                            <Label>Start Date</Label>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant={"outline"}
+                                        className={cn(
+                                            "w-full justify-start text-left font-normal",
+                                            !startDate && "text-muted-foreground"
+                                        )}
+                                    >
+                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                        {startDate ? format(startDate, "PPP") : <span>Pick a start date</span>}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                    <Calendar
+                                        mode="single"
+                                        selected={startDate}
+                                        onSelect={setStartDate}
+                                        disabled={(date) =>
+                                            date < new Date(new Date().setHours(0, 0, 0, 0))
+                                        }
+                                        initialFocus
+                                    />
+                                </PopoverContent>
+                            </Popover>
                         </div>
 
                         <div className="grid gap-2">
@@ -268,19 +358,4 @@ export function CreateSplitPaymentDialog({
     )
 }
 
-function Check({ className }: { className?: string }) {
-    return (
-        <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={className}
-        >
-            <polyline points="20 6 9 17 4 12" />
-        </svg>
-    )
-}
+
