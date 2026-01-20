@@ -265,7 +265,12 @@ export async function createCheckoutSessionForSchedule(scheduleId: string) {
             ui_mode: 'embedded',
             mode: isSetupMode ? 'setup' : (isSubscription ? 'subscription' : 'payment'),
             payment_method_types: ['card'],
-            return_url: `${process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')}/pay/success?session_id={CHECKOUT_SESSION_ID}`,
+            // Use NEXT_PUBLIC_PAYMENT_URL for payment subdomain (pay.mwfitnesscoaching.com)
+            // Note: Middleware rewrites pay.domain.com/success -> /pay/success, so we use /success not /pay/success
+            // Falls back to NEXT_PUBLIC_APP_URL/pay/success for local development (no subdomain rewrite)
+            return_url: process.env.NEXT_PUBLIC_PAYMENT_URL
+                ? `${process.env.NEXT_PUBLIC_PAYMENT_URL}/success?session_id={CHECKOUT_SESSION_ID}`
+                : `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/pay/success?session_id={CHECKOUT_SESSION_ID}`,
             submit_type: isSubscription ? undefined : 'pay',
             billing_address_collection: 'auto',
             metadata: {

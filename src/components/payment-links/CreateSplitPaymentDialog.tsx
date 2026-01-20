@@ -141,8 +141,10 @@ export function CreateSplitPaymentDialog({
 
             if (result.id) {
                 // Construct internal URL
-                const baseUrl = window.location.origin
-                const url = `${baseUrl}/pay/${result.id}`
+                // Use NEXT_PUBLIC_PAYMENT_URL for pay subdomain (pay.mwfitnesscoaching.com)
+                // Falls back to window.location.origin for local development
+                const baseUrl = process.env.NEXT_PUBLIC_PAYMENT_URL || window.location.origin
+                const url = `${baseUrl}/${result.id}`
 
                 setGeneratedLink(url)
                 toast.success("Payment Plan generated!")
