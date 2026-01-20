@@ -195,7 +195,7 @@ export async function getLeadsForPaymentLinks() {
     const { data: leads, error } = await supabase
         .from('leads')
         .select('id, first_name, last_name, email, phone')
-        .in('status', ['New', 'Contacted', 'Qualified']) // Only show active leads
+        // .in('status', ['New', 'Contacted', 'Qualified']) // Removed filter to show all leads
         .order('created_at', { ascending: false })
 
     if (error) {
