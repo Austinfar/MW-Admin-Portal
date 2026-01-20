@@ -1,0 +1,1 @@
+ALTER TABLE clients ALTER COLUMN ghl_contact_id DROP NOT NULL;

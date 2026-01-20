@@ -79,7 +79,9 @@ export async function saveTemplateTask(templateId: string, taskObj: Partial<Onbo
         description: taskObj.description,
         due_offset_days: taskObj.due_offset_days || 0,
         is_required: taskObj.is_required ?? true,
-        display_order: taskObj.display_order || 0
+        display_order: taskObj.display_order || 0,
+        assignment_type: taskObj.assignment_type || 'unassigned',
+        default_assigned_user_id: taskObj.assignment_type === 'specific_user' ? taskObj.default_assigned_user_id : null
     }
 
     if (taskObj.id) {
@@ -134,14 +136,29 @@ export async function assignTemplateToClient(clientId: string, templateId: strin
         return { error: 'Template has no tasks' }
     }
 
-    // 2. Create client tasks
-    // Calculate due dates based on due_offset_days (relative to today for now, or client start date if passed?)
-    // For simplicity, let's use TODAY as start date. Ideally pass startDate.
+    // 2. Fetch client's assigned coach for dynamic assignment
+    const { data: client } = await supabase
+        .from('clients')
+        .select('assigned_coach_id')
+        .eq('id', clientId)
+        .single()
+
+    const assignedCoachId = client?.assigned_coach_id || null
+
+    // 3. Create client tasks with appropriate assignments
     const today = new Date()
 
     const newTasks = tasks.map(task => {
         const dueDate = new Date(today)
         dueDate.setDate(today.getDate() + task.due_offset_days)
+
+        // Determine assigned user based on assignment_type
+        let assignedUserId: string | null = null
+        if (task.assignment_type === 'specific_user' && task.default_assigned_user_id) {
+            assignedUserId = task.default_assigned_user_id
+        } else if (task.assignment_type === 'assigned_coach') {
+            assignedUserId = assignedCoachId
+        }
 
         return {
             client_id: clientId,
@@ -150,6 +167,7 @@ export async function assignTemplateToClient(clientId: string, templateId: strin
             description: task.description,
             status: 'pending',
             due_date: dueDate.toISOString(),
+            assigned_user_id: assignedUserId,
             created_at: new Date().toISOString()
         }
     })
@@ -166,6 +184,7 @@ export async function assignTemplateToClient(clientId: string, templateId: strin
     revalidatePath(`/clients/${clientId}`)
     return { success: 'Onboarding assigned successfully' }
 }
+
 
 export async function getClientTasks(clientId: string) {
     const supabase = await createClient()
@@ -278,6 +297,41 @@ export async function createAdHocTask(clientId: string, taskTitle: string, dueDa
     }
 
     revalidatePath(`/clients/${clientId}`)
+    return { success: true }
+}
+
+export async function updateClientTask(
+    taskId: string,
+    updates: {
+        title?: string
+        description?: string
+        due_date?: string
+        assigned_user_id?: string | null
+    }
+) {
+    const supabase = await createClient()
+
+    // 1. Get task to find client_id for revalidation
+    const { data: task, error: fetchError } = await supabase
+        .from('onboarding_tasks')
+        .select('client_id')
+        .eq('id', taskId)
+        .single()
+
+    if (fetchError || !task) return { error: 'Task not found' }
+
+    // 2. Update task
+    const { error } = await supabase
+        .from('onboarding_tasks')
+        .update(updates)
+        .eq('id', taskId)
+
+    if (error) {
+        console.error('Error updating task:', error)
+        return { error: 'Failed to update task' }
+    }
+
+    revalidatePath(`/clients/${task.client_id}`)
     return { success: true }
 }
 

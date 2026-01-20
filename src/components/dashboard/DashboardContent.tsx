@@ -5,16 +5,26 @@ import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 import { useSidebar } from './SidebarContext'
 import { cn } from '@/lib/utils'
+import { NoAccessPage } from './NoAccessPage'
 
-import { UserAccess } from '@/lib/auth-utils'
+import { UserAccess, hasNoPermissions } from '@/lib/permissions'
 
 interface DashboardContentProps {
     children: React.ReactNode
     userAccess?: UserAccess
+    isImpersonating?: boolean
 }
 
-export function DashboardContent({ children, userAccess }: DashboardContentProps) {
+export function DashboardContent({ children, userAccess, isImpersonating }: DashboardContentProps) {
     const { isCollapsed } = useSidebar()
+
+    // Check if user has absolutely no permissions (and is not a super_admin)
+    const noAccess = userAccess &&
+        userAccess.role !== 'super_admin' &&
+        hasNoPermissions(userAccess.permissions)
+
+    // Get user's first name for the no access message
+    const userName = userAccess?.first_name || undefined
 
     return (
         <div className="h-full relative bg-background">
@@ -28,11 +38,16 @@ export function DashboardContent({ children, userAccess }: DashboardContentProps
                 "transition-all duration-300",
                 isCollapsed ? "md:pl-[72px]" : "md:pl-72"
             )}>
-                <Header userAccess={userAccess} />
+                <Header userAccess={userAccess} isImpersonating={isImpersonating} />
                 <div className="p-4 md:p-8 min-h-[calc(100vh-64px)]">
-                    {children}
+                    {noAccess ? (
+                        <NoAccessPage userName={userName} />
+                    ) : (
+                        children
+                    )}
                 </div>
             </main>
         </div>
     )
 }
+

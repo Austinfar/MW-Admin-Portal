@@ -27,7 +27,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { createStandardPaymentRef } from '@/lib/actions/stripe-actions'
+import { createStandardPaymentRef, createCheckoutSession } from '@/lib/actions/stripe-actions'
 import {
     Command,
     CommandEmpty,
@@ -45,10 +45,11 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog"
-import { Slider } from "@/components/ui/slider"
 import { CreateSplitPaymentDialog } from './CreateSplitPaymentDialog'
 import { cn } from '@/lib/utils'
 import { Label } from '@/components/ui/label'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Switch } from '@/components/ui/switch'
 
 interface ProductPrice {
     id: string
@@ -63,11 +64,13 @@ interface ProductPrice {
 interface Coach {
     id: string
     name: string | null
+    avatar_url?: string | null
 }
 
 interface SalesCloser {
     id: string
     name: string | null
+    avatar_url?: string | null
 }
 
 export interface CommissionSplit {
@@ -81,7 +84,11 @@ interface Client {
     name: string
     email: string
     stripe_customer_id: string | null
+    assigned_coach_id: string | null
+    start_date: string | null
 }
+
+import { ClientType } from '@/types/client'
 
 interface Lead {
     id: string
@@ -98,6 +105,7 @@ interface PaymentLinkGeneratorsProps {
     closers: SalesCloser[]
     clients: Client[]
     leads: Lead[]
+    clientTypes: ClientType[]
 }
 
 export interface LinkConfig {
@@ -106,6 +114,7 @@ export interface LinkConfig {
     salesCloserId: string
     clientId: string
     leadId: string
+    clientTypeId?: string
     commissionSplits: CommissionSplit[]
     programTerm: '6' | '12'
 }
@@ -113,7 +122,7 @@ export interface LinkConfig {
 // Helper to deduplicate products (if we only want to show one price option per product or just unique product names - user asked to fix "repeating projects" which implies products appearing multiple times)
 // Assuming we want to show unique products. If multiple prices exist for same product, we might want to handle that differently (e.g. variants). 
 // For now, let's just make sure we don't show exact duplicates and sort by price.
-export function PaymentLinkGenerators({ prices, isTestMode, coaches, closers, clients, leads }: PaymentLinkGeneratorsProps) {
+export function PaymentLinkGenerators({ prices, isTestMode, coaches, closers, clients, leads, clientTypes }: PaymentLinkGeneratorsProps) {
     // Deduplicate prices by ID to avoid strict duplicates
     const uniquePrices = prices.filter((price, index, self) =>
         index === self.findIndex((p) => (
@@ -130,19 +139,23 @@ export function PaymentLinkGenerators({ prices, isTestMode, coaches, closers, cl
 
     // Let's ensure we use sortedPrices everywhere.
     // Global Config State
-    const [startDate, setStartDate] = useState<Date | undefined>(new Date())
-    const [selectedCoachId, setSelectedCoachId] = useState<string>('') // Start unselected
-    const [selectedCloserId, setSelectedCloserId] = useState<string>('')
-    const [selectedClientId, setSelectedClientId] = useState<string>('')
-    const [selectedLeadId, setSelectedLeadId] = useState<string>('')
-    const [programTerm, setProgramTerm] = useState<'6' | '12'>('6') // Default to 6 months
-    const [commissionSplits, setCommissionSplits] = useState<CommissionSplit[]>([])
+    const [activeTab, setActiveTab] = useState<'standard' | 'split'>('standard')
 
-    // Dialog State for Splits
+    // Standard Generatory State
+    const [selectedPriceId, setSelectedPriceId] = useState<string>('')
+    const [customAmount, setCustomAmount] = useState<string>('') // For overriding
+    const [selectedCoachId, setSelectedCoachId] = useState<string>('tbd')
+    const [selectedCloserId, setSelectedCloserId] = useState<string>('tbd')
+    const [selectedClientId, setSelectedClientId] = useState<string>('new')
+    const [selectedLeadId, setSelectedLeadId] = useState<string>('') // If linked to a lead
+    const [selectedClientTypeId, setSelectedClientTypeId] = useState<string>('')
+    const [startDate, setStartDate] = useState<Date | undefined>(undefined)
+    const [programTerm, setProgramTerm] = useState<'6' | '12'>('6')
+    const [commissionSplits, setCommissionSplits] = useState<CommissionSplit[]>([])
+    const [commissionSplitEnabled, setCommissionSplitEnabled] = useState(false)
+
+    // Split Payment State for Splits
     const [isSplitDialogOpen, setIsSplitDialogOpen] = useState(false)
-    const [tempAppenderUserId, setTempAppenderUserId] = useState<string>('')
-    const [tempAppenderRole, setTempAppenderRole] = useState<'Closer' | 'Referrer'>('Closer')
-    const [tempAppenderPercent, setTempAppenderPercent] = useState<number>(50)
     const [isClientOpen, setIsClientOpen] = useState(false)
 
     // USE sortedPrices HERE
@@ -200,7 +213,7 @@ export function PaymentLinkGenerators({ prices, isTestMode, coaches, closers, cl
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         {/* 1. Lead/Client Selector (Leads on top) */}
                         <div className="space-y-2">
-                            <Label className="text-primary font-medium">Lead / Client (Required)</Label>
+                            <Label>Lead / Client</Label>
                             <Popover open={isClientOpen} onOpenChange={setIsClientOpen}>
                                 <PopoverTrigger asChild>
                                     <Button
@@ -209,8 +222,7 @@ export function PaymentLinkGenerators({ prices, isTestMode, coaches, closers, cl
                                         aria-expanded={isClientOpen}
                                         className={cn(
                                             "w-full justify-between",
-                                            !selectedClientId && !selectedLeadId && "text-muted-foreground border-primary/20",
-                                            (selectedClientId || selectedLeadId) && "border-primary/50 bg-primary/5"
+                                            !selectedClientId && !selectedLeadId && "text-muted-foreground"
                                         )}
                                     >
                                         {getSelectedPersonName() || "Select Lead or Client..."}
@@ -257,6 +269,23 @@ export function PaymentLinkGenerators({ prices, isTestMode, coaches, closers, cl
                                                             setSelectedClientId(client.id)
                                                             setSelectedLeadId('')
                                                             setIsClientOpen(false)
+                                                            // Auto-template coach
+                                                            if (client.assigned_coach_id) {
+                                                                setSelectedCoachId(client.assigned_coach_id)
+                                                                toast.success("Coach auto-selected from client record")
+                                                            }
+                                                            // Auto-template start date
+                                                            if (client.start_date) {
+                                                                // Append T12:00:00 to avoid timezone issues with YYYY-MM-DD strings being treated as UTC midnight
+                                                                // or just use new Date(client.start_date) if standard
+                                                                // Assuming YYYY-MM-DD
+                                                                const date = new Date(client.start_date)
+                                                                // Check if valid
+                                                                if (!isNaN(date.getTime())) {
+                                                                    setStartDate(date)
+                                                                    toast.success("Start date auto-selected from client record")
+                                                                }
+                                                            }
                                                         }}
                                                     >
                                                         <Check
@@ -322,30 +351,54 @@ export function PaymentLinkGenerators({ prices, isTestMode, coaches, closers, cl
 
                         {/* 3. Assigned Coach */}
                         <div className="space-y-2">
-                            <Label className="text-primary font-medium">Assigned Coach (Required)</Label>
+                            <Label>Assigned Coach</Label>
                             <Select
                                 value={selectedCoachId}
                                 onValueChange={setSelectedCoachId}
                             >
-                                <SelectTrigger className={cn(
-                                    "h-10",
-                                    !selectedCoachId && "text-muted-foreground border-primary/20",
-                                    selectedCoachId && "border-primary/50 bg-primary/5"
-                                )}>
+                                <SelectTrigger className="h-10">
                                     <SelectValue placeholder="Select Coach..." />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="tbd">TBD / No Preference</SelectItem>
                                     {coaches.map((coach) => (
                                         <SelectItem key={coach.id} value={coach.id}>
-                                            {coach.name || 'Unnamed Coach'}
+                                            <div className="flex items-center gap-2">
+                                                <Avatar className="h-5 w-5">
+                                                    <AvatarImage src={coach.avatar_url || ''} />
+                                                    <AvatarFallback className="text-[10px]">
+                                                        {coach.name?.[0] || '?'}
+                                                    </AvatarFallback>
+                                                </Avatar>
+                                                {coach.name || 'Unnamed Coach'}
+                                            </div>
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
                         </div>
 
-                        {/* 4. Program Term - Toggle Switch Style */}
+                        {/* 4. Program Type */}
+                        <div className="space-y-2">
+                            <Label>Program (For Automation)</Label>
+                            <Select value={selectedClientTypeId} onValueChange={setSelectedClientTypeId}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select Program Type..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {clientTypes.filter(ct => ct.is_active).map((type) => (
+                                        <SelectItem key={type.id} value={type.id}>
+                                            {type.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <p className="text-[10px] text-muted-foreground">
+                                Selecting a program ensures correct onboarding tasks are assigned.
+                            </p>
+                        </div>
+
+                        {/* 5. Program Term - Toggle Switch Style */}
                         <div className="space-y-2">
                             <Label>Program Term</Label>
                             <div className="flex rounded-lg border border-white/10 overflow-hidden h-10">
@@ -376,125 +429,170 @@ export function PaymentLinkGenerators({ prices, isTestMode, coaches, closers, cl
                             </div>
                         </div>
 
-                        {/* 5. Split Commission / Sales Config */}
+                        {/* 6. Split Commission / Sales Config */}
                         <div className="space-y-2">
-                            <Label>Commission & Attribution</Label>
-                            <Dialog open={isSplitDialogOpen} onOpenChange={setIsSplitDialogOpen}>
-                                <DialogTrigger asChild>
-                                    <Button variant="outline" className="w-full justify-between h-10">
-                                        {commissionSplits.length > 0
-                                            ? `${commissionSplits.length} Split(s) Configured`
-                                            : "Configure Splits (Optional)"}
-                                        <Split className="w-4 h-4 ml-2 opacity-50" />
-                                    </Button>
-                                </DialogTrigger>
-                                <DialogContent>
-                                    <DialogHeader>
-                                        <DialogTitle>Configure Commission Splits</DialogTitle>
-                                        <DialogDescription>
-                                            Add up to 2 additional beneficiaries for this sale. The assigned coach is automatically tracked; use this for Sales Closers or Referrers.
-                                        </DialogDescription>
-                                    </DialogHeader>
+                            <div className="flex items-center justify-between">
+                                <Label>Commission Split</Label>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs text-muted-foreground">Enable</span>
+                                    <Switch
+                                        checked={commissionSplitEnabled}
+                                        onCheckedChange={(checked) => {
+                                            setCommissionSplitEnabled(checked)
+                                            if (!checked) {
+                                                setCommissionSplits([]) // Clear splits when disabled
+                                            }
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                            {commissionSplitEnabled ? (
+                                <Dialog open={isSplitDialogOpen} onOpenChange={setIsSplitDialogOpen}>
+                                    <DialogTrigger asChild>
+                                        <Button variant="outline" className="w-full justify-between h-10">
+                                            {commissionSplits.length > 0
+                                                ? `${commissionSplits.length} Split(s) Configured`
+                                                : "Configure Splits"}
+                                            <Split className="w-4 h-4 ml-2 opacity-50" />
+                                        </Button>
+                                    </DialogTrigger>
+                                    <DialogContent className="max-w-lg">
+                                        <DialogHeader>
+                                            <DialogTitle>Configure Commission Splits</DialogTitle>
+                                            <DialogDescription>
+                                                Add a Closer and/or Referrer with their commission percentage.
+                                            </DialogDescription>
+                                        </DialogHeader>
 
-                                    <div className="space-y-4 py-4">
-                                        {/* List of current splits */}
-                                        <div className="space-y-2">
-                                            {commissionSplits.map((split, idx) => (
-                                                <div key={idx} className="flex items-center gap-2 p-2 bg-muted rounded-md text-sm">
-                                                    <span className="font-medium flex-1">
-                                                        {closers.find(c => c.id === split.userId)?.name || 'Unknown User'}
-                                                    </span>
-                                                    <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded">
-                                                        {split.role}
-                                                    </span>
-                                                    <span className="font-mono text-muted-foreground w-12 text-right">
-                                                        {split.percentage}%
-                                                    </span>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                                                        onClick={() => {
-                                                            setCommissionSplits(prev => prev.filter((_, i) => i !== idx))
-                                                        }}
-                                                    >
-                                                        <Trash2 className="w-3 h-3" />
-                                                    </Button>
+                                        <div className="space-y-6 py-4">
+                                            {/* Closer Section */}
+                                            <div className="space-y-3">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="h-2 w-2 rounded-full bg-blue-500" />
+                                                        <Label className="font-semibold">Sales Closer</Label>
+                                                    </div>
+                                                    <span className="text-xs text-muted-foreground">10% of gross revenue</span>
                                                 </div>
-                                            ))}
-                                            {commissionSplits.length === 0 && (
-                                                <p className="text-sm text-muted-foreground italic text-center py-2">No splits added yet.</p>
+                                                <Select
+                                                    value={commissionSplits.find(s => s.role === 'Closer')?.userId || 'none'}
+                                                    onValueChange={(userId) => {
+                                                        if (userId === 'none') {
+                                                            setCommissionSplits(prev => prev.filter(s => s.role !== 'Closer'))
+                                                        } else {
+                                                            const existing = commissionSplits.find(s => s.role === 'Closer')
+                                                            if (existing) {
+                                                                setCommissionSplits(prev => prev.map(s =>
+                                                                    s.role === 'Closer' ? { ...s, userId } : s
+                                                                ))
+                                                            } else {
+                                                                setCommissionSplits(prev => [...prev, { userId, role: 'Closer', percentage: 10 }])
+                                                            }
+                                                        }
+                                                    }}
+                                                >
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Select Closer (optional)..." />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="none">None</SelectItem>
+                                                        {closers.map(user => (
+                                                            <SelectItem
+                                                                key={user.id}
+                                                                value={user.id}
+                                                                disabled={commissionSplits.some(s => s.role === 'Referrer' && s.userId === user.id)}
+                                                            >
+                                                                {user.name}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <p className="text-xs text-muted-foreground">
+                                                    Receives 10% of each payment for the program duration (e.g., 6 months of recurring charges).
+                                                </p>
+                                            </div>
+
+                                            <div className="border-t border-border/50" />
+
+                                            {/* Referrer Section */}
+                                            <div className="space-y-3">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="h-2 w-2 rounded-full bg-green-500" />
+                                                        <Label className="font-semibold">Referrer</Label>
+                                                    </div>
+                                                    <span className="text-xs text-muted-foreground">$100 flat reward</span>
+                                                </div>
+                                                <Select
+                                                    value={commissionSplits.find(s => s.role === 'Referrer')?.userId || 'none'}
+                                                    onValueChange={(userId) => {
+                                                        if (userId === 'none') {
+                                                            setCommissionSplits(prev => prev.filter(s => s.role !== 'Referrer'))
+                                                        } else {
+                                                            const existing = commissionSplits.find(s => s.role === 'Referrer')
+                                                            if (existing) {
+                                                                setCommissionSplits(prev => prev.map(s =>
+                                                                    s.role === 'Referrer' ? { ...s, userId } : s
+                                                                ))
+                                                            } else {
+                                                                // Use percentage: 0 to indicate flat rate, store actual amount elsewhere or use special handling
+                                                                setCommissionSplits(prev => [...prev, { userId, role: 'Referrer', percentage: 0 }])
+                                                            }
+                                                        }
+                                                    }}
+                                                >
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Select Referrer (optional)..." />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="none">None</SelectItem>
+                                                        {closers.map(user => (
+                                                            <SelectItem
+                                                                key={user.id}
+                                                                value={user.id}
+                                                                disabled={commissionSplits.some(s => s.role === 'Closer' && s.userId === user.id)}
+                                                            >
+                                                                {user.name}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <p className="text-xs text-muted-foreground">
+                                                    Receives a one-time $100 bonus on their next payroll when the sale closes.
+                                                </p>
+                                            </div>
+
+                                            {/* Summary */}
+                                            {commissionSplits.length > 0 && (
+                                                <div className="bg-muted/50 rounded-lg p-4 space-y-3">
+                                                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">Commission Summary</Label>
+                                                    {commissionSplits.map((split, idx) => (
+                                                        <div key={idx} className="flex items-center justify-between text-sm">
+                                                            <span className="flex items-center gap-2">
+                                                                <div className={cn(
+                                                                    "h-2 w-2 rounded-full",
+                                                                    split.role === 'Closer' ? 'bg-blue-500' : 'bg-green-500'
+                                                                )} />
+                                                                <span className="font-medium">{closers.find(c => c.id === split.userId)?.name || 'Unknown'}</span>
+                                                                <span className="text-xs text-muted-foreground">({split.role})</span>
+                                                            </span>
+                                                            <span className="font-mono font-medium">
+                                                                {split.role === 'Closer' ? '10% of gross' : '$100 flat'}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             )}
                                         </div>
 
-                                        {/* Adder Form (Disable if >= 2) */}
-                                        {commissionSplits.length < 2 && (
-                                            <div className="grid gap-3 pt-4 border-t border-border/50">
-                                                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Add New Split</Label>
-                                                <div className="grid grid-cols-[1fr_100px] gap-2">
-                                                    <Select onValueChange={setTempAppenderUserId} value={tempAppenderUserId}>
-                                                        <SelectTrigger>
-                                                            <SelectValue placeholder="Select User..." />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {closers.map(user => (
-                                                                <SelectItem
-                                                                    key={user.id}
-                                                                    value={user.id}
-                                                                    disabled={commissionSplits.some(s => s.userId === user.id)}
-                                                                >
-                                                                    {user.name}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                    <Select onValueChange={(val: any) => setTempAppenderRole(val)} value={tempAppenderRole}>
-                                                        <SelectTrigger>
-                                                            <SelectValue />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="Closer">Closer</SelectItem>
-                                                            <SelectItem value="Referrer">Referrer</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                                <div className="flex items-center gap-4">
-                                                    <Label className="w-24 shrink-0">Split %</Label>
-                                                    <Slider
-                                                        defaultValue={[50]}
-                                                        max={100}
-                                                        step={5}
-                                                        value={[tempAppenderPercent]}
-                                                        onValueChange={([val]) => setTempAppenderPercent(val)}
-                                                        className="flex-1"
-                                                    />
-                                                    <span className="w-12 text-right font-mono text-sm">{tempAppenderPercent}%</span>
-                                                </div>
-                                                <Button
-                                                    size="sm"
-                                                    onClick={() => {
-                                                        if (!tempAppenderUserId) return
-                                                        setCommissionSplits(prev => [...prev, {
-                                                            userId: tempAppenderUserId,
-                                                            role: tempAppenderRole,
-                                                            percentage: tempAppenderPercent
-                                                        }])
-                                                        setTempAppenderUserId('') // Reset
-                                                        setTempAppenderPercent(50)
-                                                    }}
-                                                    disabled={!tempAppenderUserId}
-                                                >
-                                                    Add Split
-                                                </Button>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <DialogFooter>
-                                        <Button onClick={() => setIsSplitDialogOpen(false)}>Done</Button>
-                                    </DialogFooter>
-                                </DialogContent>
-                            </Dialog>
+                                        <DialogFooter>
+                                            <Button onClick={() => setIsSplitDialogOpen(false)}>Done</Button>
+                                        </DialogFooter>
+                                    </DialogContent>
+                                </Dialog>
+                            ) : (
+                                <p className="text-xs text-muted-foreground">Enable the toggle to configure commission splits for this payment.</p>
+                            )}
                         </div>
                     </div>
                 </CardContent>
@@ -589,42 +687,49 @@ function GeneratorCard({
             if (!selectedPrice) return
 
             // Call Internal Action to create DB Ref
-            const result = await createStandardPaymentRef(
+            const { id: refId, error: refError } = await createStandardPaymentRef(
                 selectedPrice.id,
                 selectedPrice.type === 'recurring' ? 'recurring' : 'one_time',
                 selectedPrice.product_name,
-                selectedPrice.unit_amount || 0,
+                selectedPrice.unit_amount || 0, // Assuming amountInCents is selectedPrice.unit_amount
                 {
-                    coachId: config.coachId === 'tbd' ? undefined : config.coachId,
-                    salesCloserId: config.salesCloserId,
-                    startDate: config.startDate ? config.startDate.toISOString() : undefined,
-                    clientId: config.clientId,
-                    leadId: config.leadId,
-                    programTerm: config.programTerm
+                    coachId: config.coachId === 'tbd' ? undefined : config.coachId, // Kept config.coachId as per original, assuming new state vars are not available here
+                    salesCloserId: config.salesCloserId, // Kept config.salesCloserId as per original
+                    clientId: config.clientId, // Kept config.clientId as per original
+                    leadId: config.leadId, // Kept config.leadId as per original
+                    clientTypeId: config.clientTypeId, // Added clientTypeId from config
+                    startDate: config.startDate ? config.startDate.toISOString() : undefined, // Kept config.startDate as per original
+                    programTerm: config.programTerm, // Kept config.programTerm as per original
+                    commissionSplits: config.commissionSplits // Added commissionSplits from config
                 }
             )
-
-            if (result.error) {
-                toast.error(result.error)
+            if (refError) {
+                toast.error(refError)
+                setIsLoading(false)
                 return
             }
 
-            if (result.id) {
-                // Generate Local Link
-                const appUrl = window.location.origin
-                const localLink = `${appUrl}/pay/${result.id}`
+            // Create Link
+            // Create Link pointing to our internal custom payment page
+            const origin = window.location.origin
+            const paymentUrl = `${origin}/pay/${refId}`
 
-                // Open in new tab
-                window.open(localLink, '_blank')
-                setLastLink(localLink)
-                toast.success("Payment link generated and opened!")
-            }
+            setLastLink(paymentUrl)
+            toast.success('Payment link generated!')
+            window.open(paymentUrl, '_blank') // Open in new tab
         } catch (error) {
             console.error(error)
             toast.error("An unexpected error occurred.")
         } finally {
             setIsLoading(false)
         }
+    }
+
+    const resetStandardForm = () => {
+        setSelectedProductId('')
+        setSelectedPriceId('')
+        setLastLink(null)
+        setIsLoading(false)
     }
 
     const copyToClipboard = () => {

@@ -12,7 +12,7 @@ export async function getClientNotes(clientId: string) {
         .from('client_notes')
         .select(`
       *,
-      author:users(name, email, id)
+      author:users(name, email, id, avatar_url)
     `)
         .eq('client_id', clientId)
         .order('is_pinned', { ascending: false })

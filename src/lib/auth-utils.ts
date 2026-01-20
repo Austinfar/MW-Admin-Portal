@@ -2,25 +2,11 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 
-export interface UserPermissions {
-    can_view_dashboard?: boolean;
-    can_view_clients?: boolean;
-    can_view_leads?: boolean;
-    can_view_sales?: boolean;
-    can_view_sales_floor?: boolean;
-    can_view_onboarding?: boolean;
-    can_view_business?: boolean;
-    can_view_payment_links?: boolean;
-    can_manage_team?: boolean;
-    [key: string]: boolean | undefined;
-}
+// Re-export shared types for backwards compatibility
+export type { ViewScope, UserPermissions, UserAccess } from './permissions';
+export { hasNoPermissions } from './permissions';
 
-export interface UserAccess {
-    role: string;
-    permissions: UserPermissions;
-    first_name?: string;
-    last_name?: string;
-}
+import type { UserAccess, UserPermissions } from './permissions';
 
 export async function getCurrentUserAccess(): Promise<UserAccess | null> {
     const supabase = await createClient();
@@ -32,35 +18,67 @@ export async function getCurrentUserAccess(): Promise<UserAccess | null> {
 
     const { data, error } = await admin
         .from('users')
-        .select('role, permissions, first_name, last_name')
+        .select('role, permissions, first_name, last_name, job_title')
         .eq('id', user.id)
         .single();
 
     if (error || !data) return null;
 
-    const role = data.role || 'user';
+    const role = (data.role || 'user') as UserAccess['role'];
     const first_name = data.first_name || '';
     const last_name = data.last_name || '';
+    const job_title = data.job_title || '';
     let permissions = (data.permissions || {}) as UserPermissions;
 
-    // ONLY super_admin bypasses all permissions
-    // Admins must still respect their individual permission toggles
+    // Normalize legacy boolean permissions to ViewScope
+    Object.keys(permissions).forEach(key => {
+        const k = key as keyof UserPermissions;
+        // @ts-ignore - Runtime check for boolean legacy data
+        if (permissions[k] === true) permissions[k] = 'all';
+        // @ts-ignore - Runtime check for boolean legacy data
+        if (permissions[k] === false) permissions[k] = 'none';
+    });
+
+    // SUPER ADMIN: Always ALL
     if (role === 'super_admin') {
         permissions = {
-            can_view_dashboard: true,
-            can_view_clients: true,
-            can_view_leads: true,
-            can_view_sales: true,
-            can_view_sales_floor: true,
-            can_view_onboarding: true,
-            can_view_business: true,
-            can_view_payment_links: true,
-            can_manage_team: true,
+            can_view_dashboard: 'all',
+            can_view_clients: 'all',
+            can_view_leads: 'all',
+            can_view_sales: 'all',
+            can_view_sales_floor: 'all',
+            can_view_onboarding: 'all',
+            can_view_business: 'all',
+            can_view_commissions: 'all',
+            can_manage_payment_links: 'all',
+            can_view_team_settings: 'all',
             ...permissions
         };
     }
 
-    return { role, permissions, first_name, last_name };
+    // ADMIN: Default to ALL if not specified, but configurable
+    else if (role === 'admin') {
+        permissions = {
+            can_view_dashboard: permissions.can_view_dashboard ?? 'all',
+            can_view_clients: permissions.can_view_clients ?? 'all',
+            can_view_leads: permissions.can_view_leads ?? 'all',
+            can_view_sales: permissions.can_view_sales ?? 'all',
+            can_view_sales_floor: permissions.can_view_sales_floor ?? 'all',
+            can_view_onboarding: permissions.can_view_onboarding ?? 'all',
+            can_view_business: permissions.can_view_business ?? 'all',
+            can_view_commissions: permissions.can_view_commissions ?? 'all',
+            can_manage_payment_links: permissions.can_manage_payment_links ?? 'all',
+            can_view_team_settings: permissions.can_view_team_settings ?? 'all',
+        };
+    }
+    // USERS (Coaches/Sales): Default to explicit permissions or restrict
+    else {
+        // Safe defaults for standard users
+        // If a permission is missing, it defaults to 'none' logically below, 
+        // but here we just pass what's in the DB.
+    }
+
+    return { role, permissions, first_name, last_name, job_title };
 }
 
 // Keep deprecated function for backward compat if needed, but we should replace usages
@@ -68,3 +86,4 @@ export async function getCurrentUserRole() {
     const access = await getCurrentUserAccess();
     return access?.role;
 }
+

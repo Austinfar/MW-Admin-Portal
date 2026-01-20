@@ -5,69 +5,13 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { LayoutDashboard, Users, CheckSquare, DollarSign, LogOut, ChevronLeft, ChevronRight, CreditCard, PhoneCall, Calendar } from 'lucide-react'
+import { LayoutDashboard, Users, CheckSquare, DollarSign, LogOut, ChevronLeft, ChevronRight, CreditCard, BrainCircuit, Calendar } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useSidebar } from './SidebarContext'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { UserAccess } from '@/lib/auth-utils'
 
-const routes = [
-    {
-        label: 'Dashboard',
-        icon: LayoutDashboard,
-        href: '/dashboard',
-        color: 'text-sky-500',
-    },
-    {
-        label: 'Sales Floor',
-        icon: Calendar,
-        href: '/sales-floor',
-        color: 'text-yellow-500',
-    },
-    {
-        label: 'Leads',
-        icon: Users, // Using Users for now, or maybe UserPlus?
-        href: '/leads',
-        color: 'text-cyan-500',
-    },
-    {
-        label: 'Clients',
-        icon: Users,
-        href: '/clients',
-        color: 'text-violet-500',
-    },
-    {
-        label: 'Onboarding',
-        icon: CheckSquare,
-        href: '/onboarding',
-        color: 'text-pink-700',
-    },
-    {
-        label: 'Business',
-        icon: DollarSign,
-        href: '/business',
-        color: 'text-emerald-500',
-    },
-    {
-        label: 'Commissions',
-        icon: DollarSign,
-        href: '/commissions',
-        color: 'text-orange-700',
-    },
-
-    {
-        label: 'Payment Links',
-        icon: CreditCard,
-        href: '/payment-links',
-        color: 'text-blue-500',
-    },
-    {
-        label: 'Sales Call Analyzer',
-        icon: PhoneCall,
-        href: '/sales',
-        color: 'text-rose-500',
-    },
-]
+import { APP_ROUTES, checkRouteAccess } from '@/lib/routes'
 
 export function Sidebar({ className, isMobile = false, userAccess }: { className?: string; isMobile?: boolean; userAccess?: UserAccess }) {
     const pathname = usePathname()
@@ -78,34 +22,8 @@ export function Sidebar({ className, isMobile = false, userAccess }: { className
     const collapsed = isMobile ? false : isCollapsed
 
     // Filter routes based on permissions
-    const filteredRoutes = routes.filter(route => {
-        // Admin always sees everything
-        if (role === 'admin') return true
-
-        switch (route.href) {
-            case '/dashboard':
-                return !!permissions.can_view_dashboard
-            case '/clients':
-                return !!permissions.can_view_clients
-            case '/onboarding':
-                return !!permissions.can_view_onboarding
-            case '/sales':
-                return !!permissions.can_view_sales
-            case '/sales-floor':
-                return !!permissions.can_view_sales_floor
-            case '/payment-links':
-                return !!permissions.can_view_payment_links
-            case '/leads':
-                return !!permissions.can_view_leads
-            case '/settings':
-                return true // Always allow settings root
-            case '/commissions':
-                return !!permissions.can_view_business
-            case '/business':
-                return !!permissions.can_view_business
-            default:
-                return true
-        }
+    const filteredRoutes = APP_ROUTES.filter(route => {
+        return checkRouteAccess(route, role, permissions)
     })
 
     return (

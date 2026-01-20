@@ -5,8 +5,11 @@ import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AddLeadDialog } from '@/components/leads/AddLeadDialog'
 import { Skeleton } from '@/components/ui/skeleton'
+import { protectRoute } from '@/lib/protect-route'
 
 export default async function LeadsPage() {
+    await protectRoute('can_view_leads')
+
     const leads = await getLeads()
 
     return (

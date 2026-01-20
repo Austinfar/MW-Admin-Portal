@@ -7,9 +7,14 @@ import { getBusinessMetrics } from "@/lib/actions/analytics"
 import { formatCurrency } from "@/lib/utils"
 // Add imports
 import { getCurrentUserAccess } from "@/lib/auth-utils"
+import { protectRoute } from "@/lib/protect-route"
 import { WelcomeGreeting } from "@/components/dashboard/WelcomeGreeting"
 
+export const dynamic = 'force-dynamic' // Ensure real-time data
+
 export default async function DashboardPage() {
+    await protectRoute('can_view_dashboard')
+
     const metricsPromise = getBusinessMetrics()
     const userAccessPromise = getCurrentUserAccess()
 

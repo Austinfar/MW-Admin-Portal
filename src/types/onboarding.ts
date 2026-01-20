@@ -13,6 +13,8 @@ export interface OnboardingTaskTemplate {
     due_offset_days: number
     is_required: boolean
     display_order: number
+    assignment_type: 'unassigned' | 'specific_user' | 'assigned_coach'
+    default_assigned_user_id: string | null
     created_at: string
 }
 

@@ -46,11 +46,15 @@ export function LeadsTable({ initialLeads }: LeadsTableProps) {
     const [filter, setFilter] = useState('')
 
     // Simple client-side filtering
-    const filteredLeads = initialLeads.filter(lead =>
-        lead.first_name.toLowerCase().includes(filter.toLowerCase()) ||
-        lead.last_name?.toLowerCase().includes(filter.toLowerCase()) ||
-        lead.email?.toLowerCase().includes(filter.toLowerCase())
-    )
+    const filteredLeads = initialLeads.filter(lead => {
+        if (lead.status === 'converted') return false // Hide converted leads
+
+        return (
+            lead.first_name.toLowerCase().includes(filter.toLowerCase()) ||
+            lead.last_name?.toLowerCase().includes(filter.toLowerCase()) ||
+            lead.email?.toLowerCase().includes(filter.toLowerCase())
+        )
+    })
 
     const handleConvert = async (id: string) => {
         toast.promise(convertLeadToClient(id), {

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { getInvitations, revokeInvitation, Invitation } from '@/lib/actions/invitations';
-import { getAllUsers, User, getCurrentUserProfile } from '@/lib/actions/profile';
+import { getAllUsers, User, getCurrentUserProfile, reactivateUser } from '@/lib/actions/profile';
 import { CreateUserDialog } from '@/components/team/CreateUserDialog';
 import { UserEditModal } from '@/components/team/UserEditModal';
 import { Button } from '@/components/ui/button';
@@ -11,8 +11,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
-import { Trash2, Shield, ChevronDown, ChevronUp } from 'lucide-react';
+import { Trash2, Shield, ChevronDown, ChevronUp, UserCheck, Users } from 'lucide-react';
 import { PermissionToggles } from './PermissionToggles';
+import { UserAccess } from '@/lib/auth-utils';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 export function TeamSettingsClient() {
     const [invitations, setInvitations] = useState<Invitation[]>([]);
@@ -20,6 +22,11 @@ export function TeamSettingsClient() {
     const [isLoading, setIsLoading] = useState(true);
     const [expandedUser, setExpandedUser] = useState<string | null>(null);
     const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+    const [showInactive, setShowInactive] = useState(false);
+    const [reactivatingId, setReactivatingId] = useState<string | null>(null);
+
+    const activeUsers = users.filter(u => u.is_active);
+    const inactiveUsers = users.filter(u => !u.is_active);
 
     const fetchData = async () => {
         setIsLoading(true);
@@ -36,8 +43,6 @@ export function TeamSettingsClient() {
         // Fetch Users (Requires Admin)
         const userResult = await getAllUsers();
         if ('error' in userResult && userResult.error) {
-            // Silently fail if not admin or just log? 
-            // If unauthorized, we just might not show the user list or show empty.
             console.error(userResult.error);
         } else if ('users' in userResult) {
             setUsers(userResult.users || []);
@@ -60,6 +65,23 @@ export function TeamSettingsClient() {
         }
     };
 
+    const handleReactivate = async (userId: string) => {
+        setReactivatingId(userId);
+        try {
+            const result = await reactivateUser(userId);
+            if (result.error) {
+                toast.error(result.error);
+            } else {
+                toast.success('User reactivated successfully');
+                fetchData();
+            }
+        } catch (error) {
+            toast.error('Failed to reactivate user');
+        } finally {
+            setReactivatingId(null);
+        }
+    };
+
     const getStatusBadge = (status: string, expiresAt: string) => {
         if (status === 'accepted') return <Badge className="bg-green-600">Accepted</Badge>;
         if (status === 'pending') {
@@ -76,24 +98,31 @@ export function TeamSettingsClient() {
                     <h3 className="text-lg font-medium">Team Members</h3>
                     <p className="text-sm text-muted-foreground">Manage your team, roles, and permissions.</p>
                 </div>
-                {isSuperAdmin && <CreateUserDialog onSuccess={fetchData} />}
+                <CreateUserDialog onSuccess={fetchData} isSuperAdmin={isSuperAdmin} />
             </div>
 
             {/* Active Team List */}
             <Card className="bg-[#121212] border-white/10">
                 <CardHeader>
-                    <CardTitle>Active Team</CardTitle>
+                    <CardTitle className="flex items-center gap-2">
+                        <Users className="h-5 w-5" />
+                        Active Team
+                        <Badge variant="secondary" className="ml-2">{activeUsers.length}</Badge>
+                    </CardTitle>
                     <CardDescription>Current members with access to the dashboard.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-4">
-                        {users.map((user) => (
+                        {activeUsers.map((user) => (
                             <div key={user.id} className="border border-white/10 rounded-lg p-4">
                                 <div className="flex items-center justify-between mb-2">
                                     <div className="flex items-center space-x-3">
-                                        <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
-                                            {user.name?.[0] || user.email[0].toUpperCase()}
-                                        </div>
+                                        <Avatar className="h-10 w-10">
+                                            <AvatarImage src={user.avatar_url || ''} alt={user.name || 'User'} />
+                                            <AvatarFallback className="bg-primary/20 text-primary font-bold">
+                                                {user.name?.[0] || user.email[0].toUpperCase()}
+                                            </AvatarFallback>
+                                        </Avatar>
                                         <div>
                                             <p className="font-medium">{user.name || 'Unnamed User'}</p>
                                             <p className="text-sm text-muted-foreground">{user.email}</p>
@@ -125,28 +154,90 @@ export function TeamSettingsClient() {
 
                                 {expandedUser === user.id && (
                                     <div className="mt-4 pt-4 border-t border-white/10 animate-in fade-in slide-in-from-top-2">
-                                        {user.role === 'admin' ? (
-                                            <div className="flex items-center text-emerald-500 bg-emerald-500/10 p-3 rounded-md">
+                                        {user.role === 'super_admin' ? (
+                                            <div className="flex items-center text-purple-400 bg-purple-500/10 p-3 rounded-md border border-purple-500/20">
                                                 <Shield className="h-5 w-5 mr-2" />
-                                                <span className="text-sm font-medium">Admins have full access to all features.</span>
+                                                <span className="text-sm font-medium">Super Admins have full access to all features.</span>
                                             </div>
                                         ) : (
                                             <PermissionToggles
                                                 userId={user.id}
+                                                role={user.role as UserAccess['role']}
                                                 initialPermissions={user.permissions || {}}
-                                                onUpdate={() => { }} // Optional: refresh list if needed, but local state handles UI
+                                                onUpdate={() => { }}
                                             />
                                         )}
                                     </div>
                                 )}
                             </div>
                         ))}
-                        {users.length === 0 && !isLoading && (
+                        {activeUsers.length === 0 && !isLoading && (
                             <div className="text-center py-8 text-muted-foreground">No active users found.</div>
                         )}
                     </div>
                 </CardContent>
             </Card>
+
+            {/* Inactive Users List */}
+            {inactiveUsers.length > 0 && (
+                <Card className="bg-[#121212] border-white/10 opacity-70">
+                    <CardHeader
+                        className="cursor-pointer hover:bg-white/5 transition-colors"
+                        onClick={() => setShowInactive(!showInactive)}
+                    >
+                        <CardTitle className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                                <Users className="h-5 w-5" />
+                                Inactive Users
+                                <Badge variant="secondary" className="ml-2 bg-red-500/20 text-red-400">{inactiveUsers.length}</Badge>
+                            </div>
+                            {showInactive ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </CardTitle>
+                        <CardDescription>Deactivated users - no longer have system access but history preserved.</CardDescription>
+                    </CardHeader>
+                    {showInactive && (
+                        <CardContent>
+                            <div className="space-y-3">
+                                {inactiveUsers.map((user) => (
+                                    <div key={user.id} className="border border-white/5 rounded-lg p-3 flex items-center justify-between bg-white/5">
+                                        <div className="flex items-center space-x-3">
+                                            <Avatar className="h-8 w-8">
+                                                <AvatarImage src={user.avatar_url || ''} alt={user.name || 'User'} />
+                                                <AvatarFallback className="bg-gray-600/20 text-gray-400 text-sm font-bold">
+                                                    {user.name?.[0] || user.email[0].toUpperCase()}
+                                                </AvatarFallback>
+                                            </Avatar>
+                                            <div>
+                                                <p className="font-medium text-muted-foreground">{user.name || 'Unnamed User'}</p>
+                                                <p className="text-xs text-muted-foreground/60">{user.email}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            {user.job_title && (
+                                                <Badge variant="secondary" className="capitalize bg-gray-500/20 text-gray-400 text-xs">
+                                                    {user.job_title.replace('_', ' ')}
+                                                </Badge>
+                                            )}
+                                            {isSuperAdmin && (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => handleReactivate(user.id)}
+                                                    disabled={reactivatingId === user.id}
+                                                    className="text-emerald-500 border-emerald-500/30 hover:bg-emerald-500/10"
+                                                >
+                                                    <UserCheck className="h-4 w-4 mr-1" />
+                                                    {reactivatingId === user.id ? 'Reactivating...' : 'Reactivate'}
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    )}
+                </Card>
+            )}
 
             {/* Pending Invitations */}
             <Card className="bg-[#121212] border-white/10 opacity-80 hover:opacity-100 transition-opacity">
@@ -189,3 +280,4 @@ export function TeamSettingsClient() {
         </div >
     );
 }
+
