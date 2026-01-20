@@ -191,8 +191,9 @@ export function CreateSplitPaymentDialog({
                                         <SelectValue placeholder="Select a product..." />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {prices.map(p => (
-                                            <SelectItem key={p.id} value={p.product_name}>
+                                        {/* Deduplicate by product_name to show unique products only */}
+                                        {[...new Map(prices.map(p => [p.product_name, p])).values()].map(p => (
+                                            <SelectItem key={p.product_id} value={p.product_name}>
                                                 {p.product_name}
                                             </SelectItem>
                                         ))}
