@@ -11,7 +11,7 @@ export default async function DashboardLayout({
 }: {
     children: React.ReactNode
 }) {
-    const userAccess = await getCurrentUserAccess() || { role: 'coach', permissions: {} }
+    const userAccess = await getCurrentUserAccess() || { role: 'user' as const, permissions: {} }
     const impersonating = await isImpersonating()
 
     return (
