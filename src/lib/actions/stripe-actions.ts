@@ -294,7 +294,8 @@ export async function createCheckoutSessionForSchedule(scheduleId: string) {
             }
             // For split payments, we MUST create a real customer so we can charge them later
             // customer_creation: 'always' ensures Stripe creates a cus_xxx customer, not a guest gcus_xxx
-            const isSplitPayment = !isSubscription && !schedule.stripe_price_id
+            // We apply this to any 'split' payment or if explicitly marked
+            const isSplitPayment = schedule.payment_type === 'split' || (!isSubscription && !schedule.stripe_price_id)
             if (isSplitPayment) {
                 sessionConfig.customer_creation = 'always'
             }
