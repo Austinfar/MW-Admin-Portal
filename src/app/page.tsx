@@ -31,6 +31,6 @@ export default async function IndexPage() {
         return redirect(allowedRoute.href)
     }
 
-    // Fallback if no routes match (should ideally go to a "No Access" page, but for now /dashboard is safe as it will be protected by middleware/layout anyway)
-    return redirect('/dashboard')
+    // Fallback to roadmap (always accessible) if no routes match
+    return redirect('/roadmap')
 }
