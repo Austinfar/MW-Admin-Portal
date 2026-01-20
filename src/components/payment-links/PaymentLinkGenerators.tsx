@@ -709,10 +709,11 @@ function GeneratorCard({
                 return
             }
 
-            // Create Link
             // Create Link pointing to our internal custom payment page
-            const origin = window.location.origin
-            const paymentUrl = `${origin}/pay/${refId}`
+            // Use NEXT_PUBLIC_PAYMENT_URL for pay subdomain (pay.mwfitnesscoaching.com)
+            // Falls back to window.location.origin for local development
+            const payBaseUrl = process.env.NEXT_PUBLIC_PAYMENT_URL || window.location.origin
+            const paymentUrl = `${payBaseUrl}/${refId}`
 
             setLastLink(paymentUrl)
             toast.success('Payment link generated!')
