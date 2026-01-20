@@ -8,7 +8,23 @@ import { Loader2 } from 'lucide-react'
 function AuthCallbackContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const next = searchParams.get('next') ?? '/dashboard'
+  // Note: 'next' param can still be used for explicit redirects (e.g., deep links)
+  const explicitNext = searchParams.get('next')
+
+  /**
+   * Fetches the first permitted route for the current user.
+   * This prevents redirect loops for users with limited permissions.
+   */
+  const getSmartRedirect = async (): Promise<string> => {
+    try {
+      const response = await fetch('/api/auth/smart-redirect')
+      const data = await response.json()
+      return data.redirect || '/roadmap'
+    } catch (error) {
+      console.error('Failed to get smart redirect:', error)
+      return '/roadmap' // Fallback to roadmap (always accessible)
+    }
+  }
 
   useEffect(() => {
     const handleCallback = async () => {
@@ -27,13 +43,20 @@ function AuthCallbackContent() {
         return
       }
 
+      const performRedirect = async () => {
+        // Use explicit 'next' param if provided (for deep links)
+        // Otherwise, use smart redirect based on permissions
+        const destination = explicitNext || await getSmartRedirect()
+        router.push(destination)
+      }
+
       if (session) {
-        router.push(next)
+        await performRedirect()
       } else {
         // If no session yet, wait for onAuthStateChange to pick up the hash
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
           if (event === 'SIGNED_IN' && session) {
-            router.push(next)
+            await performRedirect()
           }
         })
         return () => {
@@ -43,7 +66,7 @@ function AuthCallbackContent() {
     }
 
     handleCallback()
-  }, [router, next, searchParams])
+  }, [router, explicitNext, searchParams])
 
   return (
     <div className="flex bg-background h-screen w-full items-center justify-center">
@@ -69,3 +92,4 @@ export default function AuthCallback() {
     </Suspense>
   )
 }
+
