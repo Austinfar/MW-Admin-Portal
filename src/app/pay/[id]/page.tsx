@@ -145,8 +145,19 @@ export default function PayPage({ params }: { params: Promise<{ id: string }> })
                                         {/* Coach Display - Always Show */}
                                         <div className="flex items-center justify-between group/coach">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center border border-white/5 ring-2 ring-transparent group-hover/coach:ring-neon-green/30 transition-all">
-                                                    <UserCircle className="w-5 h-5 text-zinc-400 group-hover/coach:text-white transition-colors" />
+                                                <div className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center border border-white/5 ring-2 ring-transparent group-hover/coach:ring-neon-green/30 transition-all overflow-hidden">
+                                                    {/* @ts-ignore - joined prop */}
+                                                    {schedule?.coach?.avatar_url ? (
+                                                        <Image
+                                                            src={schedule.coach.avatar_url}
+                                                            alt={schedule.coach.name || 'Coach'}
+                                                            width={36}
+                                                            height={36}
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    ) : (
+                                                        <UserCircle className="w-5 h-5 text-zinc-400 group-hover/coach:text-white transition-colors" />
+                                                    )}
                                                 </div>
                                                 <div className="flex flex-col">
                                                     <span className="text-[10px] text-zinc-500 uppercase tracking-wide">Assigned Coach</span>

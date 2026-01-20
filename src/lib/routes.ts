@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, CheckSquare, DollarSign, CreditCard, BrainCircuit, Calendar } from 'lucide-react'
+import { LayoutDashboard, Users, CheckSquare, DollarSign, CreditCard, BrainCircuit, Calendar, Lightbulb } from 'lucide-react'
 import { UserPermissions } from '@/lib/auth-utils'
 
 export interface AppRoute {
@@ -74,6 +74,13 @@ export const APP_ROUTES: AppRoute[] = [
         href: '/sales',
         color: 'text-rose-500',
         permission: 'can_view_sales'
+    },
+    {
+        label: 'Roadmap',
+        icon: Lightbulb,
+        href: '/roadmap',
+        color: 'text-neon-green',
+        // No permission required - accessible to all authenticated users
     },
 ]
 

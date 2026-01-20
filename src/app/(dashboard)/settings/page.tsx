@@ -9,6 +9,7 @@ import { GHLConnectionSettings } from '@/components/settings/GHLConnectionSettin
 import { ApiConnectionStatus } from '@/components/settings/ApiConnectionStatus'
 import { StripeSyncSettings } from '@/components/settings/StripeSyncSettings'
 import { SettingsLayout } from '@/components/settings/SettingsLayout'
+import { SystemHealthDashboard } from '@/components/settings/SystemHealthDashboard'
 
 export default async function SettingsPage() {
     const clientTypes = await getAllClientTypes()
@@ -19,6 +20,17 @@ export default async function SettingsPage() {
     return (
         <SettingsLayout activeTab="general">
             <div className="space-y-6">
+                {/* System Health Dashboard */}
+                <div>
+                    <h3 className="text-lg font-medium">System Health</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                        Monitor the status of all connected services and APIs.
+                    </p>
+                    <SystemHealthDashboard />
+                </div>
+
+                <Separator />
+
                 <div>
                     <h3 className="text-lg font-medium">Coaching Programs</h3>
                     <p className="text-sm text-muted-foreground">

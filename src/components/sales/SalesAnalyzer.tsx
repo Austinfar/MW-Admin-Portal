@@ -107,18 +107,7 @@ export function SalesAnalyzer() {
 
             toast.success('Analysis started successfully.')
 
-            // Immediate UI update
-            const newLog: SalesCallLog = {
-                id: data.id,
-                created_at: new Date().toISOString(),
-                client_name: 'Analyzing Call...',
-                submitted_by: 'You', // Or get actual user name if available
-                meeting_url: newUrl,
-                report_html: null,
-                status: 'transcribing'
-            }
-
-            setLogs(prev => [newLog, ...prev])
+            // No optimistic update needed - realtime subscription handles INSERT events
             setNewUrl('')
             setIsDialogOpen(false)
         } catch (error) {

@@ -24,6 +24,7 @@ import { useRouter } from 'next/navigation'
 import { useEasterEgg } from './EasterEggProvider'
 import { GlobalSearch } from './GlobalSearch'
 import { UserAccess } from '@/lib/auth-utils'
+import { NotificationBell } from '@/components/roadmap/NotificationBell'
 
 export function Header({ userAccess, isImpersonating }: { userAccess?: UserAccess, isImpersonating?: boolean }) {
     const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -126,13 +127,7 @@ export function Header({ userAccess, isImpersonating }: { userAccess?: UserAcces
                     </kbd>
                 </Button>
 
-                <Button variant="ghost" size="icon" className="relative hover:bg-secondary/50 rounded-full">
-                    <Bell className="h-5 w-5 text-muted-foreground" />
-                    <span className="absolute top-2 right-2 flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
-                    </span>
-                </Button>
+                <NotificationBell className="hover:bg-secondary/50 rounded-full" />
 
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
