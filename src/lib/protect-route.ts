@@ -18,7 +18,7 @@ export async function protectRoute(permission: keyof UserPermissions) {
     // Check if permission is denied
     if (permValue === 'none' || permValue === false) {
         console.warn(`[AccessControl] Denied access to restricted route. Permission: ${permission}, Role: ${role}`)
-        // Redirect to root, which handles smart redirect to allowed page
-        return redirect('/')
+        // Redirect to roadmap (always accessible) to prevent redirect loops
+        return redirect('/roadmap')
     }
 }

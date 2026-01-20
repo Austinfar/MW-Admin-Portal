@@ -63,15 +63,12 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL('/login', request.url))
     }
 
-    // Redirect to dashboard if logged in and visiting login or root
+    // Redirect to root (which handles smart redirect) if logged in and visiting login
     if (request.nextUrl.pathname.startsWith('/login') && user) {
-        return NextResponse.redirect(new URL('/dashboard', request.url))
+        return NextResponse.redirect(new URL('/', request.url))
     }
 
-    // Redirect root to dashboard if logged in
-    if (isRootRoute && user) {
-        return NextResponse.redirect(new URL('/dashboard', request.url))
-    }
+    // Let root page handle smart redirect (don't redirect here)
 
     return response
 }
