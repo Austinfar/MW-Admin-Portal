@@ -233,7 +233,7 @@ export async function getPaymentSchedule(id: string) {
     const supabase = createAdminClient()
     const { data, error } = await supabase
         .from('payment_schedules')
-        .select('*, scheduled_charges(*), coach:users!assigned_coach_id(name)') // Join users table to get coach name
+        .select('*, scheduled_charges(*), coach:users!assigned_coach_id(name, avatar_url)') // Join users table to get coach name and avatar
         .eq('id', id)
         .order('due_date', { foreignTable: 'scheduled_charges', ascending: true })
         .single()
@@ -464,6 +464,8 @@ export async function createStandardPaymentRef(
             amount: amount, // Ensure regular amount column is populated
             total_amount: amount,
             remaining_amount: amount,
+            payment_type: type, // CRITICAL: Save the payment type (one_time or recurring)
+            stripe_price_id: priceId, // CRITICAL: Save the price ID for subscription checkout
             schedule_json: [{
                 amount: amount,
                 dueDate: new Date().toISOString(),

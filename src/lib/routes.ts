@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, CheckSquare, DollarSign, CreditCard, BrainCircuit, Calendar } from 'lucide-react'
+import { LayoutDashboard, Users, CheckSquare, DollarSign, CreditCard, BrainCircuit, Calendar, Lightbulb } from 'lucide-react'
 import { UserPermissions } from '@/lib/auth-utils'
 
 export interface AppRoute {
@@ -75,6 +75,13 @@ export const APP_ROUTES: AppRoute[] = [
         color: 'text-rose-500',
         permission: 'can_view_sales'
     },
+    {
+        label: 'Roadmap',
+        icon: Lightbulb,
+        href: '/roadmap',
+        color: 'text-neon-green',
+        // No permission required - accessible to all authenticated users
+    },
 ]
 
 export const checkRouteAccess = (route: AppRoute, role: string | undefined, permissions: UserPermissions): boolean => {
@@ -90,4 +97,24 @@ export const checkRouteAccess = (route: AppRoute, role: string | undefined, perm
     if (permValue === 'all' || permValue === 'own') return true
 
     return false
+}
+
+/**
+ * Get the first permitted route for a user based on their role and permissions.
+ * Returns the href of the first route they have access to.
+ * Defaults to '/roadmap' since it has no permission requirement.
+ */
+export const getFirstPermittedRoute = (role: string | undefined, permissions: UserPermissions): string => {
+    // Super Admin always goes to dashboard
+    if (role === 'super_admin') return '/dashboard'
+
+    // Find the first route the user has access to
+    for (const route of APP_ROUTES) {
+        if (checkRouteAccess(route, role, permissions)) {
+            return route.href
+        }
+    }
+
+    // Fallback to roadmap (which has no permission requirement) or login if something is wrong
+    return '/roadmap'
 }
