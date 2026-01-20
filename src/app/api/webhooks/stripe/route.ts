@@ -180,6 +180,14 @@ export async function POST(req: Request) {
                         if (lead) {
                             console.log(`Converting Lead ${lead.id} to Client...`)
 
+                            // Update lead with Stripe customer ID (for record keeping)
+                            if (customerId) {
+                                await supabase
+                                    .from('leads')
+                                    .update({ stripe_customer_id: customerId })
+                                    .eq('id', lead.id)
+                            }
+
                             // Insert Client
                             const { data: newClient, error: clientError } = await supabase
                                 .from('clients')
