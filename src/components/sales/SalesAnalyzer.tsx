@@ -169,7 +169,15 @@ export function SalesAnalyzer() {
 
                     if (payload.eventType === 'INSERT') {
                         console.log('Inserting new log:', payload.new)
-                        setLogs(prev => [payload.new as SalesCallLog, ...prev])
+                        setLogs(prev => {
+                            const exists = prev.some(log => log.id === payload.new.id)
+                            if (exists) {
+                                return prev.map(log =>
+                                    log.id === payload.new.id ? { ...log, ...payload.new } as SalesCallLog : log
+                                )
+                            }
+                            return [payload.new as SalesCallLog, ...prev]
+                        })
                     } else if (payload.eventType === 'UPDATE') {
                         console.log('Updating log:', payload.new)
                         setLogs(prev => prev.map(log =>
@@ -240,7 +248,7 @@ export function SalesAnalyzer() {
                             <span>
                                 {creditStatus.limit === Infinity
                                     ? `Unlimited Credits`
-                                    : `Credits: ${creditStatus.used}/${creditStatus.limit}`}
+                                    : `Credits: ${creditStatus.limit - creditStatus.used}/${creditStatus.limit}`}
                             </span>
                         </div>
                     )}

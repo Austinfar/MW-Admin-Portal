@@ -1,10 +1,14 @@
-'use client';
+
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CommissionActiveView } from '@/components/commissions/CommissionActiveView';
 import { CommissionHistoryView } from '@/components/commissions/CommissionHistoryView';
 
-export default function CommissionDashboard() {
+import { protectRoute } from '@/lib/protect-route';
+
+export default async function CommissionDashboard() {
+    await protectRoute('can_view_commissions');
+
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">

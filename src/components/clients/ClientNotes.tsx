@@ -134,6 +134,7 @@ export function ClientNotes({ notes, clientId }: ClientNotesProps) {
                             <div className="flex justify-between items-start gap-4 mb-2">
                                 <div className="flex items-center gap-2">
                                     <Avatar className="h-6 w-6">
+                                        <AvatarImage src={note.author?.avatar_url || ''} />
                                         <AvatarFallback className="text-[10px]">
                                             {note.author?.name?.substring(0, 2).toUpperCase() || '??'}
                                         </AvatarFallback>

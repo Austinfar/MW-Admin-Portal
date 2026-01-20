@@ -37,9 +37,11 @@ export function ImpersonationDialog({ open, onOpenChange }: ImpersonationDialogP
     const router = useRouter()
 
     useEffect(() => {
-        // Load initial users
-        handleSearch('')
-    }, [])
+        if (open) {
+            // Load initial users when dialog opens
+            handleSearch('')
+        }
+    }, [open])
 
     const handleSearch = async (val: string) => {
         setQuery(val)

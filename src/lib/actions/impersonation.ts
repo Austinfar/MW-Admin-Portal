@@ -114,18 +114,25 @@ export async function searchUsers(query: string) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
-    if (!user) return { error: 'Not authenticated' }
+    if (!user) {
+        console.log('[searchUsers] No authenticated user')
+        return { error: 'Not authenticated' }
+    }
+
+    console.log('[searchUsers] User ID:', user.id)
 
     // Check if requester is super_admin
     const adminClient = createAdminClient()
-    const { data: requester } = await adminClient
+    const { data: requester, error: requesterError } = await adminClient
         .from('users')
         .select('role')
         .eq('id', user.id)
         .single()
 
+    console.log('[searchUsers] Requester check:', { id: user.id, role: requester?.role, error: requesterError })
+
     if (requester?.role !== 'super_admin') {
-        return { error: 'Unauthorized', users: [] }
+        return { error: `Unauthorized: Role is '${requester?.role}'`, users: [] }
     }
 
     let queryBuilder = adminClient

@@ -117,18 +117,25 @@ export async function POST(req: Request) {
             const session = event.data.object as Stripe.Checkout.Session
 
             // Check if this session is related to a Payment Schedule
-            // We store scheduleId in metadata
             const scheduleId = session.metadata?.scheduleId
 
             if (scheduleId) {
                 console.log(`Processing checkout.session.completed for schedule ${scheduleId}`)
 
-                // We need to fetch the session with expansion to retrieve the payment method
-                // because the event object might not have it expanded, or we want to be sure.
-                // Or identifying the method from the PaymentIntent.
-
                 try {
-                    // Retrieve fresh session with expansions
+                    // 1. Fetch Schedule with Metadata Columns
+                    const { data: schedule, error: startError } = await supabase
+                        .from('payment_schedules')
+                        .select('*')
+                        .eq('id', scheduleId)
+                        .single()
+
+                    if (startError || !schedule) {
+                        console.error('Schedule not found for webhook:', scheduleId)
+                        return new NextResponse('Schedule not found', { status: 404 })
+                    }
+
+                    // 2. Update Payment Schedule status and Stripe Details
                     const expandedSession = await stripe.checkout.sessions.retrieve(session.id, {
                         expand: ['payment_intent', 'setup_intent']
                     })
@@ -138,14 +145,10 @@ export async function POST(req: Request) {
                         : expandedSession.customer?.id
 
                     let paymentMethodId: string | null = null
-
-                    // Extract PM from PaymentIntent
                     if (expandedSession.payment_intent && typeof expandedSession.payment_intent !== 'string') {
                         const pm = expandedSession.payment_intent.payment_method
                         paymentMethodId = typeof pm === 'string' ? pm : pm?.id || null
                     }
-
-                    // Fallback to SetupIntent if enabled (e.g. for subscription setup mode)
                     if (!paymentMethodId && expandedSession.setup_intent && typeof expandedSession.setup_intent !== 'string') {
                         const pm = expandedSession.setup_intent.payment_method
                         paymentMethodId = typeof pm === 'string' ? pm : pm?.id || null
@@ -153,25 +156,162 @@ export async function POST(req: Request) {
 
                     const customerEmail = expandedSession.customer_details?.email
 
-                    // Update payment_schedules
-                    if (customerId && paymentMethodId) {
-                        const { error } = await supabase
-                            .from('payment_schedules')
-                            .update({
-                                stripe_customer_id: customerId,
-                                stripe_payment_method_id: paymentMethodId,
-                                client_email: customerEmail || undefined,
-                                status: 'active', // Mark active so cron picks up future charges
-                            })
-                            .eq('id', scheduleId)
+                    await supabase
+                        .from('payment_schedules')
+                        .update({
+                            stripe_customer_id: customerId,
+                            stripe_payment_method_id: paymentMethodId,
+                            client_email: customerEmail || undefined,
+                            status: 'active',
+                        })
+                        .eq('id', scheduleId)
 
-                        if (error) {
-                            console.error('Error updating payment schedule:', error)
-                        } else {
-                            console.log(`Updated schedule ${scheduleId} with customer ${customerId}`)
+                    // 3. LEAD CONVERSION LOGIC (If linked to a lead)
+                    let finalClientId = schedule.client_id
+
+                    if (schedule.lead_id && !finalClientId) {
+                        // Fetch Lead
+                        const { data: lead } = await supabase
+                            .from('leads')
+                            .select('*')
+                            .eq('id', schedule.lead_id)
+                            .single()
+
+                        if (lead) {
+                            console.log(`Converting Lead ${lead.id} to Client...`)
+
+                            // Insert Client
+                            const { data: newClient, error: clientError } = await supabase
+                                .from('clients')
+                                .insert({
+                                    name: `${lead.first_name} ${lead.last_name || ''}`.trim(),
+                                    email: lead.email,
+                                    phone: lead.phone,
+                                    status: 'onboarding',
+                                    start_date: schedule.start_date || new Date().toISOString(),
+                                    assigned_coach_id: schedule.assigned_coach_id,
+                                    client_type_id: schedule.client_type_id,
+                                    stripe_customer_id: customerId,
+                                    lead_source: 'company_driven', // Or infer from sales_closer
+                                    sold_by_user_id: schedule.metadata?.salesCloserId || null
+                                    // created_at defaults to now
+                                })
+                                .select('id')
+                                .single()
+
+                            if (newClient) {
+                                finalClientId = newClient.id
+
+                                // Link Schedule to new Client
+                                await supabase
+                                    .from('payment_schedules')
+                                    .update({ client_id: finalClientId })
+                                    .eq('id', scheduleId)
+
+                                // Create "Client Note" from Lead Description if exists
+                                // Assuming we have access to lead description (schema check confirmed description exists)
+                                // We might need to cast description if it's not in the select * (it usually is)
+                                if ((lead as any).description) {
+                                    await supabase.from('client_notes').insert({
+                                        client_id: finalClientId,
+                                        content: `[Lead Note]: ${(lead as any).description}`,
+                                        is_pinned: false,
+                                        author_id: schedule.assigned_coach_id  // Assign to coach as fallback author or system
+                                    })
+                                }
+
+                                // Create Conversion Activity Log
+                                await supabase.from('activity_logs').insert({
+                                    client_id: finalClientId,
+                                    lead_id: lead.id,
+                                    type: 'conversion',
+                                    description: `Converted from Lead to Client via Payment ${scheduleId}`,
+                                    metadata: { source: 'stripe_webhook', amount: schedule.total_amount }
+                                })
+
+                                // Migrate all OLD activity logs from Lead -> Client
+                                await supabase
+                                    .from('activity_logs')
+                                    .update({ client_id: finalClientId })
+                                    .eq('lead_id', lead.id)
+
+                                // Ensure "Lead Created" log exists (Backfill history)
+                                const { data: existingLeadLog } = await supabase
+                                    .from('activity_logs')
+                                    .select('id')
+                                    .eq('lead_id', lead.id)
+                                    .eq('type', 'lead_created')
+                                    .single()
+
+                                if (!existingLeadLog) {
+                                    await supabase.from('activity_logs').insert({
+                                        client_id: finalClientId,
+                                        lead_id: lead.id,
+                                        type: 'lead_created',
+                                        description: 'Lead Created (Imported History)',
+                                        created_at: lead.created_at, // Preserve original date
+                                    })
+                                }
+
+                                // Mark Lead Converted (or delete)
+                                await supabase.from('leads').update({ status: 'converted' }).eq('id', lead.id)
+                            }
                         }
-                    } else {
-                        console.warn(`Missing customer or PM for schedule ${scheduleId}`)
+                    } else if (finalClientId) {
+                        // If payment was for existing client, just log activity
+                        await supabase.from('activity_logs').insert({
+                            client_id: finalClientId,
+                            type: 'payment',
+                            description: `Payment Schedule ${scheduleId} Activated`,
+                            metadata: { amount: schedule.total_amount }
+                        })
+                    }
+
+                    // 4. ONBOARDING TASK ASSIGNMENT
+                    if (finalClientId && schedule.client_type_id) {
+                        // Fetch Program's Default Template
+                        const { data: clientType } = await supabase
+                            .from('client_types')
+                            .select('default_onboarding_template_id, name')
+                            .eq('id', schedule.client_type_id)
+                            .single()
+
+                        if (clientType?.default_onboarding_template_id) {
+                            console.log(`Assigning Template ${clientType.default_onboarding_template_id} to Client ${finalClientId}`)
+
+                            // Fetch Template Tasks
+                            const { data: tasks } = await supabase
+                                .from('onboarding_task_templates')
+                                .select('*')
+                                .eq('template_id', clientType.default_onboarding_template_id)
+                                .eq('is_required', true) // Only required ones? Or all? Usually start with all or just required. Let's do all.
+                            // Actually, let's respect is_required or not. User probably wants all for checklist.
+
+                            if (tasks && tasks.length > 0) {
+                                const today = new Date()
+                                const newTasks = tasks.map((t: any) => {
+                                    const dueDate = new Date(today)
+                                    dueDate.setDate(today.getDate() + (t.due_offset_days || 0))
+                                    return {
+                                        client_id: finalClientId,
+                                        task_template_id: t.id,
+                                        title: t.title,
+                                        description: t.description,
+                                        status: 'pending',
+                                        due_date: dueDate.toISOString(),
+                                        created_at: new Date().toISOString()
+                                    }
+                                })
+
+                                await supabase.from('onboarding_tasks').insert(newTasks)
+
+                                await supabase.from('activity_logs').insert({
+                                    client_id: finalClientId,
+                                    type: 'onboarding',
+                                    description: `Assigned Onboarding Tasks for ${clientType.name}`,
+                                })
+                            }
+                        }
                     }
 
                 } catch (err) {

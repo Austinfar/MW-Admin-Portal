@@ -2,7 +2,11 @@ import { getClients, getClientTypes, getCoaches } from '@/lib/actions/clients'
 import { createClient } from '@/lib/supabase/server'
 import { ClientsTable } from '@/components/clients/ClientsTable'
 
+import { protectRoute } from '@/lib/protect-route'
+
 export default async function ClientsPage() {
+    await protectRoute('can_view_clients')
+
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 

@@ -7,7 +7,11 @@ export const metadata: Metadata = {
     description: 'Track business performance and revenue.',
 };
 
+import { protectRoute } from '@/lib/protect-route';
+
 export default async function BusinessPage() {
+    await protectRoute('can_view_business');
+
     const metrics = await getBusinessMetrics();
 
     return (

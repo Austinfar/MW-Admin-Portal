@@ -1,14 +1,19 @@
 import { PaymentLinkGenerators } from '@/components/payment-links/PaymentLinkGenerators'
 import { getStripeProducts, getCoaches, getSalesClosers, getClients, getLeadsForPaymentLinks } from '@/lib/actions/stripe-actions'
+import { getAllClientTypes } from '@/lib/actions/settings'
+import { protectRoute } from '@/lib/protect-route'
 
 export const dynamic = 'force-dynamic'
 
 export default async function PaymentLinksPage() {
+    await protectRoute('can_manage_payment_links')
+
     const { products, isTestMode } = await getStripeProducts()
     const coaches = await getCoaches()
     const closers = await getSalesClosers()
     const clients = await getClients()
     const leads = await getLeadsForPaymentLinks()
+    const clientTypes = await getAllClientTypes()
 
     return (
         <div className="p-8 space-y-8 max-w-7xl mx-auto">
@@ -33,6 +38,7 @@ export default async function PaymentLinksPage() {
                 closers={closers}
                 clients={clients}
                 leads={leads}
+                clientTypes={clientTypes || []}
             />
         </div>
     )

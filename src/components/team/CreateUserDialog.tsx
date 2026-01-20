@@ -39,9 +39,10 @@ const ROLE_OPTIONS = [
 
 interface CreateUserDialogProps {
     onSuccess?: () => void;
+    isSuperAdmin: boolean;
 }
 
-export function CreateUserDialog({ onSuccess }: CreateUserDialogProps) {
+export function CreateUserDialog({ onSuccess, isSuperAdmin }: CreateUserDialogProps) {
     const [open, setOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
 
@@ -163,13 +164,16 @@ export function CreateUserDialog({ onSuccess }: CreateUserDialogProps) {
                                 <SelectValue placeholder="Select role" />
                             </SelectTrigger>
                             <SelectContent>
-                                {ROLE_OPTIONS.map((option) => (
+                                {ROLE_OPTIONS.filter(opt => isSuperAdmin || opt.value !== 'admin').map((option) => (
                                     <SelectItem key={option.value} value={option.value}>
                                         {option.label}
                                     </SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
+                        {!isSuperAdmin && (
+                            <p className="text-[10px] text-muted-foreground">Only Super Admins can create other Admins.</p>
+                        )}
                     </div>
 
                     {/* Job Title */}

@@ -1,8 +1,9 @@
-'use client'
-
 import { SalesAnalyzer } from '@/components/sales/SalesAnalyzer'
+import { protectRoute } from '@/lib/protect-route'
 
-export default function SalesPage() {
+export default async function SalesPage() {
+    await protectRoute('can_view_sales')
+
     return (
         <div className="flex-1 space-y-4 p-8 pt-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 md:space-y-0">

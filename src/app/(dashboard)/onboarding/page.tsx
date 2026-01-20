@@ -2,7 +2,11 @@
 import { getOnboardingClients } from '@/lib/actions/onboarding'
 import { OnboardingBoard } from '@/components/onboarding/OnboardingBoard'
 
+import { protectRoute } from '@/lib/protect-route'
+
 export default async function OnboardingPage() {
+    await protectRoute('can_view_onboarding')
+
     const clients = await getOnboardingClients()
 
     return (

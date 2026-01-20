@@ -282,7 +282,7 @@ function addOneMonth(date: Date) {
 }
 
 function getPlanDescription(planName: string = '') {
-    const lower = planName.toLowerCase()
+    const lower = (planName || '').toLowerCase()
     if (lower.includes('lifestyle')) {
         return "You are one step away from a healthier & more fit lifestyle."
     }
@@ -297,7 +297,8 @@ function getPlanDescription(planName: string = '') {
 
 function getProgramTerm(planName: string = '') {
     // Try to extract term from name (e.g. "16 Week", "6 Month")
-    const match = planName.match(/(\d+)\s*(?:Week|Month)s?/i)
+    const lower = (planName || '').toLowerCase()
+    const match = lower.match(/(\d+)\s*(?:week|month)s?/i)
     if (match) {
         return match[0] // e.g. "16 Week"
     }

@@ -47,5 +47,6 @@ export interface Note {
         name: string
         email: string
         id: string
+        avatar_url?: string | null
     } | null
 }

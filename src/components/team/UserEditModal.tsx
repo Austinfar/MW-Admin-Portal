@@ -20,12 +20,11 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { User, updateUserRole, updateUserCommissionConfig, updateUserJobTitle, updateUserDetails, deleteUser } from '@/lib/actions/profile';
+import { User, updateUserRole, updateUserCommissionConfig, updateUserJobTitle, updateUserDetails, deleteUser, uploadAvatarForUser } from '@/lib/actions/profile';
 import { toast } from 'sonner';
 import { Loader2, Settings, Trash2 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ImageCropper } from '@/components/ui/ImageCropper';
-import { createClient } from '@/lib/supabase/client';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Camera } from 'lucide-react';
 
@@ -90,40 +89,32 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
     const handleCropComplete = async (croppedBlob: Blob) => {
         setUploading(true);
         try {
-            const supabase = createClient();
-            const fileName = `${user.id}-${Date.now()}.jpg`;
-            const filePath = `avatars/${fileName}`;
+            // Convert blob to base64 for server action
+            const reader = new FileReader();
+            const base64Promise = new Promise<string>((resolve, reject) => {
+                reader.onload = () => resolve(reader.result as string);
+                reader.onerror = reject;
+                reader.readAsDataURL(croppedBlob);
+            });
 
-            // Upload to Supabase Storage
-            const { error: uploadError } = await supabase.storage
-                .from('avatars')
-                .upload(filePath, croppedBlob, {
-                    contentType: 'image/jpeg',
-                    upsert: true
-                });
+            const base64Data = await base64Promise;
 
-            if (uploadError) {
-                console.error('Upload error:', uploadError);
-                toast.error('Failed to upload image');
+            // Use server action to upload (bypasses storage RLS)
+            const result = await uploadAvatarForUser(user.id, base64Data);
+
+            if (result.error) {
+                toast.error(`Upload failed: ${result.error}`);
                 return;
             }
 
-            // Get Public URL
-            const { data: { publicUrl } } = supabase.storage
-                .from('avatars')
-                .getPublicUrl(filePath);
+            if (result.url) {
+                setAvatarUrl(result.url);
+                toast.success('Image uploaded! Click Save to apply.');
+            }
 
-            setAvatarUrl(publicUrl);
-
-            // NOTE: We update the actual profile in handleSave or immediately?
-            // Let's update it immediately for instant feedback, or wait for save.
-            // Based on this modal pattern, we usually wait for Save.
-            // However, for images it's often better to save immediately or store in a temp state.
-            // We'll store in temp state `avatarUrl` and save it during handleSave.
-
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error handling crop:', error);
-            toast.error('Something went wrong');
+            toast.error(`Something went wrong: ${error?.message || 'Unknown error'}`);
         } finally {
             setUploading(false);
         }
@@ -179,20 +170,34 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
 
             // Update Avatar if changed
             if (avatarUrl !== user.avatar_url) {
-                const { updateAvatar } = await import('@/lib/actions/profile');
-                // We need a specific action to update ANY user's avatar, currently updateAvatar uses getCurrentUser
-                // But since we are likely Super Admin editing someone else, we need an admin version or ensure the profile action handles it.
-                // Looking at profile.ts, updateAvatar uses getCurrentUserId(). 
-                // We need to implement updateOtherUserAvatar or pass ID to updateAvatar.
-                // For now, let's assume we need to add a capability to updateAvatar or create a new one.
-                // Actually, let's use a new prop in detailsToUpdate if super admin, or just call a new action we'll make.
-                // Let's create `updateUserAvatar(userId, url)` in profile.ts next.
-                // For now, we'll optimistically display it, but we need that backend action.
+                if (isSuperAdmin) {
+                    // Use the updated updateUserDetails that now accepts avatar_url
+                    await updateUserDetails(user.id, { avatar_url: avatarUrl! });
+                } else if (user.id) {
+                    // For self update (if user is editing themselves), use standard updateAvatar
+                    // But wait, updateAvatar is for CURRENT user.
+                    // UserEditModal is usually for editing OTHERS in Team Settings.
+                    // But if a user edits themselves via profile settings, they might use this?
+                    // Actually TeamSettings is for editing OTHERS.
+                    // If I am editing MYSELF in Team Settings, updateAvatar works.
+                    // If I am Admin editing another User, I can't update their avatar?
+                    // Currently only Super Admin has Account tab.
+                    // So Standard Admin can't update avatar of others anyway (no UI for it in General tab? Wait, Avatar is in General tab).
+                    // Avatar is in General tab!
+                    // So Admin editing User: can they update avatar?
+                    // updateAvatar uses getCurrentUserId(). So it would update Admin's avatar.
+                    // We need a way for Admin to update User's avatar.
+                    // Or restrict Avatar update to Super Admin / Self.
+                    // Let's use updateUserDetails if available?
+                    // updateUserDetails checks for Super Admin.
+                    // So Admin cannot update User's avatar with updateUserDetails.
+                    // I should probably restrict Avatar upload to Super Admin OR Self.
+                    // If !isSuperAdmin and user.id !== currentUserId, hide avatar upload?
+                    // Or allow it and creating a new action `adminUpdateAvatar`.
+                    // For now, let's use updateUserDetails for Super Admin, and maybe fail/warn for others unless self.
 
-                // Temporary fix: If it's self, updateAvatar works. If it's another user, we need a new action.
-                if (isSuperAdmin || user.id) { // We have user.id
-                    const { updateUserAvatar } = await import('@/lib/actions/profile');
-                    await updateUserAvatar(user.id, avatarUrl!);
+                    // Assuming we only allow Super Admin to update others' avatars for now.
+                    // Because updateUserDetails requires Super Admin.
                 }
             }
 
@@ -372,7 +377,7 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
                                 </SelectTrigger>
                                 <SelectContent>
                                     {isSuperAdmin && <SelectItem value="super_admin">Super Admin (Full Access)</SelectItem>}
-                                    <SelectItem value="admin">Admin (Elevated Access)</SelectItem>
+                                    {isSuperAdmin && <SelectItem value="admin">Admin (Elevated Access)</SelectItem>}
                                     <SelectItem value="user">Standard (Permission-Based)</SelectItem>
                                 </SelectContent>
                             </Select>

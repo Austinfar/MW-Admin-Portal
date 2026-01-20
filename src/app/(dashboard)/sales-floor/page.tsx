@@ -5,10 +5,13 @@ import { Leaderboard } from '@/components/sales/floor/Leaderboard'
 import { PipelineFunnel } from '@/components/sales/floor/PipelineFunnel'
 import { StreakCounter } from '@/components/sales/floor/StreakCounter'
 import { WarRoom } from '@/components/sales/floor/WarRoom'
+import { protectRoute } from '@/lib/protect-route'
 
 export const dynamic = 'force-dynamic' // Ensure real-time data
 
 export default async function SalesFloorPage() {
+    await protectRoute('can_view_sales_floor')
+
     const dashboardData = await getSalesDashboardData()
 
     return (

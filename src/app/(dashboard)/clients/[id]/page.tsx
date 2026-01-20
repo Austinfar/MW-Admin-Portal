@@ -137,7 +137,7 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
                                     <CardDescription>Track onboarding progress and steps.</CardDescription>
                                 </CardHeader>
                                 <CardContent>
-                                    <ClientOnboardingChecklist tasks={tasks} clientId={client.id} />
+                                    <ClientOnboardingChecklist tasks={tasks} clientId={client.id} users={users} />
                                 </CardContent>
                             </Card>
                         </TabsContent>

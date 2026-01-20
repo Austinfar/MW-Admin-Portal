@@ -49,25 +49,33 @@ export async function getStripeProducts() {
     }
 }
 
-export async function createPaymentLink(priceId: string) {
+export async function createCheckoutSession(
+    priceId: string,
+    isRecurring: boolean,
+    metadata: { scheduleId: string }
+) {
     try {
-        const session = await stripe.paymentLinks.create({
+        const session = await stripe.checkout.sessions.create({
             line_items: [
                 {
                     price: priceId,
                     quantity: 1,
-                    // adjustable_quantity: { enabled: true, minimum: 1, maximum: 10 },
                 },
             ],
-            after_completion: {
-                type: 'hosted_confirmation',
-            },
+            mode: isRecurring ? 'subscription' : 'payment',
+            success_url: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/payment/cancel`,
+            metadata: {
+                scheduleId: metadata.scheduleId
+            }
         })
 
+        if (!session.url) throw new Error('No session URL returned')
+
         return { url: session.url }
-    } catch (error) {
-        console.error('Error creating payment link:', error)
-        return { error: 'Failed to create payment link' }
+    } catch (error: any) {
+        console.error('Error creating checkout session:', error)
+        return { error: error?.message || 'Failed to create session' }
     }
 }
 
@@ -84,6 +92,7 @@ interface SplitPaymentPayload {
     salesCloserId?: string
     clientId?: string
     leadId?: string
+    clientTypeId?: string
     commissionSplits?: any[]
     programTerm?: '6' | '12'
 }
@@ -129,11 +138,12 @@ export async function getCoaches() {
     // USE ADMIN CLIENT to bypass RLS and ensure we see all coaches
     const supabase = createAdminClient()
 
-    // Fetch users with role 'coach' or 'admin' (if admins also coach)
+    // Fetch users with job_title 'coach' or 'head_coach'
+    // Note: 'role' is for access level (super_admin/admin/user), 'job_title' is for job function
     const { data: coaches, error } = await supabase
         .from('users')
-        .select('id, name')
-        .in('role', ['coach', 'admin'])
+        .select('id, name, avatar_url')
+        .in('job_title', ['coach', 'head_coach', 'admin_staff'])
         .eq('is_active', true)
         .order('name')
 
@@ -144,14 +154,14 @@ export async function getCoaches() {
     return coaches || []
 }
 
-// 0.1 Fetch Sales Closers for Selector
+// 0.1 Fetch Sales Closers for Selector (all team members)
 export async function getSalesClosers() {
     const supabase = createAdminClient()
 
+    // Fetch ALL active users - anyone can be a closer or referrer
     const { data: closers, error } = await supabase
         .from('users')
-        .select('id, name')
-        .in('role', ['sales_closer', 'admin'])
+        .select('id, name, avatar_url')
         .eq('is_active', true)
         .order('name')
 
@@ -168,7 +178,7 @@ export async function getClients() {
 
     const { data: clients, error } = await supabase
         .from('clients')
-        .select('id, name, email, stripe_customer_id')
+        .select('id, name, email, stripe_customer_id, assigned_coach_id, start_date')
         .order('name')
 
     if (error) {
@@ -246,7 +256,9 @@ export async function createCheckoutSessionForSchedule(scheduleId: string) {
     if (!schedule) return { error: 'Schedule not found' }
 
     try {
-        const isSetupMode = schedule.amount === 0
+        // Fallback for older records where 'amount' (column) might be null but 'total_amount' is set
+        const effectiveAmount = schedule.amount ?? schedule.total_amount ?? schedule.remaining_amount ?? 0
+        const isSetupMode = effectiveAmount === 0
         const isSubscription = schedule.payment_type === 'recurring'
 
         const sessionConfig: Stripe.Checkout.SessionCreateParams = {
@@ -320,7 +332,7 @@ export async function createCheckoutSessionForSchedule(scheduleId: string) {
                                     name: (schedule.plan_name || 'Subscription') + ' (Initial Payment)',
                                     description: 'First month payment collected today'
                                 },
-                                unit_amount: schedule.amount,
+                                unit_amount: effectiveAmount,
                             },
                             quantity: 1
                         }
@@ -343,7 +355,7 @@ export async function createCheckoutSessionForSchedule(scheduleId: string) {
                         price_data: {
                             currency: schedule.currency || 'usd',
                             product: schedule.stripe_price_id, // Link to existing Product
-                            unit_amount: schedule.amount,      // Use the Custom Scheduled Amount
+                            unit_amount: effectiveAmount,      // Use the Custom Scheduled Amount
                         },
                         quantity: 1,
                     },
@@ -377,7 +389,7 @@ export async function createCheckoutSessionForSchedule(scheduleId: string) {
                             product_data: {
                                 name: (schedule.plan_name || 'Payment Plan') + ' (First Payment)',
                             },
-                            unit_amount: schedule.amount,
+                            unit_amount: effectiveAmount,
                         },
                         quantity: 1,
                     },
@@ -387,6 +399,15 @@ export async function createCheckoutSessionForSchedule(scheduleId: string) {
                 }
             }
         }
+
+        console.log('[createCheckoutSessionForSchedule] Config:', JSON.stringify({
+            scheduleId,
+            amount: effectiveAmount,
+            startDate: schedule.start_date,
+            isSubscription,
+            isSetupMode,
+            sessionConfig
+        }, null, 2))
 
         const session = await stripe.checkout.sessions.create(sessionConfig)
 
@@ -418,12 +439,13 @@ export async function createStandardPaymentRef(
         salesCloserId?: string,
         clientId?: string,
         leadId?: string,
+        clientTypeId?: string,
         startDate?: string,
         commissionSplits?: any[],
         programTerm?: '6' | '12'
     }
 ) {
-    const supabase = createAdminClient()
+    const supabase = await createClient()
 
     // 1. Handle Client / Stripe Customer Pre-Check
     if (options?.clientId && options.clientId !== 'new') {
@@ -437,49 +459,64 @@ export async function createStandardPaymentRef(
 
     try {
         const payload: any = {
-            plan_name: productName,
-            amount: amount, // For display & initial sorting, though subscription ignores this for billing
-            currency: 'usd',
-            status: 'draft',
-            payment_type: type,
-            stripe_price_id: priceId,
-            program_term: options?.programTerm || '6', // Default to 6 months
+            status: 'pending_initial',
+            plan_name: productName, // Ensure plan name is saved to DB column
+            amount: amount, // Ensure regular amount column is populated
+            total_amount: amount,
+            remaining_amount: amount,
+            schedule_json: [{
+                amount: amount,
+                dueDate: new Date().toISOString(),
+                status: 'pending'
+            }],
+            metadata: {
+                priceId,
+                type,
+                productName,
+                clientId: options?.clientId,
+                leadId: options?.leadId,
+                clientTypeId: options?.clientTypeId,
+                coachId: options?.coachId,
+                salesCloserId: options?.salesCloserId,
+                startDate: options?.startDate,
+                programTerm: options?.programTerm,
+                commissionSplits: options?.commissionSplits
+            },
+            assigned_coach_id: options?.coachId && options.coachId !== 'tbd' ? options.coachId : null,
+            sales_closer_id: options?.salesCloserId && options.salesCloserId !== 'tbd' ? options.salesCloserId : null,
+            client_id: options?.clientId || null,
+            lead_id: options?.leadId || null,
+            client_type_id: options?.clientTypeId || null,
+            start_date: options?.startDate || null,
+            program_term: options?.programTerm || '6',
+            commission_splits: options?.commissionSplits || null
         }
 
-        if (options?.coachId && options.coachId !== 'tbd') {
-            payload.assigned_coach_id = options.coachId
-        }
-        if (options?.salesCloserId && options.salesCloserId !== 'tbd') {
-            payload.sales_closer_id = options.salesCloserId
-        }
-        if (options?.clientId) {
-            payload.client_id = options.clientId
-        }
-        if (options?.leadId) {
-            payload.lead_id = options.leadId
-        }
-
-        // Add commission splits
-        if (options?.commissionSplits && options.commissionSplits.length > 0) {
-            payload.commission_splits = options.commissionSplits
-        }
-
-        if (options?.startDate) {
-            payload.start_date = options.startDate
+        // Update Client Record if overrides provided (Auto-Update Logic)
+        if (options?.clientId && options.clientId !== 'new') {
+            const updates: any = {}
+            if (options.coachId && options.coachId !== 'tbd') {
+                updates.assigned_coach_id = options.coachId
+            }
+            if (Object.keys(updates).length > 0) {
+                // We await this to ensure consistency
+                await supabase.from('clients').update(updates).eq('id', options.clientId)
+            }
         }
 
         const { data: schedule, error } = await supabase
             .from('payment_schedules')
             .insert(payload)
-            .select()
+            .select('id')
             .single()
 
         if (error) {
-            console.error('Error creating standard payment ref:', error)
+            console.error('Error creating payment schedule:', error)
             return { error: error.message }
         }
 
         return { id: schedule.id }
+
     } catch (error: any) {
         console.error('Error creating standard payment ref:', error)
         return { error: error?.message || 'Failed to create reference' }
@@ -531,6 +568,17 @@ export async function createSplitPaymentDraft(payload: SplitPaymentPayload) {
 
         if (payload.startDate) {
             insertData.start_date = payload.startDate
+        }
+
+        // Update Client Record if overrides provided (Auto-Update Logic)
+        if (payload.clientId && payload.clientId !== 'new') {
+            const updates: any = {}
+            if (payload.coachId && payload.coachId !== 'tbd') {
+                updates.assigned_coach_id = payload.coachId
+            }
+            if (Object.keys(updates).length > 0) {
+                await supabase.from('clients').update(updates).eq('id', payload.clientId)
+            }
         }
 
         // Add program term

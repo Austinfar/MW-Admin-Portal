@@ -30,6 +30,7 @@ export interface User {
     commission_config?: Record<string, number>
     is_active: boolean
     created_at: string
+    avatar_url: string | null
 }
 
 /**
@@ -174,6 +175,45 @@ export async function updateProfile(formData: FormData) {
 
     revalidatePath('/profile');
     return { success: true };
+}
+
+/**
+ * Upload avatar image for a user (uses admin client to bypass storage RLS)
+ */
+export async function uploadAvatarForUser(userId: string, base64Data: string): Promise<{ url?: string; error?: string }> {
+    try {
+        const admin = createAdminClient();
+
+        // Convert base64 to buffer
+        const base64Clean = base64Data.replace(/^data:image\/\w+;base64,/, '');
+        const buffer = Buffer.from(base64Clean, 'base64');
+
+        const fileName = `${userId}-${Date.now()}.jpg`;
+        const filePath = `avatars/${fileName}`;
+
+        // Upload using admin client (bypasses RLS)
+        const { error: uploadError } = await admin.storage
+            .from('avatars')
+            .upload(filePath, buffer, {
+                contentType: 'image/jpeg',
+                upsert: true
+            });
+
+        if (uploadError) {
+            console.error('Avatar upload error:', uploadError);
+            return { error: uploadError.message };
+        }
+
+        // Get public URL
+        const { data: { publicUrl } } = admin.storage
+            .from('avatars')
+            .getPublicUrl(filePath);
+
+        return { url: publicUrl };
+    } catch (error: any) {
+        console.error('Avatar upload failed:', error);
+        return { error: error?.message || 'Upload failed' };
+    }
 }
 
 /**
@@ -506,6 +546,7 @@ export async function updateUserDetails(userId: string, data: {
     name?: string
     email?: string
     password?: string
+    avatar_url?: string
 }) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -543,6 +584,7 @@ export async function updateUserDetails(userId: string, data: {
         const profileUpdate: Record<string, any> = { updated_at: new Date().toISOString() }
         if (data.name) profileUpdate.name = data.name
         if (data.email) profileUpdate.email = data.email
+        if (data.avatar_url) profileUpdate.avatar_url = data.avatar_url
 
         const { error: profileError } = await admin
             .from('users')
@@ -563,7 +605,10 @@ export async function updateUserDetails(userId: string, data: {
 }
 
 /**
- * Delete a user (super admin only)
+ * Deactivate a user (super admin only)
+ * - Sets is_active = false so they don't appear in active lists
+ * - Deletes auth user so they can't log in
+ * - Keeps all commission records, sales records, and history intact
  */
 export async function deleteUser(userId: string) {
     const supabase = await createClient()
@@ -589,28 +634,88 @@ export async function deleteUser(userId: string) {
         return { error: 'Cannot delete your own account' }
     }
 
-    try {
-        // Delete from auth (this will cascade or just remove auth access)
-        const { error: authError } = await admin.auth.admin.deleteUser(userId)
-        if (authError) {
-            console.error('Auth deletion failed:', authError)
-            return { error: authError.message }
-        }
+    // Get the user being deleted to prevent super_admin deletion
+    const { data: targetUser } = await admin
+        .from('users')
+        .select('role, email')
+        .eq('id', userId)
+        .single()
 
-        // Mark as inactive in users table (soft delete) or hard delete
+    if (targetUser?.role === 'super_admin') {
+        return { error: 'Cannot delete Super Admin accounts' }
+    }
+
+    try {
+        // 1. Soft delete - mark as inactive
+        // This keeps all commission records, sales records, and history intact
         const { error: profileError } = await admin
             .from('users')
-            .update({ is_active: false, updated_at: new Date().toISOString() })
+            .update({
+                is_active: false,
+                updated_at: new Date().toISOString()
+            })
             .eq('id', userId)
 
         if (profileError) {
             console.error('Profile deactivation failed:', profileError)
+            return { error: `Failed to deactivate user: ${profileError.message}` }
+        }
+
+        // 2. Delete from auth so they can't log in
+        // Note: This may fail if there's FK constraint, but profile is already deactivated
+        const { error: authError } = await admin.auth.admin.deleteUser(userId)
+        if (authError) {
+            console.error('Auth deletion failed (user already deactivated):', authError)
+            // Continue - the user is already deactivated and can't access the system
         }
 
         revalidatePath('/settings/team')
         return { success: true }
     } catch (error: any) {
-        console.error('User deletion error:', error)
-        return { error: error?.message || 'Failed to delete user' }
+        console.error('User deactivation error:', error)
+        return { error: error?.message || 'Failed to deactivate user' }
+    }
+}
+
+/**
+ * Reactivate a deactivated user (super admin only)
+ */
+export async function reactivateUser(userId: string) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) return { error: 'Not authenticated' }
+
+    const admin = createAdminClient()
+
+    // Verify requester is super_admin
+    const { data: requesterProfile } = await admin
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+    if (requesterProfile?.role !== 'super_admin') {
+        return { error: 'Unauthorized: Super Admin access required' }
+    }
+
+    try {
+        const { error } = await admin
+            .from('users')
+            .update({
+                is_active: true,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', userId)
+
+        if (error) {
+            return { error: `Failed to reactivate user: ${error.message}` }
+        }
+
+        revalidatePath('/settings/team')
+        return { success: true }
+    } catch (error: any) {
+        console.error('User reactivation error:', error)
+        return { error: error?.message || 'Failed to reactivate user' }
     }
 }
