@@ -31,8 +31,8 @@ interface WebhookJob {
  * - After 3 failures: marked as 'dead' and admin notified
  *
  * Run via Vercel cron every 5 minutes:
- * vercel.json: { "crons": [{ "path": "/api/cron/webhook-retry", "schedule": "*/5 * * * *" }] }
  */
+// vercel.json: { "crons": [{ "path": "/api/cron/webhook-retry", "schedule": "*/5 * * * *" }] }
 export async function GET(request: Request) {
     const supabase = createAdminClient()
 
@@ -168,7 +168,7 @@ async function processJob(job: WebhookJob): Promise<boolean> {
             if (job.payload.slackUserId && job.payload.message) {
                 const result = await sendDirectMessage(
                     job.payload.slackUserId,
-                    job.payload.message as { text: string; blocks?: unknown[] }
+                    job.payload.message as { text: string; blocks?: any[] }
                 )
                 return result.success
             }
