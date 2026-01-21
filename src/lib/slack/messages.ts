@@ -146,7 +146,7 @@ export function buildSaleCelebration(context: SaleContext): SlackMessage {
                 })}`,
             },
         ],
-    } as SlackBlock)
+    } as unknown as SlackBlock)
 
     return {
         text: `🎉 New client signed: ${clientName} for ${programName} (${formatCurrency(paymentAmount)})`,
@@ -307,7 +307,7 @@ export function buildPipelineFailureAlert(
                     text: '_Failed jobs have been queued for retry._',
                 },
             ],
-        } as SlackBlock,
+        } as unknown as SlackBlock,
     ]
 
     return {
