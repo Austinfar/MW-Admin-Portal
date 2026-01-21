@@ -1298,3 +1298,362 @@ export async function getCurrentPeriodStats(coachId?: string): Promise<{
         yearToDate
     };
 }
+
+// ============================================
+// ADMIN: UNCALCULATED COMMISSIONS
+// ============================================
+
+export interface UncalculatedPayment {
+    id: string;
+    amount: number;
+    payment_date: string;
+    client_id: string | null;
+    client_name: string | null;
+    client_email: string | null;
+    stripe_payment_id: string | null;
+    status: string;
+}
+
+/**
+ * Get all payments that have commission_calculated = false but are linked to a client
+ * These are payments that slipped through (manual imports, webhook failures, etc.)
+ */
+export async function getUncalculatedPayments(): Promise<{
+    payments: UncalculatedPayment[];
+    orphanCount: number;
+    error?: string;
+}> {
+    const user = await getCurrentUser();
+    const admin = await isAdmin(user.id);
+
+    if (!admin) {
+        return { payments: [], orphanCount: 0, error: 'Unauthorized' };
+    }
+
+    const supabase = createAdminClient();
+
+    // Get payments with commission_calculated = false that have a client_id
+    const { data: uncalculated, error } = await supabase
+        .from('payments')
+        .select(`
+            id,
+            amount,
+            payment_date,
+            client_id,
+            client_email,
+            stripe_payment_id,
+            status,
+            clients:client_id (name)
+        `)
+        .eq('commission_calculated', false)
+        .eq('status', 'succeeded')
+        .not('client_id', 'is', null)
+        .order('payment_date', { ascending: false });
+
+    if (error) {
+        console.error('getUncalculatedPayments error:', error);
+        return { payments: [], orphanCount: 0, error: error.message };
+    }
+
+    // Also count orphan payments (no client_id)
+    const { count: orphanCount } = await supabase
+        .from('payments')
+        .select('id', { count: 'exact', head: true })
+        .eq('commission_calculated', false)
+        .eq('status', 'succeeded')
+        .is('client_id', null);
+
+    const payments: UncalculatedPayment[] = (uncalculated || []).map(p => ({
+        id: p.id,
+        amount: p.amount,
+        payment_date: p.payment_date,
+        client_id: p.client_id,
+        client_name: (p.clients as any)?.name || null,
+        client_email: p.client_email,
+        stripe_payment_id: p.stripe_payment_id,
+        status: p.status
+    }));
+
+    return { payments, orphanCount: orphanCount || 0 };
+}
+
+/**
+ * Process all uncalculated payments (batch operation)
+ * Calls calculateCommission for each payment
+ */
+export async function processUncalculatedCommissions(): Promise<{
+    processed: number;
+    failed: number;
+    skipped: number;
+    errors: string[];
+}> {
+    const user = await getCurrentUser();
+    const admin = await isAdmin(user.id);
+
+    if (!admin) {
+        return { processed: 0, failed: 0, skipped: 0, errors: ['Unauthorized'] };
+    }
+
+    const { calculateCommission } = await import('@/lib/logic/commissions');
+    const supabase = createAdminClient();
+
+    // Get all uncalculated payments with a client_id
+    const { data: payments, error } = await supabase
+        .from('payments')
+        .select('id')
+        .eq('commission_calculated', false)
+        .eq('status', 'succeeded')
+        .not('client_id', 'is', null);
+
+    if (error || !payments) {
+        return { processed: 0, failed: 0, skipped: 0, errors: [error?.message || 'Failed to fetch payments'] };
+    }
+
+    let processed = 0;
+    let failed = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+
+    for (const payment of payments) {
+        try {
+            const result = await calculateCommission(payment.id);
+
+            if (result.success) {
+                if (result.skipped) {
+                    skipped++;
+                } else {
+                    processed++;
+                }
+            } else {
+                failed++;
+                errors.push(`Payment ${payment.id}: ${result.reason}`);
+            }
+        } catch (err) {
+            failed++;
+            errors.push(`Payment ${payment.id}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        }
+    }
+
+    // Log the batch operation
+    await supabase.from('activity_logs').insert({
+        action: 'batch_commission_process',
+        entity_type: 'payments',
+        user_id: user.id,
+        metadata: {
+            total: payments.length,
+            processed,
+            failed,
+            skipped,
+            timestamp: new Date().toISOString()
+        }
+    });
+
+    revalidatePath('/commissions');
+
+    return { processed, failed, skipped, errors: errors.slice(0, 10) }; // Limit errors to 10
+}
+
+/**
+ * Recalculate commission for a single payment (admin action)
+ */
+export async function recalculateSinglePayment(paymentId: string, reason: string): Promise<{
+    success: boolean;
+    error?: string;
+}> {
+    const user = await getCurrentUser();
+    const admin = await isAdmin(user.id);
+
+    if (!admin) {
+        return { success: false, error: 'Unauthorized' };
+    }
+
+    const { recalculateCommission } = await import('@/lib/logic/commissions');
+
+    try {
+        const result = await recalculateCommission(paymentId, user.id, reason);
+
+        if (result.success) {
+            revalidatePath('/commissions');
+            return { success: true };
+        }
+
+        return { success: false, error: result.error };
+    } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+    }
+}
+
+// ============================================================================
+// ORPHAN PAYMENT MANAGEMENT
+// ============================================================================
+
+export interface OrphanPayment {
+    id: string;
+    stripe_payment_id: string;
+    amount: number;
+    client_email: string | null;
+    payment_date: string;
+    status: string;
+    review_status: string | null;
+    created_at: string;
+}
+
+export interface ClientOption {
+    id: string;
+    name: string;
+    email: string | null;
+    assigned_coach_id: string | null;
+}
+
+/**
+ * Get all orphan payments (payments without client_id)
+ */
+export async function getOrphanPayments(): Promise<{
+    payments: OrphanPayment[];
+    error?: string;
+}> {
+    const user = await getCurrentUser();
+    const admin = await isAdmin(user.id);
+
+    if (!admin) {
+        return { payments: [], error: 'Unauthorized' };
+    }
+
+    // Use admin client to bypass RLS
+    const supabase = createAdminClient();
+
+    const { data: payments, error } = await supabase
+        .from('payments')
+        .select('id, stripe_payment_id, amount, client_email, payment_date, status, review_status, created_at')
+        .is('client_id', null)
+        .eq('status', 'succeeded')
+        .order('payment_date', { ascending: false })
+        .limit(100);
+
+    if (error) {
+        console.error('getOrphanPayments error:', error);
+        return { payments: [], error: error.message };
+    }
+
+    return { payments: payments || [] };
+}
+
+/**
+ * Search for clients to match with an orphan payment
+ */
+export async function searchClientsForMatch(query: string): Promise<{
+    clients: ClientOption[];
+    error?: string;
+}> {
+    const user = await getCurrentUser();
+    const admin = await isAdmin(user.id);
+
+    if (!admin) {
+        return { clients: [], error: 'Unauthorized' };
+    }
+
+    if (!query || query.length < 2) {
+        return { clients: [] };
+    }
+
+    // Use admin client to bypass RLS
+    const supabase = createAdminClient();
+
+    const { data: clients, error } = await supabase
+        .from('clients')
+        .select('id, name, email, assigned_coach_id')
+        .or(`name.ilike.%${query}%,email.ilike.%${query}%`)
+        .order('name')
+        .limit(20);
+
+    if (error) {
+        console.error('searchClientsForMatch error:', error);
+        return { clients: [], error: error.message };
+    }
+
+    return { clients: clients || [] };
+}
+
+/**
+ * Match an orphan payment to a client and calculate commission
+ */
+export async function matchOrphanPaymentToClient(
+    paymentId: string,
+    clientId: string
+): Promise<{
+    success: boolean;
+    error?: string;
+}> {
+    const user = await getCurrentUser();
+    const admin = await isAdmin(user.id);
+
+    if (!admin) {
+        return { success: false, error: 'Unauthorized' };
+    }
+
+    const { calculateCommissionAfterMatch } = await import('@/lib/logic/commissions');
+
+    try {
+        const result = await calculateCommissionAfterMatch(paymentId, clientId, user.id);
+
+        if (result.success) {
+            revalidatePath('/commissions');
+            revalidatePath('/commissions/orphan-payments');
+            return { success: true };
+        }
+
+        return { success: false, error: result.error };
+    } catch (err) {
+        console.error('matchOrphanPaymentToClient error:', err);
+        return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+    }
+}
+
+/**
+ * Mark an orphan payment as excluded (won't be matched)
+ */
+export async function excludeOrphanPayment(
+    paymentId: string,
+    reason: string
+): Promise<{
+    success: boolean;
+    error?: string;
+}> {
+    const user = await getCurrentUser();
+    const admin = await isAdmin(user.id);
+
+    if (!admin) {
+        return { success: false, error: 'Unauthorized' };
+    }
+
+    const supabase = createAdminClient();
+
+    const { error } = await supabase
+        .from('payments')
+        .update({
+            review_status: 'excluded',
+            matched_by: user.id,
+            matched_at: new Date().toISOString()
+        })
+        .eq('id', paymentId);
+
+    if (error) {
+        console.error('excludeOrphanPayment error:', error);
+        return { success: false, error: error.message };
+    }
+
+    // Log the exclusion
+    await supabase.from('activity_logs').insert({
+        action: 'payment_excluded',
+        entity_type: 'payment',
+        entity_id: paymentId,
+        user_id: user.id,
+        metadata: {
+            reason,
+            timestamp: new Date().toISOString()
+        }
+    });
+
+    revalidatePath('/commissions/orphan-payments');
+    return { success: true };
+}

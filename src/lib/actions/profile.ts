@@ -32,6 +32,7 @@ export interface User {
     is_active: boolean
     created_at: string
     avatar_url: string | null
+    slack_user_id: string | null
 }
 
 /**
@@ -548,6 +549,7 @@ export async function updateUserDetails(userId: string, data: {
     email?: string
     password?: string
     avatar_url?: string
+    slack_user_id?: string | null
 }) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -586,6 +588,7 @@ export async function updateUserDetails(userId: string, data: {
         if (data.name) profileUpdate.name = data.name
         if (data.email) profileUpdate.email = data.email
         if (data.avatar_url) profileUpdate.avatar_url = data.avatar_url
+        if (data.slack_user_id !== undefined) profileUpdate.slack_user_id = data.slack_user_id
 
         const { error: profileError } = await admin
             .from('users')

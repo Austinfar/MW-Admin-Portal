@@ -552,9 +552,15 @@ export async function createSplitPaymentDraft(payload: SplitPaymentPayload) {
     }
 
     try {
+        // Calculate total program value from down payment + all scheduled payments
+        const scheduledPaymentsTotal = payload.schedule.reduce((sum, item) => sum + item.amount, 0)
+        const totalProgramValue = payload.downPayment + scheduledPaymentsTotal
+
         const insertData: any = {
             plan_name: payload.planName,
             amount: payload.downPayment,
+            total_amount: totalProgramValue,
+            remaining_amount: totalProgramValue, // Will be reduced as payments come in
             currency: 'usd',
             status: 'draft',
             payment_type: 'split',

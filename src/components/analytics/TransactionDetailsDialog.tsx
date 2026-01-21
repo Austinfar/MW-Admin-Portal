@@ -35,9 +35,7 @@ export function TransactionDetailsDialog({ payment, children }: TransactionDetai
         }
     };
 
-    // Helper to format currency (assuming cents for now, will confirm with audit)
-    // If amount > 10000 likely cents, if < 1000 likely dollars? 
-    // For now, assuming standard Stripe cents.
+    // Database stores amounts in dollars
     const amount = new Intl.NumberFormat('en-US', {
         style: 'currency',
         currency: payment.currency || 'USD',

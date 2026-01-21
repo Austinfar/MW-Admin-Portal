@@ -360,4 +360,80 @@ export class GHLClient {
             method: 'DELETE'
         })
     }
+
+    // ============================================
+    // DOCUMENT METHODS
+    // ============================================
+
+    /**
+     * Send a document to a contact
+     * @param contactId GHL contact ID
+     * @param templateId Document template ID from GHL
+     * @returns Document ID if successful
+     */
+    async sendDocument(contactId: string, templateId: string): Promise<{ documentId: string } | null> {
+        const response = await this.request<{ document?: { id: string }; id?: string }>(`/contacts/${contactId}/documents`, {
+            method: 'POST',
+            body: JSON.stringify({
+                templateId,
+                // GHL auto-populates template variables from contact data
+            })
+        })
+
+        if (response) {
+            const documentId = response.document?.id || response.id
+            if (documentId) {
+                return { documentId }
+            }
+        }
+
+        return null
+    }
+
+    /**
+     * Get document status
+     * @param documentId GHL document ID
+     * @returns Document status and signed URL if available
+     */
+    async getDocumentStatus(documentId: string): Promise<{
+        status: string
+        signedUrl?: string
+        viewedAt?: string
+        signedAt?: string
+    } | null> {
+        const response = await this.request<{
+            document?: {
+                status: string
+                signedDocumentUrl?: string
+                viewedAt?: string
+                signedAt?: string
+            }
+            status?: string
+            signedDocumentUrl?: string
+        }>(`/documents/${documentId}`)
+
+        if (response) {
+            const doc = response.document || response
+            return {
+                status: doc.status || 'unknown',
+                signedUrl: doc.signedDocumentUrl,
+                viewedAt: (doc as any).viewedAt,
+                signedAt: (doc as any).signedAt,
+            }
+        }
+
+        return null
+    }
+
+    /**
+     * Void/cancel a document
+     * @param documentId GHL document ID
+     */
+    async voidDocument(documentId: string): Promise<boolean> {
+        const response = await this.request<{ success?: boolean }>(`/documents/${documentId}/void`, {
+            method: 'POST'
+        })
+
+        return response?.success !== false
+    }
 }
