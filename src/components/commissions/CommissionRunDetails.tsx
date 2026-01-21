@@ -90,7 +90,9 @@ export function CommissionRunDetails({ run, onBack }: CommissionRunDetailsProps)
             if (adjType === 'clawback') amount = -Math.abs(amount);
             else amount = Math.abs(amount);
 
-            await addAdjustment(run.id, adjUser, amount, adjReason);
+            // Map UI type to API type
+            const apiType = adjType === 'clawback' ? 'deduction' : 'bonus';
+            await addAdjustment(adjUser, amount, apiType, adjReason, { runId: run.id });
 
             setIsAdjustmentOpen(false);
             setAdjUser('');
@@ -111,7 +113,7 @@ export function CommissionRunDetails({ run, onBack }: CommissionRunDetailsProps)
         if (!confirm('Are you sure?')) return;
         setProcessing(true);
         try {
-            await removeAdjustment(id, run.id);
+            await removeAdjustment(id);
             const data = await getPayrollStats(new Date(), new Date(), { payrollRunId: run.id });
             setStats(data);
         } catch (e) {

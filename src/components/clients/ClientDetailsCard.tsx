@@ -39,16 +39,23 @@ export function ClientDetailsCard({ client, ghlLocationId, users = [], isAdmin =
         sold_by_user_id: client.sold_by_user_id || 'none',
         assigned_coach_id: client.assigned_coach_id || 'none',
         lead_source: client.lead_source || 'company_driven',
-        check_in_day: client.check_in_day || 'none'
+        check_in_day: client.check_in_day || 'none',
+        appointment_setter_id: client.appointment_setter_id || 'none'
     });
 
     const handleSave = async () => {
         setIsLoading(true);
         try {
-            const result = await updateClient(client.id, {
+            // Convert 'none' placeholder values back to null for database
+            const cleanedData = {
                 ...formData,
+                sold_by_user_id: formData.sold_by_user_id === 'none' ? null : formData.sold_by_user_id,
+                assigned_coach_id: formData.assigned_coach_id === 'none' ? null : formData.assigned_coach_id,
+                appointment_setter_id: formData.appointment_setter_id === 'none' ? null : formData.appointment_setter_id,
+                check_in_day: formData.check_in_day === 'none' ? null : formData.check_in_day,
                 ghl_contact_id: client.ghl_contact_id // Pass this so action knows to sync
-            });
+            };
+            const result = await updateClient(client.id, cleanedData);
 
             if (result.error) {
                 toast.error('Failed to update profile');
@@ -108,13 +115,30 @@ export function ClientDetailsCard({ client, ghlLocationId, users = [], isAdmin =
                             <Label className="text-xs font-semibold text-primary mb-2 block">Sales Attribution</Label>
                             <div className="space-y-3">
                                 <div className="space-y-1">
-                                    <Label htmlFor="sold_by">Sold By</Label>
+                                    <Label htmlFor="sold_by">Sold By (Closer)</Label>
                                     <Select
                                         value={formData.sold_by_user_id}
                                         onValueChange={(value) => setFormData({ ...formData, sold_by_user_id: value })}
                                     >
                                         <SelectTrigger>
                                             <SelectValue placeholder="Select Closer" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="none">-- None --</SelectItem>
+                                            {users.map(u => (
+                                                <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-1">
+                                    <Label htmlFor="appointment_setter">Appointment Setter</Label>
+                                    <Select
+                                        value={formData.appointment_setter_id}
+                                        onValueChange={(value) => setFormData({ ...formData, appointment_setter_id: value })}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select Setter" />
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="none">-- None --</SelectItem>
@@ -254,12 +278,18 @@ export function ClientDetailsCard({ client, ghlLocationId, users = [], isAdmin =
                         )}
 
                         {/* Sales Info Display */}
-                        {(client.sold_by_user || client.lead_source) && (
+                        {(client.sold_by_user || client.lead_source || client.appointment_setter) && (
                             <div className="pt-2 border-t border-primary/5 space-y-2">
                                 <div className="space-y-1">
-                                    <label className="text-xs font-medium text-muted-foreground">Sold By</label>
+                                    <label className="text-xs font-medium text-muted-foreground">Sold By (Closer)</label>
                                     <div className="text-sm font-medium">
                                         {client.sold_by_user?.name || <span className="text-muted-foreground italic">Unassigned</span>}
+                                    </div>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-medium text-muted-foreground">Appointment Setter</label>
+                                    <div className="text-sm font-medium">
+                                        {client.appointment_setter?.name || <span className="text-muted-foreground italic">Unassigned</span>}
                                     </div>
                                 </div>
                                 <div className="space-y-1">

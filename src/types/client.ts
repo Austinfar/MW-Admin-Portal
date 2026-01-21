@@ -16,6 +16,7 @@ export interface Client {
     stripe_customer_id?: string | null
     sold_by_user_id?: string | null // NEW
     check_in_day?: string | null // NEW
+    appointment_setter_id?: string | null // Commission system v2
     created_at: string
     // Joined fields
     client_type?: {
@@ -29,6 +30,10 @@ export interface Client {
         name: string
         email: string
     } | null // NEW
+    appointment_setter?: {
+        name: string
+        email: string
+    } | null // Commission system v2
 }
 
 export interface ClientType {

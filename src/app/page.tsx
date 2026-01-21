@@ -24,10 +24,10 @@ export default async function IndexPage() {
 
     const { role, permissions } = userAccess
 
-    // Find the first route the user has access to
-    const allowedRoute = APP_ROUTES.find(route => checkRouteAccess(route, role, permissions))
+    // Find the first route the user has access to (must have an href)
+    const allowedRoute = APP_ROUTES.find(route => route.href && checkRouteAccess(route, role, permissions))
 
-    if (allowedRoute) {
+    if (allowedRoute && allowedRoute.href) {
         return redirect(allowedRoute.href)
     }
 

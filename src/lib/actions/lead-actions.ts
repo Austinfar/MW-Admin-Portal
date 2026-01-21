@@ -134,6 +134,49 @@ export async function deleteLead(id: string) {
     return { success: true }
 }
 
+export async function updateLeadAppointmentSetter(leadId: string, setterId: string | null) {
+    const supabase = await createClient()
+
+    // Get current lead info for activity log
+    const { data: lead } = await supabase
+        .from('leads')
+        .select('first_name, last_name, booked_by_user_id')
+        .eq('id', leadId)
+        .single()
+
+    if (!lead) return { error: 'Lead not found' }
+
+    // Get setter name for activity log
+    let setterName = 'None'
+    if (setterId) {
+        const { data: setter } = await supabase
+            .from('users')
+            .select('name')
+            .eq('id', setterId)
+            .single()
+        setterName = setter?.name || 'Unknown'
+    }
+
+    const { error } = await supabase
+        .from('leads')
+        .update({ booked_by_user_id: setterId })
+        .eq('id', leadId)
+
+    if (error) return { error: error.message }
+
+    // Log activity
+    await logLeadActivity(
+        supabase,
+        leadId,
+        'Appointment Setter Updated',
+        `Appointment setter changed to "${setterName}".`
+    )
+
+    revalidatePath('/leads')
+    revalidatePath(`/leads/${leadId}`)
+    return { success: true }
+}
+
 export async function convertLeadToClient(leadId: string) {
     const supabase = await createClient()
 

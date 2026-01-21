@@ -5,11 +5,22 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { LayoutDashboard, Users, CheckSquare, DollarSign, LogOut, ChevronLeft, ChevronRight, CreditCard, BrainCircuit, Calendar } from 'lucide-react'
+import { LayoutDashboard, Users, CheckSquare, DollarSign, LogOut, ChevronLeft, ChevronRight, CreditCard, BrainCircuit, Calendar, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useSidebar } from './SidebarContext'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { UserAccess } from '@/lib/auth-utils'
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 
 import { APP_ROUTES, checkRouteAccess } from '@/lib/routes'
 
@@ -61,10 +72,98 @@ export function Sidebar({ className, isMobile = false, userAccess }: { className
                     </Link>
                     <div className="space-y-1">
                         {filteredRoutes.map((route) => {
+                            // Helper to determine if a route (or its children) is active
+                            const isActive = route.href === pathname || route.children?.some(child => child.href === pathname)
+                            const isParent = route.children && route.children.length > 0
+
+                            if (isParent) {
+                                // Nested Menu Item
+                                if (collapsed) {
+                                    // Collapsed State: Dropdown/Popover
+                                    return (
+                                        <DropdownMenu key={route.label}>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button
+                                                    variant="ghost"
+                                                    className={cn(
+                                                        "w-full p-2 h-auto justify-center",
+                                                        isActive ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-sidebar-accent/50"
+                                                    )}
+                                                >
+                                                    <route.icon className={cn("h-5 w-5", route.color)} />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent side="right" className="w-56 bg-popover border-border p-2" align="start">
+                                                <div className="px-2 py-1.5 text-sm font-semibold text-foreground">
+                                                    {route.label}
+                                                </div>
+                                                <div className="h-px bg-border my-1" />
+                                                {route.children?.map(child => (
+                                                    child.href && checkRouteAccess(child, role, permissions) && (
+                                                        <Link key={child.href} href={child.href}>
+                                                            <DropdownMenuItem className={cn("cursor-pointer focus:bg-sidebar-accent", pathname === child.href && "bg-sidebar-accent")}>
+                                                                <child.icon className={cn("mr-2 h-4 w-4", child.color)} />
+                                                                <span>{child.label}</span>
+                                                            </DropdownMenuItem>
+                                                        </Link>
+                                                    )
+                                                ))}
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    )
+                                }
+
+                                // Expanded State: Collapsible
+                                return (
+                                    <Collapsible key={route.label} defaultOpen={isActive} className="group/collapsible">
+                                        <CollapsibleTrigger asChild>
+                                            <Button
+                                                variant="ghost"
+                                                className={cn(
+                                                    "w-full justify-between hover:bg-sidebar-accent/50 text-muted-foreground hover:text-sidebar-foreground",
+                                                    isActive && "text-sidebar-foreground"
+                                                )}
+                                            >
+                                                <div className="flex items-center">
+                                                    <route.icon className={cn("mr-3 h-5 w-5", route.color)} />
+                                                    {route.label}
+                                                </div>
+                                                <ChevronRight className="h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                                            </Button>
+                                        </CollapsibleTrigger>
+                                        <CollapsibleContent className="pl-4 space-y-1 pt-1">
+                                            {route.children?.map(child => (
+                                                child.href && checkRouteAccess(child, role, permissions) && (
+                                                    <Link
+                                                        key={child.href}
+                                                        href={child.href}
+                                                        className={cn(
+                                                            "text-sm group flex p-2 w-full font-medium cursor-pointer rounded-lg transition duration-200 justify-start",
+                                                            pathname === child.href
+                                                                ? "bg-primary/10 text-primary" // Different active style for nested
+                                                                : "text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+                                                        )}
+                                                    >
+                                                        <div className="flex items-center flex-1">
+                                                            <child.icon className={cn(
+                                                                "h-4 w-4 mr-3", // Smaller icon for nested
+                                                                child.color
+                                                            )} />
+                                                            {child.label}
+                                                        </div>
+                                                    </Link>
+                                                )
+                                            ))}
+                                        </CollapsibleContent>
+                                    </Collapsible>
+                                )
+                            }
+
+                            // Single Menu Item
                             const linkContent = (
                                 <Link
                                     key={route.href}
-                                    href={route.href}
+                                    href={route.href!}
                                     className={cn(
                                         "text-sm group flex p-3 w-full font-medium cursor-pointer rounded-lg transition duration-200",
                                         collapsed ? "justify-center" : "justify-start",
@@ -102,29 +201,6 @@ export function Sidebar({ className, isMobile = false, userAccess }: { className
                     </div>
                 </div>
 
-                {/* Collapse Toggle Button - only show on desktop */}
-                {!isMobile && (
-                    <div className={cn("px-3", collapsed && "px-2")}>
-                        <Button
-                            variant="ghost"
-                            onClick={toggleSidebar}
-                            className={cn(
-                                "w-full text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50",
-                                collapsed ? "justify-center px-0" : "justify-start"
-                            )}
-                        >
-                            {collapsed ? (
-                                <ChevronRight className="h-5 w-5" />
-                            ) : (
-                                <>
-                                    <ChevronLeft className="h-5 w-5 mr-3" />
-                                    Collapse
-                                </>
-                            )}
-                        </Button>
-                    </div>
-                )}
-
                 <div className={cn("px-3", collapsed && "px-2")}>
                     <form action="/auth/signout" method="post">
                         {collapsed ? (
@@ -139,6 +215,7 @@ export function Sidebar({ className, isMobile = false, userAccess }: { className
                                 </TooltipContent>
                             </Tooltip>
                         ) : (
+
                             <Button variant="ghost" className="w-full justify-start text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50">
                                 <LogOut className="h-5 w-5 mr-3" />
                                 Logout

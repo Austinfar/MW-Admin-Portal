@@ -52,6 +52,9 @@ export async function getCurrentUserAccess(): Promise<UserAccess | null> {
             can_view_commissions: 'all',
             can_manage_payment_links: 'all',
             can_view_team_settings: 'all',
+            // Payroll permissions - super_admin has all
+            can_approve_payroll: true,
+            can_create_manual_commissions: true,
             ...permissions
         };
     }
@@ -69,6 +72,9 @@ export async function getCurrentUserAccess(): Promise<UserAccess | null> {
             can_view_commissions: permissions.can_view_commissions ?? 'all',
             can_manage_payment_links: permissions.can_manage_payment_links ?? 'all',
             can_view_team_settings: permissions.can_view_team_settings ?? 'all',
+            // Payroll permissions - admins need explicit grant, default false
+            can_approve_payroll: permissions.can_approve_payroll ?? false,
+            can_create_manual_commissions: permissions.can_create_manual_commissions ?? false,
         };
     }
     // USERS (Coaches/Sales): Default to explicit permissions or restrict

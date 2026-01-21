@@ -8,6 +8,7 @@ import { UserPermissions, ViewScope, UserAccess } from '@/lib/auth-utils'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { Loader2, Save } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
 
 interface PermissionTogglesProps {
     userId: string
@@ -16,7 +17,8 @@ interface PermissionTogglesProps {
     onUpdate?: () => void
 }
 
-const PERMISSION_CONFIG: Record<keyof UserPermissions, { label: string, options: ViewScope[] }> = {
+// ViewScope-based permissions (none/own/all)
+const VIEW_PERMISSION_CONFIG: Record<string, { label: string, options: ViewScope[] }> = {
     can_view_dashboard: { label: 'View Dashboard', options: ['none', 'all'] },
     can_view_clients: { label: 'View Clients Tab', options: ['none', 'own', 'all'] },
     can_view_leads: { label: 'View Leads Tab', options: ['none', 'own', 'all'] },
@@ -29,16 +31,38 @@ const PERMISSION_CONFIG: Record<keyof UserPermissions, { label: string, options:
     can_view_team_settings: { label: 'View Team Settings', options: ['none', 'all'] }
 }
 
+// Boolean-based permissions (on/off)
+const BOOLEAN_PERMISSION_CONFIG: Record<string, { label: string, description: string }> = {
+    can_approve_payroll: {
+        label: 'Approve Payroll',
+        description: 'Can approve payroll runs for payout (requires different user than creator)'
+    },
+    can_create_manual_commissions: {
+        label: 'Create Manual Commissions',
+        description: 'Can add manual commission entries and adjustments'
+    }
+}
+
 export function PermissionToggles({ userId, role, initialPermissions, onUpdate }: PermissionTogglesProps) {
     // Initialize permissions with defaults based on role to match backend logic
     const [permissions, setPermissions] = useState<UserPermissions>(() => {
         const defaults: UserPermissions = {}
         const isDefaultAll = role === 'admin' || role === 'super_admin'
 
-        Object.keys(PERMISSION_CONFIG).forEach(key => {
+        // ViewScope permissions
+        Object.keys(VIEW_PERMISSION_CONFIG).forEach(key => {
             const k = key as keyof UserPermissions
-            // If explicit permission exists, use it. Otherwise use role default.
             defaults[k] = initialPermissions[k] || (isDefaultAll ? 'all' : 'none')
+        })
+
+        // Boolean permissions (super_admin gets all, others need explicit grant)
+        Object.keys(BOOLEAN_PERMISSION_CONFIG).forEach(key => {
+            const k = key as keyof UserPermissions
+            if (role === 'super_admin') {
+                defaults[k] = true
+            } else {
+                defaults[k] = initialPermissions[k] ?? false
+            }
         })
 
         return defaults
@@ -46,7 +70,12 @@ export function PermissionToggles({ userId, role, initialPermissions, onUpdate }
     const [isSaving, setIsSaving] = useState(false)
     const [hasChanges, setHasChanges] = useState(false)
 
-    const handleLocalChange = (key: keyof UserPermissions, value: ViewScope) => {
+    const handleViewScopeChange = (key: keyof UserPermissions, value: ViewScope) => {
+        setPermissions(prev => ({ ...prev, [key]: value }))
+        setHasChanges(true)
+    }
+
+    const handleBooleanChange = (key: keyof UserPermissions, value: boolean) => {
         setPermissions(prev => ({ ...prev, [key]: value }))
         setHasChanges(true)
     }
@@ -79,8 +108,10 @@ export function PermissionToggles({ userId, role, initialPermissions, onUpdate }
 
     return (
         <div className="space-y-6">
+            {/* ViewScope Permissions */}
             <div className="space-y-3">
-                {Object.entries(PERMISSION_CONFIG).map(([key, config]) => {
+                <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider">View Permissions</h4>
+                {Object.entries(VIEW_PERMISSION_CONFIG).map(([key, config]) => {
                     const permKey = key as keyof UserPermissions;
                     const currentValue = (permissions[permKey] as ViewScope) || 'none';
 
@@ -98,7 +129,7 @@ export function PermissionToggles({ userId, role, initialPermissions, onUpdate }
                                     <button
                                         key={option}
                                         type="button"
-                                        onClick={() => handleLocalChange(permKey, option)}
+                                        onClick={() => handleViewScopeChange(permKey, option)}
                                         disabled={isSaving}
                                         className={cn(
                                             "flex-1 text-xs py-1.5 px-3 rounded-md transition-all font-medium text-center",
@@ -114,6 +145,40 @@ export function PermissionToggles({ userId, role, initialPermissions, onUpdate }
                         </div>
                     )
                 })}
+            </div>
+
+            {/* Boolean Permissions (Admin-specific) */}
+            <div className="space-y-3">
+                <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider">Payroll Permissions</h4>
+                {Object.entries(BOOLEAN_PERMISSION_CONFIG).map(([key, config]) => {
+                    const permKey = key as keyof UserPermissions;
+                    const currentValue = permissions[permKey] === true;
+
+                    return (
+                        <div
+                            key={key}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] transition-colors"
+                        >
+                            <div className="flex-1">
+                                <Label htmlFor={`${userId}-${key}`} className="font-medium text-sm text-gray-300">
+                                    {config.label}
+                                </Label>
+                                <p className="text-xs text-gray-500 mt-0.5">{config.description}</p>
+                            </div>
+
+                            <Switch
+                                id={`${userId}-${key}`}
+                                checked={currentValue}
+                                onCheckedChange={(checked) => handleBooleanChange(permKey, checked)}
+                                disabled={isSaving || role === 'super_admin'} // Super admins always have these
+                                className="data-[state=checked]:bg-emerald-600"
+                            />
+                        </div>
+                    )
+                })}
+                {role === 'super_admin' && (
+                    <p className="text-xs text-gray-500 italic">Super admins automatically have all payroll permissions.</p>
+                )}
             </div>
 
             <div className="flex items-center justify-between pt-4 border-t border-white/10">
