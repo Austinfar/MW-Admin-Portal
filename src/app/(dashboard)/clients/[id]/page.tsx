@@ -17,6 +17,7 @@ import { ClientDetailsCard } from '@/components/clients/ClientDetailsCard'
 import { ClientNotes } from '@/components/clients/ClientNotes'
 import { ClientActivityTimeline } from '@/components/clients/ClientActivityTimeline'
 import { ClientSalesCalls } from '@/components/clients/ClientSalesCalls'
+import { AgreementSection } from '@/components/clients/AgreementSection'
 import { getClientPayments } from '@/lib/actions/payments'
 import { OnboardingTask } from '@/types/onboarding'
 import { Note } from '@/types/client'
@@ -175,6 +176,12 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
                             </div>
                         </CardContent>
                     </Card>
+
+                    <AgreementSection
+                        clientId={client.id}
+                        clientName={client.name}
+                        hasGhlContactId={Boolean(client.ghl_contact_id)}
+                    />
 
                     <Card className="bg-card/40 border-primary/5 backdrop-blur-sm">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

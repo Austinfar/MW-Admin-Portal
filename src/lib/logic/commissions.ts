@@ -31,17 +31,37 @@ interface LedgerEntry {
  * 3. Appointment Setter: 10% of GROSS (if client has appointment_setter_id)
  * 4. Referrer: $100 flat (if in commission_splits, first payment only)
  * 5. Assigned Coach: 50-70% of REMAINDER (what's left after fees + other commissions)
+ *
+ * ATOMIC LOCKING: Uses database-level locking to prevent race conditions
+ * when multiple webhooks arrive simultaneously.
  */
-export async function calculateCommission(paymentId: string): Promise<void> {
+export async function calculateCommission(paymentId: string): Promise<{ success: boolean; skipped?: boolean; reason?: string }> {
     const supabase = createAdminClient()
 
-    // 1. Fetch Payment with Client details
+    // 1. ATOMIC LOCK: Prevent duplicate processing via database-level lock
+    // This atomically checks AND sets commission_calculated = true
+    const { data: locked, error: lockError } = await supabase.rpc('lock_payment_for_commission', {
+        p_payment_id: paymentId
+    })
+
+    if (lockError) {
+        console.error('Commission Calc: Lock acquisition failed', lockError)
+        return { success: false, reason: 'lock_failed' }
+    }
+
+    if (!locked) {
+        console.log('Commission Calc: Already calculated/locked for payment', paymentId)
+        return { success: true, skipped: true, reason: 'already_calculated' }
+    }
+
+    // 2. Fetch Payment with Client details
     const { data: payment, error: paymentError } = await supabase
         .from('payments')
         .select(`
             *,
             client:clients (
                 id,
+                name,
                 start_date,
                 lead_source,
                 is_resign,
@@ -55,13 +75,9 @@ export async function calculateCommission(paymentId: string): Promise<void> {
 
     if (paymentError || !payment) {
         console.error('Commission Calc: Payment not found', paymentError)
-        return
-    }
-
-    // Skip if commission already calculated
-    if (payment.commission_calculated) {
-        console.log('Commission Calc: Already calculated for payment', paymentId)
-        return
+        // Unlock since we couldn't process
+        await supabase.rpc('unlock_payment_for_commission', { p_payment_id: paymentId })
+        return { success: false, reason: 'payment_not_found' }
     }
 
     const client = payment.client
@@ -69,10 +85,25 @@ export async function calculateCommission(paymentId: string): Promise<void> {
         // Mark payment for review if no client matched
         await supabase
             .from('payments')
-            .update({ review_status: 'pending_review' })
+            .update({
+                review_status: 'pending_review',
+                review_flagged_at: new Date().toISOString()
+            })
             .eq('id', paymentId)
-        console.log('Commission Calc: No client found, marking for review')
-        return
+
+        // Create admin notification for orphan payment
+        await supabase.from('feature_notifications').insert({
+            type: 'orphan_payment',
+            category: 'alert',
+            message: `Unmatched payment: $${payment.amount} from ${payment.client_email || 'unknown'} - needs manual review`,
+            target_role: 'admin',
+            is_read: false
+        })
+
+        console.log('Commission Calc: No client found, marked for review with admin notification')
+        // Unlock since no commission was created
+        await supabase.rpc('unlock_payment_for_commission', { p_payment_id: paymentId })
+        return { success: false, reason: 'no_client_matched' }
     }
 
     // 2. Find the Payment Schedule to get commission_splits
@@ -101,7 +132,7 @@ export async function calculateCommission(paymentId: string): Promise<void> {
 
     if (afterFees <= 0) {
         console.log('Commission Calc: Amount after fees <= 0, skipping')
-        return
+        return { success: true, skipped: true, reason: 'amount_after_fees_zero' }
     }
 
     const periodStart = getPayoutPeriodStart(new Date(payment.created_at || payment.created))
@@ -251,7 +282,9 @@ export async function calculateCommission(paymentId: string): Promise<void> {
 
         if (insertError) {
             console.error('Commission Calc: Failed to insert ledger entries', insertError)
-            return
+            // Unlock the payment so it can be retried
+            await supabase.rpc('unlock_payment_for_commission', { p_payment_id: paymentId })
+            return { success: false, reason: 'ledger_insert_failed' }
         }
 
         console.log(`Commission Calc: Created ${ledgerEntries.length} ledger entries for payment ${paymentId}`)
@@ -262,16 +295,18 @@ export async function calculateCommission(paymentId: string): Promise<void> {
         }
     }
 
-    // 11. Mark payment as processed
-    await supabase
-        .from('payments')
-        .update({ commission_calculated: true })
-        .eq('id', paymentId)
+    // Note: commission_calculated is already set to true by lock_payment_for_commission
+    console.log(`Commission Calc: Successfully processed payment ${paymentId}`)
+    return { success: true }
 }
 
 /**
  * Determine which coach should receive commission based on coach_history and payment date.
  * Handles coach transitions - payments go to whoever was active at payment time.
+ *
+ * BOUNDARY LOGIC: Uses INCLUSIVE start, EXCLUSIVE end dates.
+ * If coach A ends Jan 15 and coach B starts Jan 15, payment on Jan 15 goes to coach B.
+ * Sorted by start_date descending (most recent first) for deterministic behavior.
  */
 function getActiveCoachForPayment(
     client: { assigned_coach_id: string | null; coach_history?: Array<{ coach_id: string; start_date: string; end_date: string | null }> },
@@ -280,12 +315,18 @@ function getActiveCoachForPayment(
     const paymentDate = new Date(payment.created_at || payment.created || new Date())
     const coachHistory = client.coach_history || []
 
+    // Sort by start_date descending - most recent first for deterministic behavior
+    const sortedHistory = [...coachHistory].sort((a, b) =>
+        new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
+    )
+
     // Check history for the coach active at payment time
-    for (const entry of coachHistory) {
+    for (const entry of sortedHistory) {
         const startDate = new Date(entry.start_date)
         const endDate = entry.end_date ? new Date(entry.end_date) : null
 
-        if (paymentDate >= startDate && (!endDate || paymentDate <= endDate)) {
+        // INCLUSIVE start, EXCLUSIVE end (paymentDate < endDate, not <=)
+        if (paymentDate >= startDate && (!endDate || paymentDate < endDate)) {
             return entry.coach_id
         }
     }
@@ -355,19 +396,32 @@ async function getCoachCommissionRate(
 
 /**
  * Check if this is the first payment for a client/schedule.
+ *
+ * ATOMIC: Uses PostgreSQL advisory lock to prevent race conditions
+ * when multiple payments process simultaneously for a new client.
  */
 async function checkIsFirstPayment(
     supabase: ReturnType<typeof createAdminClient>,
     clientId: string,
     _scheduleId: string | null | undefined // Reserved for future per-schedule tracking
 ): Promise<boolean> {
-    // Check if any previous commission entries exist for this client
-    const { count } = await supabase
-        .from('commission_ledger')
-        .select('id', { count: 'exact', head: true })
-        .eq('client_id', clientId)
+    // Use atomic advisory lock to prevent race condition with simultaneous payments
+    const { data: isFirst, error } = await supabase.rpc('check_is_first_payment', {
+        p_client_id: clientId
+    })
 
-    return (count || 0) === 0
+    if (error) {
+        console.error('checkIsFirstPayment: RPC failed, falling back to query', error)
+        // Fallback to simple query (less safe but better than failing)
+        const { count } = await supabase
+            .from('commission_ledger')
+            .select('id', { count: 'exact', head: true })
+            .eq('client_id', clientId)
+            .neq('status', 'void') // Exclude voided entries
+        return (count || 0) === 0
+    }
+
+    return isFirst ?? false
 }
 
 /**
@@ -455,4 +509,141 @@ export function getCurrentPayPeriod(): { start: Date; end: Date; payoutDate: Dat
     const payoutDate = getPayoutDate(start)
 
     return { start, end, payoutDate }
+}
+
+/**
+ * Recalculate commission for a payment.
+ * This voids existing commission entries and re-runs the calculation.
+ *
+ * Use cases:
+ * - Admin needs to correct a miscalculated commission
+ * - Client data was updated after initial calculation
+ * - Manual matching of orphan payment to client
+ *
+ * @param paymentId - The payment ID to recalculate
+ * @param userId - The user performing the recalculation (for audit log)
+ * @param reason - Why the recalculation is being performed
+ */
+export async function recalculateCommission(
+    paymentId: string,
+    userId: string,
+    reason: string
+): Promise<{ success: boolean; voided: number; error?: string }> {
+    const supabase = createAdminClient()
+
+    try {
+        // 1. Void existing commission entries for this payment
+        const { data: voidedCount, error: voidError } = await supabase.rpc('void_commission_entries', {
+            p_payment_id: paymentId
+        })
+
+        if (voidError) {
+            console.error('Recalculate: Failed to void entries', voidError)
+            return { success: false, voided: 0, error: 'Failed to void existing entries' }
+        }
+
+        console.log(`Recalculate: Voided ${voidedCount || 0} existing entries for payment ${paymentId}`)
+
+        // 2. Unlock the payment so it can be recalculated
+        const { error: unlockError } = await supabase.rpc('unlock_payment_for_commission', {
+            p_payment_id: paymentId
+        })
+
+        if (unlockError) {
+            console.error('Recalculate: Failed to unlock payment', unlockError)
+            return { success: false, voided: voidedCount || 0, error: 'Failed to unlock payment' }
+        }
+
+        // 3. Log the recalculation for audit trail
+        await supabase.from('activity_logs').insert({
+            action: 'commission_recalculate',
+            entity_type: 'payment',
+            entity_id: paymentId,
+            user_id: userId,
+            metadata: {
+                reason,
+                voided_entries: voidedCount || 0,
+                timestamp: new Date().toISOString()
+            }
+        })
+
+        // 4. Re-run commission calculation
+        const result = await calculateCommission(paymentId)
+
+        if (!result.success) {
+            return { success: false, voided: voidedCount || 0, error: result.reason }
+        }
+
+        console.log(`Recalculate: Successfully recalculated commission for payment ${paymentId}`)
+        return { success: true, voided: voidedCount || 0 }
+
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error'
+        console.error('Recalculate: Unexpected error', error)
+        return { success: false, voided: 0, error: message }
+    }
+}
+
+/**
+ * Calculate commission for an orphan payment after manual client matching.
+ * This is called when an admin matches an unmatched payment to a client.
+ *
+ * @param paymentId - The payment ID that was matched
+ * @param clientId - The client ID it was matched to
+ * @param userId - The user performing the match (for audit log)
+ */
+export async function calculateCommissionAfterMatch(
+    paymentId: string,
+    clientId: string,
+    userId: string
+): Promise<{ success: boolean; error?: string }> {
+    const supabase = createAdminClient()
+
+    try {
+        // 1. Update the payment with the client ID
+        const { error: updateError } = await supabase
+            .from('payments')
+            .update({
+                client_id: clientId,
+                review_status: 'matched',
+                matched_by: userId,
+                matched_at: new Date().toISOString()
+            })
+            .eq('id', paymentId)
+
+        if (updateError) {
+            console.error('CalculateAfterMatch: Failed to update payment', updateError)
+            return { success: false, error: 'Failed to link payment to client' }
+        }
+
+        // 2. Unlock if previously locked (in case of retry)
+        await supabase.rpc('unlock_payment_for_commission', { p_payment_id: paymentId })
+
+        // 3. Log the match for audit trail
+        await supabase.from('activity_logs').insert({
+            action: 'payment_manual_match',
+            entity_type: 'payment',
+            entity_id: paymentId,
+            user_id: userId,
+            metadata: {
+                client_id: clientId,
+                timestamp: new Date().toISOString()
+            }
+        })
+
+        // 4. Calculate commission
+        const result = await calculateCommission(paymentId)
+
+        if (!result.success && result.reason !== 'already_calculated') {
+            return { success: false, error: result.reason }
+        }
+
+        console.log(`CalculateAfterMatch: Successfully processed payment ${paymentId} for client ${clientId}`)
+        return { success: true }
+
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error'
+        console.error('CalculateAfterMatch: Unexpected error', error)
+        return { success: false, error: message }
+    }
 }

@@ -4,6 +4,7 @@ import { stripe } from '@/lib/stripe'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { calculateCommission } from '@/lib/logic/commissions'
 import { handleRefund, handleDisputeCreated, handleDisputeClosed } from '@/lib/logic/chargebacks'
+import { executePostPaymentFlow, type PostPaymentContext } from '@/lib/logic/post-payment'
 import Stripe from 'stripe'
 
 export async function POST(req: Request) {
@@ -138,8 +139,19 @@ export async function POST(req: Request) {
 
                     // 2. Update Payment Schedule status and Stripe Details
                     const expandedSession = await stripe.checkout.sessions.retrieve(session.id, {
-                        expand: ['payment_intent', 'setup_intent']
+                        expand: ['payment_intent', 'setup_intent', 'line_items.data.price.product']
                     })
+
+                    // Extract product name from line items
+                    let stripeProductName: string | null = null
+                    const lineItems = expandedSession.line_items?.data
+                    if (lineItems && lineItems.length > 0) {
+                        const firstItem = lineItems[0]
+                        const product = firstItem.price?.product
+                        if (product && typeof product !== 'string' && 'name' in product) {
+                            stripeProductName = product.name || null
+                        }
+                    }
 
                     const customerId = typeof expandedSession.customer === 'string'
                         ? expandedSession.customer
@@ -164,6 +176,7 @@ export async function POST(req: Request) {
                             stripe_payment_method_id: paymentMethodId,
                             client_email: customerEmail || undefined,
                             status: 'active',
+                            ...(stripeProductName && { stripe_product_name: stripeProductName }),
                         })
                         .eq('id', scheduleId)
 
@@ -328,6 +341,86 @@ export async function POST(req: Request) {
                                 })
                             }
                         }
+                    }
+
+                    // 5. POST-PAYMENT FLOW (Slack notifications, internal notifications)
+                    if (finalClientId) {
+                        // Fetch the client to get all needed info for notifications
+                        const { data: clientForNotif } = await supabase
+                            .from('clients')
+                            .select('name, email, appointment_setter_id, ghl_contact_id')
+                            .eq('id', finalClientId)
+                            .single()
+
+                        // Fetch lead description if this was a conversion (for client goal)
+                        let clientGoal: string | null = null
+                        if (schedule.lead_id) {
+                            const { data: leadData } = await supabase
+                                .from('leads')
+                                .select('description')
+                                .eq('id', schedule.lead_id)
+                                .single()
+                            clientGoal = leadData?.description || null
+                        }
+
+                        // Use Stripe product name (fresh or stored), fall back to plan_name or client type
+                        let programName = stripeProductName || schedule.stripe_product_name || schedule.plan_name || 'Coaching Program'
+                        if (!stripeProductName && !schedule.stripe_product_name && schedule.client_type_id) {
+                            const { data: ct } = await supabase
+                                .from('client_types')
+                                .select('name')
+                                .eq('id', schedule.client_type_id)
+                                .single()
+                            if (ct?.name) programName = ct.name
+                        }
+
+                        // Extract referrer from commission splits
+                        const commissionSplits = (schedule.commission_splits as Array<{ userId: string; role: string }>) || []
+                        const referrer = commissionSplits.find(s => s.role === 'Referrer')
+
+                        // Calculate payment amounts
+                        // amount = initial payment in cents, total_amount = full program value
+                        const initialPaymentCents = schedule.amount || 0
+                        const totalProgramCents = schedule.total_amount || initialPaymentCents
+                        const remainingCents = schedule.remaining_amount || 0
+                        const cashCollectedCents = totalProgramCents - remainingCents
+
+                        // Parse program length from program_term field (stored as string like "6")
+                        const programLengthMonths = schedule.program_term
+                            ? parseInt(schedule.program_term, 10) || null
+                            : null
+
+                        // Map payment_type to our enum
+                        const paymentType = schedule.payment_type === 'paid_in_full'
+                            ? 'paid_in_full' as const
+                            : schedule.payment_type === 'split'
+                                ? 'split' as const
+                                : schedule.payment_type === 'recurring' || schedule.payment_type === 'subscription'
+                                    ? 'subscription' as const
+                                    : null
+
+                        const postPaymentContext: PostPaymentContext = {
+                            clientId: finalClientId,
+                            clientName: clientForNotif?.name || 'Client',
+                            clientEmail: clientForNotif?.email || customerEmail || '',
+                            clientGoal,
+                            programName,
+                            paymentAmount: initialPaymentCents / 100, // Convert cents to dollars
+                            totalProgramValue: totalProgramCents / 100,
+                            cashCollected: cashCollectedCents / 100,
+                            programLengthMonths,
+                            paymentType,
+                            closerId: schedule.metadata?.salesCloserId || null,
+                            setterId: clientForNotif?.appointment_setter_id || null,
+                            referrerId: referrer?.userId || null,
+                            coachId: schedule.assigned_coach_id || null,
+                            commissions: [], // Commissions are calculated separately via payment_intent.succeeded
+                        }
+
+                        // Execute async (don't block webhook response)
+                        executePostPaymentFlow(postPaymentContext).catch(err => {
+                            console.error('[Post-Payment] Flow error:', err)
+                        })
                     }
 
                 } catch (err) {

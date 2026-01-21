@@ -14,8 +14,7 @@ interface BusinessDashboardProps {
 export function BusinessDashboard({ metrics }: BusinessDashboardProps) {
 
     // Helper to format currency
-    // Note: Aggregates from analytics.ts are in Dollars. 
-    // Individual payments from DB are in Cents.
+    // All amounts (aggregates and individual payments) are in dollars
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('en-US', {
             style: 'currency',

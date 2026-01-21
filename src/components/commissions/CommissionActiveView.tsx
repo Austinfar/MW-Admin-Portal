@@ -14,6 +14,7 @@ import { CoachCommissionSummary } from './CoachCommissionSummary';
 import { PeriodSelector, PayPeriod, generatePayPeriods } from './PeriodSelector';
 import { AdjustmentsList } from './AdjustmentsList';
 import { AddManualCommissionDialog } from './AddManualCommissionDialog';
+import { UncalculatedPaymentsAlert } from './UncalculatedPaymentsAlert';
 import { toast } from 'sonner';
 
 export function CommissionActiveView() {
@@ -165,6 +166,9 @@ export function CommissionActiveView() {
         <div className="space-y-6">
             {/* Summary Cards (for coaches) */}
             <CoachCommissionSummary />
+
+            {/* Admin Alert: Uncalculated Payments */}
+            {isAdmin && <UncalculatedPaymentsAlert />}
 
             {/* Filters Bar */}
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">

@@ -51,6 +51,7 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
     // General Tab
     const [role, setRole] = useState(user.role);
     const [jobTitle, setJobTitle] = useState<string>(user.job_title || 'coach');
+    const [slackUserId, setSlackUserId] = useState<string>(user.slack_user_id || '');
 
     // Account Tab (Super Admin only)
     const [name, setName] = useState(user.name || '');
@@ -145,10 +146,13 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
 
             // Update Account Details (Super Admin only)
             if (isSuperAdmin) {
-                const detailsToUpdate: { name?: string; email?: string; password?: string } = {};
+                const detailsToUpdate: { name?: string; email?: string; password?: string; slack_user_id?: string | null } = {};
                 if (name !== user.name) detailsToUpdate.name = name;
                 if (email !== user.email) detailsToUpdate.email = email;
                 if (newPassword) detailsToUpdate.password = newPassword;
+                if (slackUserId !== (user.slack_user_id || '')) {
+                    detailsToUpdate.slack_user_id = slackUserId || null;
+                }
 
                 if (Object.keys(detailsToUpdate).length > 0) {
                     const detailsResult = await updateUserDetails(user.id, detailsToUpdate);
@@ -382,6 +386,21 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
                                 </SelectContent>
                             </Select>
                             <p className="text-xs text-muted-foreground">Super Admin bypasses all permission checks; Admin has management capabilities; Standard respects individual toggles</p>
+                        </div>
+
+                        {/* Slack Integration */}
+                        <div className="space-y-2">
+                            <Label htmlFor="slackUserId">Slack User ID</Label>
+                            <Input
+                                id="slackUserId"
+                                value={slackUserId}
+                                onChange={(e) => setSlackUserId(e.target.value)}
+                                className="bg-white/5 border-white/10"
+                                placeholder="e.g., U0G9QF9C6"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                For Slack notifications. Find it in Slack: Profile → ⋯ → Copy member ID
+                            </p>
                         </div>
                     </TabsContent>
 

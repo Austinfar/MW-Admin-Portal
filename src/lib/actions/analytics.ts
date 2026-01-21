@@ -48,7 +48,7 @@ async function _getBusinessMetrics(): Promise<BusinessMetrics> {
     // 3. Calculate Total Revenue & Avg Payment (Only Succeeded)
     const succeededPayments = allPayments.filter(p => p.status === 'succeeded');
 
-    // Assuming standard Stripe cents for 'amount' column
+    // Database stores amounts in dollars (converted from Stripe cents during sync)
     const totalRevenue = succeededPayments.reduce((sum, p) => sum + p.amount, 0);
     const averagePayment = succeededPayments.length > 0 ? totalRevenue / succeededPayments.length : 0;
 
@@ -67,6 +67,7 @@ async function _getBusinessMetrics(): Promise<BusinessMetrics> {
         const d = new Date(p.payment_date || p.created_at);
         const key = d.toISOString().slice(0, 7);
         if (monthlyRevenueMap.has(key)) {
+            // Amounts already in dollars
             monthlyRevenueMap.set(key, (monthlyRevenueMap.get(key) || 0) + p.amount);
         }
     });
@@ -96,7 +97,8 @@ async function _getBusinessMetrics(): Promise<BusinessMetrics> {
 
     let mrr = 0;
     activeSubs.forEach(sub => {
-        let amount = sub.amount / 100; // Cents to Dollars
+        // Database stores amounts in dollars
+        let amount = sub.amount;
         if (sub.interval === 'year') {
             amount = amount / 12;
         }
@@ -140,7 +142,7 @@ async function _getBusinessMetrics(): Promise<BusinessMetrics> {
             const d = new Date(p.payment_date || p.created_at);
             return d.getFullYear() === targetYear;
         })
-        .reduce((sum, p) => sum + p.amount, 0); // Amount is already in Dollars
+        .reduce((sum, p) => sum + p.amount, 0); // Amounts already in dollars
 
     let projectedFutureRevenue = 0;
 
