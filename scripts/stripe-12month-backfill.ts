@@ -54,9 +54,9 @@ const stats: BackfillStats = {
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
- * Calculate estimated Stripe fee (2.9% + $0.30)
+ * Calculate estimated Stripe fee (2.9% + $0.30) - used as fallback only
  */
-function calculateStripeFee(amountInCents: number): number {
+function calculateEstimatedStripeFee(amountInCents: number): number {
     const amountInDollars = amountInCents / 100;
     return Number((amountInDollars * 0.029 + 0.30).toFixed(2));
 }
@@ -212,7 +212,7 @@ async function importPaymentIntents(
             const params: Stripe.PaymentIntentListParams = {
                 limit: 100,
                 created: { gte: TWELVE_MONTHS_AGO },
-                expand: ['data.latest_charge']
+                expand: ['data.latest_charge.balance_transaction']
             };
 
             if (startingAfter) {
@@ -251,12 +251,21 @@ async function importPaymentIntents(
                     }
                 }
 
-                const stripeFee = calculateStripeFee(payment.amount);
+                // Get actual Stripe fee from balance transaction, fall back to estimate
+                let stripeFee: number;
+                const charge = payment.latest_charge as Stripe.Charge | null;
+                const balanceTransaction = charge?.balance_transaction as Stripe.BalanceTransaction | null;
+
+                if (balanceTransaction && typeof balanceTransaction !== 'string') {
+                    stripeFee = balanceTransaction.fee / 100;
+                } else {
+                    stripeFee = calculateEstimatedStripeFee(payment.amount);
+                }
+
                 const netAmount = (payment.amount / 100) - stripeFee;
 
                 let clientEmail = payment.receipt_email;
-                if (!clientEmail && payment.latest_charge) {
-                    const charge = payment.latest_charge as Stripe.Charge;
+                if (!clientEmail && charge) {
                     clientEmail = charge.billing_details?.email || null;
                 }
 
@@ -264,8 +273,7 @@ async function importPaymentIntents(
                 let refundAmount = 0;
                 let status = mapStripeStatus(payment.status);
 
-                if (payment.latest_charge) {
-                    const charge = payment.latest_charge as Stripe.Charge;
+                if (charge) {
                     if (charge.refunded) {
                         status = 'refunded';
                         refundAmount = (charge.amount_refunded || 0) / 100;
@@ -345,7 +353,8 @@ async function importStandaloneCharges(
         try {
             const params: Stripe.ChargeListParams = {
                 limit: 100,
-                created: { gte: TWELVE_MONTHS_AGO }
+                created: { gte: TWELVE_MONTHS_AGO },
+                expand: ['data.balance_transaction']
             };
 
             if (startingAfter) {
@@ -381,7 +390,16 @@ async function importStandaloneCharges(
                     }
                 }
 
-                const stripeFee = calculateStripeFee(charge.amount);
+                // Get actual Stripe fee from balance transaction, fall back to estimate
+                let stripeFee: number;
+                const balanceTransaction = charge.balance_transaction as Stripe.BalanceTransaction | null;
+
+                if (balanceTransaction && typeof balanceTransaction !== 'string') {
+                    stripeFee = balanceTransaction.fee / 100;
+                } else {
+                    stripeFee = calculateEstimatedStripeFee(charge.amount);
+                }
+
                 const netAmount = (charge.amount / 100) - stripeFee;
 
                 let status = mapStripeStatus(charge.status);

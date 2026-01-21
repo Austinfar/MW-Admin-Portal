@@ -16,13 +16,16 @@ export async function getCurrentUserAccess(): Promise<UserAccess | null> {
 
     const admin = createAdminClient();
 
+    // Check if we can bypass RLS
     const { data, error } = await admin
         .from('users')
         .select('role, permissions, first_name, last_name, job_title')
         .eq('id', user.id)
         .single();
 
-    if (error || !data) return null;
+    if (error || !data) {
+        return null;
+    }
 
     const role = (data.role || 'user') as UserAccess['role'];
     const first_name = data.first_name || '';

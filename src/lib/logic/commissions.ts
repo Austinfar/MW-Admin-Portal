@@ -19,6 +19,7 @@ interface LedgerEntry {
     source_schedule_id: string | null
     status: 'pending'
     payout_period_start: string
+    transaction_date: string
     calculation_basis: Record<string, unknown>
 }
 
@@ -135,7 +136,9 @@ export async function calculateCommission(paymentId: string): Promise<{ success:
         return { success: true, skipped: true, reason: 'amount_after_fees_zero' }
     }
 
-    const periodStart = getPayoutPeriodStart(new Date(payment.created_at || payment.created))
+    const paymentDate = new Date(payment.payment_date || payment.created_at || payment.created)
+    const periodStart = getPayoutPeriodStart(paymentDate)
+    const transactionDate = paymentDate.toISOString()
     const ledgerEntries: LedgerEntry[] = []
 
     // Track deductions from the pool for coach calculation
@@ -167,6 +170,7 @@ export async function calculateCommission(paymentId: string): Promise<{ success:
                 source_schedule_id: schedule?.id || null,
                 status: 'pending',
                 payout_period_start: periodStart,
+                transaction_date: transactionDate,
                 calculation_basis: {
                     type: 'closer',
                     rate: closerRate,
@@ -193,6 +197,7 @@ export async function calculateCommission(paymentId: string): Promise<{ success:
                     source_schedule_id: schedule?.id || null,
                     status: 'pending',
                     payout_period_start: periodStart,
+                    transaction_date: transactionDate,
                     calculation_basis: {
                         type: 'referrer',
                         flat_fee: referrerFlatFee,
@@ -223,6 +228,7 @@ export async function calculateCommission(paymentId: string): Promise<{ success:
             source_schedule_id: schedule?.id || null,
             status: 'pending',
             payout_period_start: periodStart,
+            transaction_date: transactionDate,
             calculation_basis: {
                 type: 'setter',
                 rate: setterRate,
@@ -256,6 +262,7 @@ export async function calculateCommission(paymentId: string): Promise<{ success:
                     source_schedule_id: schedule?.id || null,
                     status: 'pending',
                     payout_period_start: periodStart,
+                    transaction_date: transactionDate,
                     calculation_basis: {
                         type: 'coach',
                         rate: coachRate,

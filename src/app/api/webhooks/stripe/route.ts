@@ -44,11 +44,35 @@ export async function POST(req: Request) {
             const stripeCustomerId = typeof paymentIntent.customer === 'string' ? paymentIntent.customer : paymentIntent.customer?.id || null
             const description = paymentIntent.description
 
-            // Attempt to find client email from receipt_email or metadata or customer object if I fetched it.
-            // PaymentIntent usually has receipt_email.
+            // Fetch the actual Stripe fee from the charge's balance transaction
+            let stripeFee: number | null = null
             let clientEmail = paymentIntent.receipt_email
 
-            // If no email on PI, maybe try to fetch customer? (Optional optimization)
+            try {
+                // Fetch the PaymentIntent with expanded charge and balance_transaction
+                const expandedPI = await stripe.paymentIntents.retrieve(paymentIntent.id, {
+                    expand: ['latest_charge.balance_transaction']
+                })
+
+                const charge = expandedPI.latest_charge as Stripe.Charge | null
+                if (charge) {
+                    // Get email from charge if not on payment intent
+                    if (!clientEmail) {
+                        clientEmail = charge.billing_details?.email || charge.receipt_email || null
+                    }
+
+                    // Get actual fee from balance transaction
+                    const balanceTransaction = charge.balance_transaction as Stripe.BalanceTransaction | null
+                    if (balanceTransaction && typeof balanceTransaction !== 'string') {
+                        // Fee is in cents, convert to dollars
+                        stripeFee = balanceTransaction.fee / 100
+                    }
+                }
+            } catch (fetchError) {
+                console.error('Error fetching expanded payment intent for fee:', fetchError)
+                // Fall back to estimated fee if we can't fetch the real one
+                stripeFee = Number((amount * 0.029 + 0.30).toFixed(2))
+            }
 
             let clientId: string | null = null
 
@@ -82,10 +106,15 @@ export async function POST(req: Request) {
                 }
             }
 
+            // Calculate net amount
+            const netAmount = stripeFee !== null ? amount - stripeFee : null
+
             // Upsert Payment
             const { error } = await supabase.from('payments').upsert({
                 stripe_payment_id: stripePaymentId,
                 amount,
+                stripe_fee: stripeFee,
+                net_amount: netAmount,
                 currency,
                 status,
                 created,
@@ -473,13 +502,37 @@ export async function POST(req: Request) {
 
                     // Create payment record
                     const amount = (invoice.amount_paid || 0) / 100
-                    // Estimate Stripe fee if not available (2.9% + $0.30)
-                    const stripeFee = amount * 0.029 + 0.30
 
                     const paymentIntentId = invoice.payment_intent
                     const stripePaymentId = typeof paymentIntentId === 'string'
                         ? paymentIntentId
                         : paymentIntentId?.id || invoice.id
+
+                    // Fetch actual Stripe fee from charge's balance transaction
+                    let stripeFee: number | null = null
+                    try {
+                        if (typeof paymentIntentId === 'string') {
+                            const expandedPI = await stripe.paymentIntents.retrieve(paymentIntentId, {
+                                expand: ['latest_charge.balance_transaction']
+                            })
+                            const charge = expandedPI.latest_charge as Stripe.Charge | null
+                            if (charge) {
+                                const balanceTransaction = charge.balance_transaction as Stripe.BalanceTransaction | null
+                                if (balanceTransaction && typeof balanceTransaction !== 'string') {
+                                    stripeFee = balanceTransaction.fee / 100
+                                }
+                            }
+                        }
+                    } catch (fetchError) {
+                        console.error('Error fetching actual Stripe fee for invoice:', fetchError)
+                    }
+
+                    // Fall back to estimated fee if we couldn't fetch the real one
+                    if (stripeFee === null) {
+                        stripeFee = Number((amount * 0.029 + 0.30).toFixed(2))
+                    }
+
+                    const netAmount = amount - stripeFee
 
                     // Check if payment already exists (avoid duplicates)
                     const { data: existingPayment } = await supabase
@@ -497,6 +550,7 @@ export async function POST(req: Request) {
                                 stripe_payment_id: stripePaymentId,
                                 amount,
                                 stripe_fee: stripeFee,
+                                net_amount: netAmount,
                                 currency: invoice.currency,
                                 status: 'succeeded',
                                 client_id: config.client_id,
