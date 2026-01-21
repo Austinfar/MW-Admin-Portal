@@ -192,7 +192,7 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
                             </div>
                             <Separator className="my-4 bg-primary/10" />
                             <h4 className="text-sm font-medium mb-3 text-muted-foreground">Recent Transactions</h4>
-                            <ClientPaymentsList payments={payments} />
+                            <ClientPaymentsList payments={payments} clientId={client.id} stripeCustomerId={client.stripe_customer_id} />
                         </CardContent>
                     </Card>
                 </div>
