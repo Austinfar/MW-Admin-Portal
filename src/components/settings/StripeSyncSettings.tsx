@@ -4,8 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { Loader2, CheckCircle2, AlertCircle, Users, CreditCard, Receipt } from 'lucide-react';
-import { syncAllClientsWithStripe, syncStripePayments, getStripeSyncStatus } from '@/lib/actions/stripe-sync';
+import { Loader2, CheckCircle2, AlertCircle, Users, CreditCard, Receipt, DollarSign, History } from 'lucide-react';
+import { syncAllClientsWithStripe, syncStripePayments, getStripeSyncStatus, backfillStripeFees, fullStripeBackfill } from '@/lib/actions/stripe-sync';
 
 interface SyncStatus {
     state: 'idle' | 'syncing' | 'completed' | 'error';
@@ -19,8 +19,12 @@ interface SyncStatus {
 export function StripeSyncSettings() {
     const [isSyncingClients, setIsSyncingClients] = useState(false);
     const [isSyncingPayments, setIsSyncingPayments] = useState(false);
+    const [isBackfillingFees, setIsBackfillingFees] = useState(false);
+    const [isFullBackfill, setIsFullBackfill] = useState(false);
     const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
     const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+    const isAnyOperationRunning = isSyncingClients || isSyncingPayments || isBackfillingFees || isFullBackfill;
 
     const checkStatus = async () => {
         try {
@@ -31,9 +35,9 @@ export function StripeSyncSettings() {
         }
     };
 
-    // Start polling when syncing begins
+    // Start polling when any sync operation begins
     useEffect(() => {
-        if (isSyncingClients) {
+        if (isAnyOperationRunning) {
             pollIntervalRef.current = setInterval(checkStatus, 500);
             checkStatus();
         } else {
@@ -48,7 +52,7 @@ export function StripeSyncSettings() {
                 clearInterval(pollIntervalRef.current);
             }
         };
-    }, [isSyncingClients]);
+    }, [isAnyOperationRunning]);
 
     const handleSyncClients = async () => {
         setIsSyncingClients(true);
@@ -94,11 +98,66 @@ export function StripeSyncSettings() {
         }
     };
 
+    const handleBackfillFees = async () => {
+        setIsBackfillingFees(true);
+        setSyncStatus({ state: 'syncing', total: 0, processed: 0, synced: 0, errors: 0, last_updated: new Date().toISOString() });
+
+        try {
+            const result = await backfillStripeFees();
+
+            if (result.error) {
+                toast.error('Fee backfill failed', { description: result.error });
+            } else {
+                toast.success('Fee backfill completed!', {
+                    description: `Updated ${result.updated} payments with actual Stripe fees. ${result.skipped} already correct.`
+                });
+            }
+        } catch (error) {
+            toast.error('An unexpected error occurred');
+            console.error(error);
+        } finally {
+            await checkStatus();
+            setIsBackfillingFees(false);
+        }
+    };
+
+    const handleFullBackfill = async () => {
+        setIsFullBackfill(true);
+        setSyncStatus({ state: 'syncing', total: 0, processed: 0, synced: 0, errors: 0, last_updated: new Date().toISOString() });
+
+        try {
+            const result = await fullStripeBackfill();
+
+            if (!result.success) {
+                toast.error('Full backfill failed', { description: `${result.errors} errors occurred` });
+            } else {
+                toast.success('Full backfill completed!', {
+                    description: `Imported ${result.synced} payments. ${result.linked} linked to clients, ${result.orphaned} need review.`
+                });
+            }
+        } catch (error) {
+            toast.error('An unexpected error occurred');
+            console.error(error);
+        } finally {
+            await checkStatus();
+            setIsFullBackfill(false);
+        }
+    };
+
     // Calculate progress
     const percent = (syncStatus && syncStatus.total > 0) ? Math.round((syncStatus.processed / syncStatus.total) * 100) : 0;
-    const showProgress = isSyncingClients || syncStatus?.state === 'syncing';
+    const showProgress = isAnyOperationRunning || syncStatus?.state === 'syncing';
     const isCompleted = syncStatus?.state === 'completed';
     const hasErrors = (syncStatus?.errors || 0) > 0;
+
+    // Determine current operation label
+    const getOperationLabel = () => {
+        if (isSyncingClients) return 'Syncing customers with Stripe...';
+        if (isSyncingPayments) return 'Syncing payments...';
+        if (isBackfillingFees) return 'Backfilling Stripe fees...';
+        if (isFullBackfill) return 'Running full 12-month backfill...';
+        return 'Syncing with Stripe...';
+    };
 
     return (
         <Card className="bg-card/40 border-primary/5">
@@ -118,7 +177,7 @@ export function StripeSyncSettings() {
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                                <span className="text-sm font-medium">Syncing with Stripe...</span>
+                                <span className="text-sm font-medium">{getOperationLabel()}</span>
                             </div>
                             <span className="text-sm font-mono text-primary">
                                 {percent}%
@@ -175,15 +234,17 @@ export function StripeSyncSettings() {
                     </div>
                 )}
 
-                <div className="text-sm text-muted-foreground">
+                <div className="text-sm text-muted-foreground space-y-1">
                     <p><strong>Sync Customers:</strong> Looks up each client's email in Stripe and links their Stripe customer ID.</p>
-                    <p className="mt-1"><strong>Sync Payments:</strong> Imports the last 30 days of payments from Stripe.</p>
+                    <p><strong>Sync Payments:</strong> Imports the last 30 days of payments from Stripe.</p>
+                    <p><strong>Backfill Fees:</strong> Updates existing payments with actual Stripe fees (replaces estimated fees).</p>
+                    <p><strong>Full Backfill:</strong> Imports all payments from the last 12 months with actual fees.</p>
                 </div>
             </CardContent>
             <CardFooter className="gap-2 flex-wrap">
                 <Button
                     onClick={handleSyncClients}
-                    disabled={isSyncingClients || isSyncingPayments}
+                    disabled={isAnyOperationRunning}
                     className="gap-2"
                 >
                     {isSyncingClients ? (
@@ -201,7 +262,7 @@ export function StripeSyncSettings() {
                 <Button
                     variant="outline"
                     onClick={handleSyncPayments}
-                    disabled={isSyncingClients || isSyncingPayments}
+                    disabled={isAnyOperationRunning}
                     className="gap-2"
                 >
                     {isSyncingPayments ? (
@@ -213,6 +274,42 @@ export function StripeSyncSettings() {
                         <>
                             <Receipt className="h-4 w-4" />
                             Sync Payments (30 days)
+                        </>
+                    )}
+                </Button>
+                <Button
+                    variant="outline"
+                    onClick={handleBackfillFees}
+                    disabled={isAnyOperationRunning}
+                    className="gap-2"
+                >
+                    {isBackfillingFees ? (
+                        <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Backfilling Fees...
+                        </>
+                    ) : (
+                        <>
+                            <DollarSign className="h-4 w-4" />
+                            Backfill Fees
+                        </>
+                    )}
+                </Button>
+                <Button
+                    variant="outline"
+                    onClick={handleFullBackfill}
+                    disabled={isAnyOperationRunning}
+                    className="gap-2"
+                >
+                    {isFullBackfill ? (
+                        <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Running Full Backfill...
+                        </>
+                    ) : (
+                        <>
+                            <History className="h-4 w-4" />
+                            Full Backfill (12 mo)
                         </>
                     )}
                 </Button>
