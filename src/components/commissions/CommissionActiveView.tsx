@@ -2,27 +2,31 @@
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { getPayrollStats, PayrollStats, lockPayrollRun } from '@/lib/actions/payroll';
+import { getPayrollStats, PayrollStats, createPayrollDraft } from '@/lib/actions/payroll';
 import { formatCurrency, cn } from '@/lib/utils';
-import { Loader2, Calendar as CalendarIcon, Download, AlertCircle, Search, Lock } from 'lucide-react';
+import { Loader2, Download, AlertCircle, Search, FileText, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DateRange } from 'react-day-picker';
-import { startOfMonth, endOfMonth, format, isSameDay } from 'date-fns';
-import { DateRangePicker } from '@/components/ui/date-range-picker';
+import { startOfMonth, endOfMonth, format } from 'date-fns';
 import { CommissionLedgerTable } from './CommissionLedgerTable';
-import { getPayrollPeriods, PayrollPeriod } from '@/lib/payroll-utils';
+import { CoachCommissionSummary } from './CoachCommissionSummary';
+import { PeriodSelector, PayPeriod, generatePayPeriods } from './PeriodSelector';
+import { AdjustmentsList } from './AdjustmentsList';
+import { AddManualCommissionDialog } from './AddManualCommissionDialog';
+import { toast } from 'sonner';
 
 export function CommissionActiveView() {
     const [stats, setStats] = useState<PayrollStats | null>(null);
     const [loading, setLoading] = useState(true);
-    const [date, setDate] = useState<DateRange | undefined>({
-        from: startOfMonth(new Date()),
-        to: endOfMonth(new Date()),
+    const [selectedPeriod, setSelectedPeriod] = useState<PayPeriod | null>(null);
+    const [date, setDate] = useState<DateRange | undefined>(() => {
+        const periods = generatePayPeriods(1);
+        if (periods.length > 0) {
+            return { from: periods[0].start, to: periods[0].end };
+        }
+        return { from: startOfMonth(new Date()), to: endOfMonth(new Date()) };
     });
-
-    // Payroll Period Logic
-    const [periods, setPeriods] = useState<PayrollPeriod[]>([]);
 
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCoach, setSelectedCoach] = useState<string>('all');
@@ -31,9 +35,16 @@ export function CommissionActiveView() {
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
     const [coaches, setCoaches] = useState<{ id: string, name: string | null }[]>([]);
     const [isAdmin, setIsAdmin] = useState(false);
+    const [isCreatingDraft, setIsCreatingDraft] = useState(false);
+    const [isManualCommissionOpen, setIsManualCommissionOpen] = useState(false);
 
+    // Initialize period and check admin
     useEffect(() => {
-        setPeriods(getPayrollPeriods());
+        const periods = generatePayPeriods(1);
+        if (periods.length > 0) {
+            setSelectedPeriod(periods[0]);
+            setDate({ from: periods[0].start, to: periods[0].end });
+        }
 
         async function checkAdminAndFetchCoaches() {
             try {
@@ -43,7 +54,6 @@ export function CommissionActiveView() {
                     setIsAdmin(true);
                     const { users } = await getAllUsers();
                     if (users) {
-                        // Filter by job_title for coaches/closers (people who earn commissions)
                         setCoaches(users.filter(u =>
                             u.job_title === 'coach' ||
                             u.job_title === 'head_coach' ||
@@ -58,6 +68,7 @@ export function CommissionActiveView() {
         checkAdminAndFetchCoaches();
     }, []);
 
+    // Fetch stats when filters change
     useEffect(() => {
         const timeoutId = setTimeout(() => {
             fetchStats();
@@ -85,6 +96,11 @@ export function CommissionActiveView() {
         }
     }
 
+    function handlePeriodChange(period: PayPeriod) {
+        setSelectedPeriod(period);
+        setDate({ from: period.start, to: period.end });
+    }
+
     async function handleExport() {
         if (!date?.from || !date?.to) return;
         try {
@@ -105,52 +121,67 @@ export function CommissionActiveView() {
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+            toast.success('Export downloaded');
         } catch (error) {
             console.error('Failed to export', error);
-            alert('Failed to generate export');
+            toast.error('Failed to generate export');
         }
     }
 
-    async function handleLockPayroll() {
+    async function handleCreateDraft() {
         if (!date?.from || !date?.to) return;
-        if (!confirm('Are you sure you want to lock this period? This will create a "Draft" payroll run containing all pending commissions in this date range.')) return;
 
+        // Calculate payout date: Next Friday after period end
+        const periodEnd = new Date(date.to);
+        const daysUntilFriday = (5 - periodEnd.getDay() + 7) % 7 || 7;
+        const payoutDate = new Date(periodEnd);
+        payoutDate.setDate(periodEnd.getDate() + daysUntilFriday);
+
+        setIsCreatingDraft(true);
         try {
-            setLoading(true);
-            // Calculate payout date: Next Friday after period end
-            const periodEnd = new Date(date.to);
-            const daysUntilFriday = (5 - periodEnd.getDay() + 7) % 7 || 7; // 5 is Friday
-            const payoutDate = new Date(periodEnd);
-            payoutDate.setDate(periodEnd.getDate() + daysUntilFriday);
+            const result = await createPayrollDraft(date.from, date.to, payoutDate);
 
-            await lockPayrollRun(date.from, date.to, payoutDate);
-            alert('Payroll Run Created! Check the History tab.');
-            fetchStats(); // Refresh logic
+            if (result.error) {
+                toast.error(result.error);
+                return;
+            }
+
+            toast.success('Payroll submitted for payment! Check the History tab.');
+            fetchStats();
         } catch (e) {
             console.error(e);
-            alert('Failed to lock payroll');
+            toast.error('Failed to create payroll draft');
         } finally {
-            setLoading(false);
+            setIsCreatingDraft(false);
         }
     }
+
+    // Calculate pending amount
+    const pendingAmount = stats?.entries
+        .filter(e => e.status === 'pending')
+        .reduce((sum, e) => sum + Number(e.commission_amount), 0) || 0;
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                {/* Filters */}
-                <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
+            {/* Summary Cards (for coaches) */}
+            <CoachCommissionSummary />
+
+            {/* Filters Bar */}
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                <div className="flex flex-wrap gap-2 w-full lg:w-auto">
                     <div className="relative">
                         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                         <Input
                             placeholder="Search client/coach..."
-                            className="pl-8 w-[200px] bg-white/5 border-white/10"
+                            className="pl-8 w-[180px] bg-white/5 border-white/10"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
                     </div>
+
                     {isAdmin && (
                         <select
-                            className="h-10 px-3 py-2 bg-[#1a1a1a] border border-white/10 rounded-md text-sm text-white focus:outline-none focus:ring-2 focus:ring-yellow-500/50"
+                            className="h-10 px-3 py-2 bg-[#1a1a1a] border border-white/10 rounded-md text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                             value={selectedCoach}
                             onChange={(e) => setSelectedCoach(e.target.value)}
                         >
@@ -160,35 +191,56 @@ export function CommissionActiveView() {
                             ))}
                         </select>
                     )}
+
                     <select
-                        className="h-10 px-3 py-2 bg-[#1a1a1a] border border-white/10 rounded-md text-sm text-white focus:outline-none focus:ring-2 focus:ring-yellow-500/50"
+                        className="h-10 px-3 py-2 bg-[#1a1a1a] border border-white/10 rounded-md text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                         value={selectedClientType}
                         onChange={(e) => setSelectedClientType(e.target.value)}
                     >
                         <option value="all">All Sources</option>
                         <option value="company_driven">Company Driven</option>
-                        <option value="self_gen">Self Generated</option>
+                        <option value="coach_driven">Coach Driven</option>
                     </select>
 
-                    <DateRangePicker
-                        date={date}
-                        setDate={setDate}
-                        presets={periods.map(p => ({
-                            label: p.label + (p.isCurrent ? ' (Current)' : ''),
-                            date: { from: p.start, to: p.end }
-                        }))}
+                    <PeriodSelector
+                        selectedPeriod={selectedPeriod}
+                        onPeriodChange={handlePeriodChange}
                     />
+                </div>
 
-                    <Button variant="outline" className="bg-white/5 border-white/10 hover:bg-white/10" onClick={handleExport}>
+                <div className="flex gap-2">
+                    <Button
+                        variant="outline"
+                        className="bg-white/5 border-white/10 hover:bg-white/10"
+                        onClick={handleExport}
+                    >
                         <Download className="mr-2 h-4 w-4" />
                         Export
                     </Button>
 
                     {isAdmin && (
-                        <Button className="bg-yellow-500 text-black hover:bg-yellow-400" onClick={handleLockPayroll}>
-                            <Lock className="mr-2 h-4 w-4" />
-                            Lock Period
-                        </Button>
+                        <>
+                            <Button
+                                variant="outline"
+                                className="bg-white/5 border-white/10 hover:bg-white/10"
+                                onClick={() => setIsManualCommissionOpen(true)}
+                            >
+                                <Plus className="mr-2 h-4 w-4" />
+                                Add Manual
+                            </Button>
+                            <Button
+                                className="bg-emerald-600 text-white hover:bg-emerald-500"
+                                onClick={handleCreateDraft}
+                                disabled={isCreatingDraft}
+                            >
+                                {isCreatingDraft ? (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                    <FileText className="mr-2 h-4 w-4" />
+                                )}
+                                Submit for Payment
+                            </Button>
+                        </>
                     )}
                 </div>
             </div>
@@ -199,57 +251,97 @@ export function CommissionActiveView() {
                 </div>
             ) : stats ? (
                 <div className="space-y-6">
-                    {/* Summary Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Quick Stats */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <Card className="bg-card/40 border-white/5 backdrop-blur-sm">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">Total Commission</CardTitle>
-                                <div className="h-4 w-4 text-emerald-500 font-bold">$</div>
+                                <CardTitle className="text-sm font-medium">Period Total</CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold text-emerald-500">{formatCurrency(stats.totalCommission)}</div>
-                                <p className="text-xs text-muted-foreground">Pending + Paid</p>
+                                <div className="text-2xl font-bold text-emerald-500">
+                                    {formatCurrency(stats.totalPayout)}
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    {stats.transactionCount} transactions
+                                </p>
                             </CardContent>
                         </Card>
+
                         <Card className="bg-card/40 border-white/5 backdrop-blur-sm">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">Pending Payout</CardTitle>
-                                <div className="h-4 w-4 text-yellow-500">O</div>
+                                <CardTitle className="text-sm font-medium">Pending</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <div className="text-2xl font-bold text-yellow-500">
-                                    {formatCurrency(stats.entries.filter(e => e.status === 'pending').reduce((sum, e) => sum + Number(e.commission_amount), 0))}
+                                    {formatCurrency(pendingAmount)}
                                 </div>
-                                <p className="text-xs text-muted-foreground">Not yet paid out</p>
+                                <p className="text-xs text-muted-foreground">
+                                    Awaiting payroll
+                                </p>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="bg-card/40 border-white/5 backdrop-blur-sm">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium">Top Earner</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-bold text-purple-500">
+                                    {formatCurrency(stats.summary.topEarner.amount)}
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    {stats.summary.topEarner.name}
+                                </p>
                             </CardContent>
                         </Card>
                     </div>
 
-                    <Card className="bg-card/40 border-white/5 backdrop-blur-sm">
-                        <CardHeader>
-                            <div className="flex items-center justify-between">
-                                <CardTitle>Commission Ledger</CardTitle>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xs text-muted-foreground mr-1">Sort by:</span>
-                                    <button
-                                        className={cn("text-xs px-2 py-1 rounded hover:bg-white/5", sortBy === 'date' && "bg-white/10 text-yellow-500")}
-                                        onClick={() => { setSortBy('date'); setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc'); }}
-                                    >
-                                        Date {sortBy === 'date' && (sortOrder === 'asc' ? '↑' : '↓')}
-                                    </button>
-                                    <button
-                                        className={cn("text-xs px-2 py-1 rounded hover:bg-white/5", sortBy === 'amount' && "bg-white/10 text-yellow-500")}
-                                        onClick={() => { setSortBy('amount'); setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc'); }}
-                                    >
-                                        Amount {sortBy === 'amount' && (sortOrder === 'asc' ? '↑' : '↓')}
-                                    </button>
+                    {/* Main Content Grid */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {/* Ledger Table */}
+                        <Card className="lg:col-span-2 bg-card/40 border-white/5 backdrop-blur-sm">
+                            <CardHeader>
+                                <div className="flex items-center justify-between">
+                                    <CardTitle>Commission Ledger</CardTitle>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-muted-foreground mr-1">Sort:</span>
+                                        <button
+                                            className={cn(
+                                                "text-xs px-2 py-1 rounded hover:bg-white/5",
+                                                sortBy === 'date' && "bg-white/10 text-emerald-500"
+                                            )}
+                                            onClick={() => {
+                                                setSortBy('date');
+                                                setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                                            }}
+                                        >
+                                            Date {sortBy === 'date' && (sortOrder === 'asc' ? '↑' : '↓')}
+                                        </button>
+                                        <button
+                                            className={cn(
+                                                "text-xs px-2 py-1 rounded hover:bg-white/5",
+                                                sortBy === 'amount' && "bg-white/10 text-emerald-500"
+                                            )}
+                                            onClick={() => {
+                                                setSortBy('amount');
+                                                setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                                            }}
+                                        >
+                                            Amount {sortBy === 'amount' && (sortOrder === 'asc' ? '↑' : '↓')}
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent>
-                            <CommissionLedgerTable entries={stats.entries} />
-                        </CardContent>
-                    </Card>
+                            </CardHeader>
+                            <CardContent>
+                                <CommissionLedgerTable entries={stats.entries} showRecipient={isAdmin} />
+                            </CardContent>
+                        </Card>
+
+                        {/* Adjustments Sidebar */}
+                        <div className="space-y-6">
+                            <AdjustmentsList limit={5} />
+                        </div>
+                    </div>
                 </div>
             ) : (
                 <div className="flex flex-col items-center justify-center p-12 text-muted-foreground">
@@ -257,6 +349,13 @@ export function CommissionActiveView() {
                     <p>Failed to load data.</p>
                 </div>
             )}
+
+            {/* Manual Commission Dialog */}
+            <AddManualCommissionDialog
+                open={isManualCommissionOpen}
+                onOpenChange={setIsManualCommissionOpen}
+                onSuccess={fetchStats}
+            />
         </div>
     );
 }

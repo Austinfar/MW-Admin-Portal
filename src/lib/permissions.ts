@@ -15,6 +15,9 @@ export interface UserPermissions {
     can_view_commissions?: ViewScope;
     can_manage_payment_links?: ViewScope;
     can_view_team_settings?: ViewScope;
+    // Payroll permissions
+    can_approve_payroll?: boolean;
+    can_create_manual_commissions?: boolean;
     [key: string]: string | boolean | undefined;
 }
 

@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { format } from 'date-fns'
-import { Mail, Phone, ArrowRight, Trash2, MessageSquare, Activity, ExternalLink } from 'lucide-react'
+import { Mail, Phone, ArrowRight, Trash2, MessageSquare, Activity, ExternalLink, UserPlus, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
-import { convertLeadToClient, deleteLead } from '@/lib/actions/lead-actions'
+import { convertLeadToClient, deleteLead, updateLeadAppointmentSetter } from '@/lib/actions/lead-actions'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 
@@ -27,6 +27,12 @@ interface Lead {
     ghl_contact_id: string | null
     created_at: string
     updated_at: string
+    booked_by_user_id: string | null
+}
+
+interface SimpleUser {
+    id: string
+    name: string | null
 }
 
 interface LeadDetailClientProps {
@@ -36,6 +42,53 @@ interface LeadDetailClientProps {
 
 export function LeadDetailClient({ lead, ghlLocationId }: LeadDetailClientProps) {
     const router = useRouter()
+    const [users, setUsers] = useState<SimpleUser[]>([])
+    const [loadingUsers, setLoadingUsers] = useState(true)
+    const [selectedSetter, setSelectedSetter] = useState<string>(lead.booked_by_user_id || '')
+    const [updatingSetter, setUpdatingSetter] = useState(false)
+    const [isAdmin, setIsAdmin] = useState(false)
+
+    // Fetch users for appointment setter dropdown and check if current user is admin
+    useEffect(() => {
+        async function init() {
+            try {
+                const { getAllUsers, getCurrentUserProfile } = await import('@/lib/actions/profile')
+                const profile = await getCurrentUserProfile()
+                if (profile?.role === 'super_admin' || profile?.role === 'admin') {
+                    setIsAdmin(true)
+                    const { users: allUsers } = await getAllUsers()
+                    if (allUsers) {
+                        // Filter to setters/appointment setters or just show all for flexibility
+                        setUsers(allUsers.map(u => ({ id: u.id, name: u.name })))
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to fetch users', e)
+            } finally {
+                setLoadingUsers(false)
+            }
+        }
+        init()
+    }, [])
+
+    const handleSetterChange = async (newSetterId: string) => {
+        setSelectedSetter(newSetterId)
+        setUpdatingSetter(true)
+        try {
+            const result = await updateLeadAppointmentSetter(lead.id, newSetterId || null)
+            if (result.error) {
+                toast.error(result.error)
+                setSelectedSetter(lead.booked_by_user_id || '')
+            } else {
+                toast.success('Appointment setter updated')
+            }
+        } catch (e) {
+            toast.error('Failed to update appointment setter')
+            setSelectedSetter(lead.booked_by_user_id || '')
+        } finally {
+            setUpdatingSetter(false)
+        }
+    }
 
     const getStatusColor = (status: string) => {
         const styles: Record<string, string> = {
@@ -145,10 +198,38 @@ export function LeadDetailClient({ lead, ghlLocationId }: LeadDetailClientProps)
                                 <span className="text-sm text-muted-foreground">Created</span>
                                 <span className="text-sm font-medium">{format(new Date(lead.created_at), 'MMM d, yyyy')}</span>
                             </div>
-                            <div className="flex justify-between items-center pb-2">
+                            <div className="flex justify-between items-center border-b border-primary/5 pb-2">
                                 <span className="text-sm text-muted-foreground">Last Updated</span>
                                 <span className="text-sm font-medium">{format(new Date(lead.updated_at), 'MMM d, yyyy')}</span>
                             </div>
+                            {isAdmin && (
+                                <div className="flex justify-between items-center pb-2">
+                                    <span className="text-sm text-muted-foreground flex items-center gap-1">
+                                        <UserPlus className="h-3 w-3" />
+                                        Appt. Setter
+                                    </span>
+                                    {loadingUsers ? (
+                                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                    ) : (
+                                        <div className="relative">
+                                            <select
+                                                className="h-8 px-2 py-1 bg-[#1a1a1a] border border-white/10 rounded-md text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 disabled:opacity-50"
+                                                value={selectedSetter}
+                                                onChange={(e) => handleSetterChange(e.target.value)}
+                                                disabled={updatingSetter}
+                                            >
+                                                <option value="">None</option>
+                                                {users.map(u => (
+                                                    <option key={u.id} value={u.id}>{u.name || 'Unknown'}</option>
+                                                ))}
+                                            </select>
+                                            {updatingSetter && (
+                                                <Loader2 className="absolute right-6 top-2 h-3 w-3 animate-spin text-emerald-500" />
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
 

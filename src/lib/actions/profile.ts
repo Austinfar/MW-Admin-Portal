@@ -18,6 +18,7 @@ export interface UserProfile {
     commission_rate: number | null;
     is_active: boolean;
     created_at: string;
+    permissions?: UserPermissions;
 }
 
 export interface User {

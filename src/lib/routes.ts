@@ -4,9 +4,10 @@ import { UserPermissions } from '@/lib/auth-utils'
 export interface AppRoute {
     label: string
     icon?: any // using generic type to avoid strict icon typing issues in config
-    href: string
+    href?: string // Optional for parent items
     color?: string
     permission?: keyof UserPermissions
+    children?: AppRoute[]
 }
 
 // Ordered list of routes - used for Sidebar AND for "Smart Redirect" priority
@@ -19,61 +20,84 @@ export const APP_ROUTES: AppRoute[] = [
         permission: 'can_view_dashboard'
     },
     {
-        label: 'Sales Floor',
-        icon: Calendar,
-        href: '/sales-floor',
-        color: 'text-yellow-500',
-        permission: 'can_view_sales_floor'
+        label: 'Sales',
+        icon: DollarSign,
+        color: 'text-green-600',
+        // No permission on parent, visible if children are visible
+        children: [
+            {
+                label: 'Sales Floor',
+                icon: Calendar,
+                href: '/sales-floor',
+                color: 'text-yellow-500',
+                permission: 'can_view_sales_floor'
+            },
+            {
+                label: 'Leads',
+                icon: Users,
+                href: '/leads',
+                color: 'text-cyan-500',
+                permission: 'can_view_leads'
+            },
+            {
+                label: 'Payment Links',
+                icon: CreditCard,
+                href: '/payment-links',
+                color: 'text-blue-500',
+                permission: 'can_manage_payment_links'
+            },
+            {
+                label: 'Commissions',
+                icon: DollarSign,
+                href: '/commissions',
+                color: 'text-orange-700',
+                permission: 'can_view_commissions'
+            },
+            {
+                label: 'AI Call Analyzer',
+                icon: BrainCircuit,
+                href: '/sales',
+                color: 'text-rose-500',
+                permission: 'can_view_sales'
+            },
+        ]
     },
     {
-        label: 'Leads',
-        icon: Users,
-        href: '/leads',
-        color: 'text-cyan-500',
-        // Note: In sidebar this was can_view_leads. Confirming consistency.
-        permission: 'can_view_leads'
-    },
-    {
-        label: 'Clients',
-        icon: Users,
-        href: '/clients',
+        label: 'Coaching',
+        icon: Users, // Using Users as generic coaching icon
         color: 'text-violet-500',
-        permission: 'can_view_clients'
+        // No permission on parent
+        children: [
+            {
+                label: 'Clients',
+                icon: Users,
+                href: '/clients',
+                color: 'text-violet-500',
+                permission: 'can_view_clients'
+            },
+            {
+                label: 'Onboarding',
+                icon: CheckSquare,
+                href: '/onboarding',
+                color: 'text-pink-700',
+                permission: 'can_view_onboarding'
+            },
+        ]
     },
     {
-        label: 'Onboarding',
-        icon: CheckSquare,
-        href: '/onboarding',
-        color: 'text-pink-700',
-        permission: 'can_view_onboarding'
-    },
-    {
-        label: 'Business',
-        icon: DollarSign,
-        href: '/business',
+        label: 'Admin',
+        icon: LayoutDashboard, // Generic admin icon
         color: 'text-emerald-500',
-        permission: 'can_view_business'
-    },
-    {
-        label: 'Commissions',
-        icon: DollarSign,
-        href: '/commissions',
-        color: 'text-orange-700',
-        permission: 'can_view_commissions'
-    },
-    {
-        label: 'Payment Links',
-        icon: CreditCard,
-        href: '/payment-links',
-        color: 'text-blue-500',
-        permission: 'can_manage_payment_links'
-    },
-    {
-        label: 'AI Sales Call Analyzer',
-        icon: BrainCircuit,
-        href: '/sales',
-        color: 'text-rose-500',
-        permission: 'can_view_sales'
+        permission: 'can_view_business',
+        children: [
+            {
+                label: 'Business',
+                icon: DollarSign,
+                href: '/business',
+                color: 'text-emerald-500',
+                permission: 'can_view_business'
+            },
+        ]
     },
     {
         label: 'Roadmap',
@@ -88,11 +112,15 @@ export const checkRouteAccess = (route: AppRoute, role: string | undefined, perm
     // Super Admin always sees everything
     if (role === 'super_admin') return true
 
-    // If no specific permission is required, it's open (or managed elsewhere)
+    // If it has children, it's visible if AT LEAST ONE child is visible
+    if (route.children && route.children.length > 0) {
+        return route.children.some(child => checkRouteAccess(child, role, permissions))
+    }
+
+    // Normal permission check for leaf nodes
     if (!route.permission) return true
 
     const permValue = permissions[route.permission]
-
     if (permValue === true) return true
     if (permValue === 'all' || permValue === 'own') return true
 
@@ -105,16 +133,29 @@ export const checkRouteAccess = (route: AppRoute, role: string | undefined, perm
  * Defaults to '/roadmap' since it has no permission requirement.
  */
 export const getFirstPermittedRoute = (role: string | undefined, permissions: UserPermissions): string => {
-    // Super Admin always goes to dashboard
+    // Super Admin: Dashboard
     if (role === 'super_admin') return '/dashboard'
 
-    // Find the first route the user has access to
-    for (const route of APP_ROUTES) {
-        if (checkRouteAccess(route, role, permissions)) {
-            return route.href
+    // Recursive helper to find first accessible href
+    const findFirst = (routes: AppRoute[]): string | null => {
+        for (const route of routes) {
+            if (checkRouteAccess(route, role, permissions)) {
+                // If it's a leaf node with href, return it
+                if (route.href) return route.href
+
+                // If it has children, look inside
+                if (route.children) {
+                    const childHref = findFirst(route.children)
+                    if (childHref) return childHref
+                }
+            }
         }
+        return null
     }
 
-    // Fallback to roadmap (which has no permission requirement) or login if something is wrong
+    const first = findFirst(APP_ROUTES)
+    if (first) return first
+
+    // Fallback to roadmap
     return '/roadmap'
 }

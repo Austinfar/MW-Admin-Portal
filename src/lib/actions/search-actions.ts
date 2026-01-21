@@ -102,7 +102,7 @@ export async function searchGlobal(query: string): Promise<GlobalSearchResults> 
     // 3. Search Users (Coaches/Admins) - ONLY IF ADMIN
     let coaches: SearchResult[] = []
 
-    if (profile?.role === 'admin') {
+    if (profile?.role === 'admin' || profile?.role === 'super_admin') {
         const { data: coachesData } = await supabase
             .from('users')
             .select('id, name, email, role')

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { stripe } from '@/lib/stripe'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { calculateCommission } from '@/lib/logic/commissions'
+import { handleRefund, handleDisputeCreated, handleDisputeClosed } from '@/lib/logic/chargebacks'
 import Stripe from 'stripe'
 
 export async function POST(req: Request) {
@@ -188,7 +189,7 @@ export async function POST(req: Request) {
                                     .eq('id', lead.id)
                             }
 
-                            // Insert Client
+                            // Insert Client (copy appointment_setter_id from lead)
                             const { data: newClient, error: clientError } = await supabase
                                 .from('clients')
                                 .insert({
@@ -201,8 +202,15 @@ export async function POST(req: Request) {
                                     client_type_id: schedule.client_type_id,
                                     stripe_customer_id: customerId,
                                     lead_source: 'company_driven', // Or infer from sales_closer
-                                    sold_by_user_id: schedule.metadata?.salesCloserId || null
-                                    // created_at defaults to now
+                                    sold_by_user_id: schedule.metadata?.salesCloserId || null,
+                                    // Copy appointment setter from lead
+                                    appointment_setter_id: (lead as any).booked_by_user_id || null,
+                                    // Initialize coach_history with current coach
+                                    coach_history: schedule.assigned_coach_id ? [{
+                                        coach_id: schedule.assigned_coach_id,
+                                        start_date: new Date().toISOString().split('T')[0],
+                                        end_date: null
+                                    }] : []
                                 })
                                 .select('id')
                                 .single()
@@ -327,7 +335,136 @@ export async function POST(req: Request) {
                 }
             }
         }
-        // Add other events like 'payment_intent.payment_failed' if needed
+        // Handle Refunds
+        if (event.type === 'charge.refunded') {
+            const charge = event.data.object as Stripe.Charge
+            console.log('Processing charge.refunded event')
+            await handleRefund(charge)
+        }
+
+        // Handle Disputes
+        if (event.type === 'charge.dispute.created') {
+            const dispute = event.data.object as Stripe.Dispute
+            console.log('Processing charge.dispute.created event')
+            await handleDisputeCreated(dispute)
+        }
+
+        if (event.type === 'charge.dispute.closed') {
+            const dispute = event.data.object as Stripe.Dispute
+            console.log('Processing charge.dispute.closed event')
+            await handleDisputeClosed(dispute)
+        }
+
+        // Handle subscription invoice payments (for legacy subscriptions)
+        if (event.type === 'invoice.paid') {
+            // Use 'any' to handle different Stripe API versions
+            const invoice = event.data.object as any
+
+            // Only process subscription invoices
+            const subscriptionId = invoice.subscription
+            if (subscriptionId) {
+                const subId = typeof subscriptionId === 'string'
+                    ? subscriptionId
+                    : subscriptionId.id
+
+                // Check if we have commission config for this subscription
+                const { data: config } = await supabase
+                    .from('subscription_commission_config')
+                    .select('*')
+                    .eq('stripe_subscription_id', subId)
+                    .eq('is_active', true)
+                    .single()
+
+                if (config && config.client_id) {
+                    console.log(`Processing invoice.paid for configured subscription ${subId}`)
+
+                    // Create payment record
+                    const amount = (invoice.amount_paid || 0) / 100
+                    // Estimate Stripe fee if not available (2.9% + $0.30)
+                    const stripeFee = amount * 0.029 + 0.30
+
+                    const paymentIntentId = invoice.payment_intent
+                    const stripePaymentId = typeof paymentIntentId === 'string'
+                        ? paymentIntentId
+                        : paymentIntentId?.id || invoice.id
+
+                    // Check if payment already exists (avoid duplicates)
+                    const { data: existingPayment } = await supabase
+                        .from('payments')
+                        .select('id')
+                        .eq('stripe_payment_id', stripePaymentId)
+                        .single()
+
+                    if (existingPayment) {
+                        console.log(`Payment ${stripePaymentId} already exists, skipping`)
+                    } else {
+                        const { data: payment, error: paymentError } = await supabase
+                            .from('payments')
+                            .insert({
+                                stripe_payment_id: stripePaymentId,
+                                amount,
+                                stripe_fee: stripeFee,
+                                currency: invoice.currency,
+                                status: 'succeeded',
+                                client_id: config.client_id,
+                                client_email: invoice.customer_email,
+                                stripe_customer_id: typeof invoice.customer === 'string'
+                                    ? invoice.customer
+                                    : invoice.customer?.id,
+                                description: `Subscription payment: ${invoice.lines?.data?.[0]?.description || 'Recurring'}`,
+                                created: new Date(invoice.created * 1000).toISOString()
+                            })
+                            .select('id')
+                            .single()
+
+                        if (payment && !paymentError) {
+                            // Update client with subscription config settings if not already set
+                            const updates: Record<string, unknown> = {}
+                            if (config.assigned_coach_id) {
+                                updates.assigned_coach_id = config.assigned_coach_id
+                            }
+                            if (config.appointment_setter_id) {
+                                updates.appointment_setter_id = config.appointment_setter_id
+                            }
+                            if (config.lead_source) {
+                                updates.lead_source = config.lead_source
+                            }
+                            if (typeof config.is_resign === 'boolean') {
+                                updates.is_resign = config.is_resign
+                            }
+
+                            if (Object.keys(updates).length > 0) {
+                                await supabase
+                                    .from('clients')
+                                    .update(updates)
+                                    .eq('id', config.client_id)
+                            }
+
+                            // Create a temporary payment_schedule record for commission calculation
+                            // This allows the commission calculator to find the commission_splits
+                            if (config.commission_splits && (config.commission_splits as any[]).length > 0) {
+                                await supabase
+                                    .from('payment_schedules')
+                                    .upsert({
+                                        id: `sub-${subId}`, // Use subscription ID as unique identifier
+                                        client_id: config.client_id,
+                                        assigned_coach_id: config.assigned_coach_id,
+                                        commission_splits: config.commission_splits,
+                                        status: 'active',
+                                        plan_name: `Subscription ${subId}`,
+                                        payment_type: 'recurring',
+                                    }, {
+                                        onConflict: 'id'
+                                    })
+                            }
+
+                            // Trigger commission calculation
+                            await calculateCommission(payment.id)
+                        }
+                    }
+                }
+            }
+        }
     } catch (err: any) {
         console.error('Webhook handler error:', err)
         return new NextResponse('Internal Server Error', { status: 500 })

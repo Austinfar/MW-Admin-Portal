@@ -3,6 +3,7 @@ import { getLeads } from '@/lib/actions/lead-actions'
 import { LeadsTable } from '@/components/leads/LeadsTable'
 import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { SyncGHLButton } from '@/components/leads/SyncGHLButton'
 import { AddLeadDialog } from '@/components/leads/AddLeadDialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { protectRoute } from '@/lib/protect-route'
@@ -17,6 +18,7 @@ export default async function LeadsPage() {
             <div className="flex items-center justify-between space-y-2">
                 <h2 className="text-3xl font-bold tracking-tight text-white">Leads</h2>
                 <div className="flex items-center space-x-2">
+                    <SyncGHLButton />
                     <AddLeadDialog />
                 </div>
             </div>

@@ -27,7 +27,7 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
     const params = await props.params;
     const client = await getClient(params.id)
     const userAccess = await getCurrentUserAccess()
-    const isAdmin = userAccess?.role === 'admin'
+    const isAdmin = userAccess?.role === 'admin' || userAccess?.role === 'super_admin'
 
     const tasksData = await getClientTasks(params.id)
     const tasks = (tasksData || []) as OnboardingTask[]

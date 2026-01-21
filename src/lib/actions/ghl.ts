@@ -6,6 +6,7 @@ import { getAppSettings, updateAppSetting } from '@/lib/actions/app-settings';
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 // Cache file for pipelines (5 min TTL)
 const PIPELINES_CACHE_FILE = join(process.cwd(), '.pipelines-cache.json');
@@ -270,3 +271,88 @@ export async function sendGHLSms(contactId: string, message: string) {
         return { error: 'Internal server error during SMS send' };
     }
 }
+
+export async function syncCallBookedLeads() {
+    const TARGET_PIPELINE_ID = 'b8b4YK6vrZzlMgET6f5w';
+    const TARGET_STAGE_ID = '50fe0592-c82e-46c9-9312-7fdf906c8ecb';
+
+    console.log('[GHL Sync] Starting Call Booked sync...');
+    const client = await getAuthenticatedGHLClient();
+
+    // 1. Fetch opportunities for the pipeline
+    console.log(`[GHL Sync] Fetching opportunities for pipeline: ${TARGET_PIPELINE_ID}`);
+    const { opportunities } = await client.getOpportunities(TARGET_PIPELINE_ID);
+
+    if (!opportunities) {
+        console.error('[GHL Sync] Failed to fetch opportunities');
+        return { error: 'Failed to fetch opportunities' };
+    }
+
+    // 2. Filter for specific stage
+    const callBookedOps = opportunities.filter((op: any) => op.pipelineStageId === TARGET_STAGE_ID);
+    console.log(`[GHL Sync] Found ${opportunities.length} total ops, ${callBookedOps.length} in 'Call Booked' stage.`);
+
+    if (callBookedOps.length === 0) {
+        return { success: true, count: 0, message: 'No contacts found in Call Booked stage' };
+    }
+
+    const supabase = createAdminClient();
+    let syncedCount = 0;
+    let errors = 0;
+
+    for (const op of callBookedOps) {
+        try {
+            if (!op.contact) continue;
+
+            const contact = op.contact;
+            // Map data
+            const leadData = {
+                first_name: contact.firstName || op.name?.split(' ')[0] || 'Unknown',
+                last_name: contact.lastName || op.name?.split(' ').slice(1).join(' ') || '',
+                email: contact.email,
+                phone: contact.phone,
+                description: `Imported from GHL 'Call Booked' stage (Op ID: ${op.id})`,
+                status: 'Appt Set', // Maps to "Call Booked" intent
+                source: 'GHL',
+                updated_at: new Date().toISOString()
+            };
+
+            // Upsert based on email
+            if (leadData.email) {
+                const { data: existing } = await supabase
+                    .from('leads')
+                    .select('id')
+                    .eq('email', leadData.email)
+                    .single();
+
+                if (existing) {
+                    // Update
+                    await supabase
+                        .from('leads')
+                        .update(leadData)
+                        .eq('id', existing.id);
+                    syncedCount++;
+                } else {
+                    // Insert
+                    await supabase
+                        .from('leads')
+                        .insert(leadData);
+                    syncedCount++;
+                }
+            } else {
+                // Insert if no email but has name/phone? 
+                // Assuming we want to capture them.
+                await supabase.from('leads').insert(leadData);
+                syncedCount++;
+            }
+
+        } catch (e) {
+            console.error('[GHL Sync] Error processing op:', op.id, e);
+            errors++;
+        }
+    }
+
+    console.log(`[GHL Sync] Completed. Synced: ${syncedCount}, Errors: ${errors}`);
+    return { success: true, count: syncedCount, errors };
+}
+
