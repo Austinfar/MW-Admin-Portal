@@ -103,6 +103,13 @@
   --sidebar-accent-foreground: oklch(0.98 0 0);
   --sidebar-border: oklch(0.25 0.03 245);
   --sidebar-ring: oklch(0.6 0.2 150);
+
+  /* Glassmorphism Effects */
+  --glass-bg: oklch(0.18 0.02 240 / 0.6);
+  --glass-border: oklch(1 0 0 / 0.08);
+  --glass-border-active: oklch(0.6 0.2 150 / 0.3);
+  --glow-primary: oklch(0.6 0.2 150 / 0.4);
+  --glow-primary-strong: oklch(0.6 0.2 150 / 0.6);
 }
 
 .dark {
@@ -138,6 +145,13 @@
   --sidebar-accent-foreground: oklch(0.98 0 0);
   --sidebar-border: oklch(0.25 0.03 245);
   --sidebar-ring: oklch(0.6 0.2 150);
+
+  /* Glassmorphism Effects */
+  --glass-bg: oklch(0.18 0.02 240 / 0.6);
+  --glass-border: oklch(1 0 0 / 0.08);
+  --glass-border-active: oklch(0.6 0.2 150 / 0.3);
+  --glow-primary: oklch(0.6 0.2 150 / 0.4);
+  --glow-primary-strong: oklch(0.6 0.2 150 / 0.6);
 }
 
 @layer base {
@@ -219,4 +233,31 @@
 
 .rich-text-content .ProseMirror p {
   margin: 0.25rem 0;
+}
+
+/* Glassmorphism Sidebar Animations */
+@keyframes glow-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 6px var(--glow-primary));
+  }
+  50% {
+    filter: drop-shadow(0 0 12px var(--glow-primary-strong));
+  }
+}
+
+@keyframes subtle-glow {
+  0%, 100% {
+    box-shadow: 0 0 15px var(--glow-primary), inset 0 1px 0 var(--glass-border);
+  }
+  50% {
+    box-shadow: 0 0 25px var(--glow-primary-strong), inset 0 1px 0 var(--glass-border);
+  }
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+.animate-subtle-glow {
+  animation: subtle-glow 3s ease-in-out infinite;
 }

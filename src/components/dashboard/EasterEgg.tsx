@@ -55,7 +55,7 @@ export function EasterEgg({ isActive, onComplete }: EasterEggProps) {
             {/* Rising Image */}
             <div className="relative z-20 animate-rise-and-bounce mb-[-50px]">
                 <Image
-                    src="/matt-money.png?v=2"
+                    src="/mat-money.png?v=3"
                     alt="Money Trees"
                     width={700}
                     height={300}

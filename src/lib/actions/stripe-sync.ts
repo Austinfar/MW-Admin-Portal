@@ -302,6 +302,82 @@ export async function syncStripePayments(daysBack: number = 30) {
 }
 
 /**
+ * Sync payments from Stripe for a SINGLE client by their stripe_customer_id
+ */
+export async function syncClientPaymentsFromStripe(clientId: string, stripeCustomerId: string) {
+    if (!stripeCustomerId) {
+        return { error: 'No Stripe customer ID provided', synced: 0 };
+    }
+
+    const supabase = createAdminClient();
+
+    try {
+        // Get all payment intents for this customer
+        const payments = await stripe.paymentIntents.list({
+            customer: stripeCustomerId,
+            limit: 100,
+        });
+
+        let syncedCount = 0;
+
+        for (const payment of payments.data) {
+            let email = payment.receipt_email;
+            const paymentAny = payment as any;
+            if (!email && paymentAny.charges?.data?.[0]?.billing_details?.email) {
+                email = paymentAny.charges.data[0].billing_details.email;
+            }
+
+            const { error } = await supabase.from('payments').upsert({
+                stripe_payment_id: payment.id,
+                amount: payment.amount / 100,
+                currency: payment.currency,
+                status: payment.status,
+                payment_date: new Date(payment.created * 1000).toISOString(),
+                client_email: email ?? null,
+                stripe_customer_id: stripeCustomerId,
+                client_id: clientId,
+                product_name: payment.description,
+            }, {
+                onConflict: 'stripe_payment_id'
+            });
+
+            if (!error) syncedCount++;
+        }
+
+        // Also sync standalone charges
+        const charges = await stripe.charges.list({
+            customer: stripeCustomerId,
+            limit: 100,
+        });
+
+        for (const charge of charges.data) {
+            if (charge.payment_intent) continue;
+
+            const { error } = await supabase.from('payments').upsert({
+                stripe_payment_id: charge.id,
+                amount: charge.amount / 100,
+                currency: charge.currency,
+                status: charge.status === 'succeeded' ? 'succeeded' : charge.status,
+                payment_date: new Date(charge.created * 1000).toISOString(),
+                client_email: charge.billing_details?.email ?? charge.receipt_email ?? null,
+                stripe_customer_id: stripeCustomerId,
+                client_id: clientId,
+                product_name: charge.description,
+            }, {
+                onConflict: 'stripe_payment_id'
+            });
+
+            if (!error) syncedCount++;
+        }
+
+        return { success: true, synced: syncedCount };
+    } catch (error: any) {
+        console.error('[Client Payment Sync] Error:', error);
+        return { error: error.message, synced: 0 };
+    }
+}
+
+/**
  * Sync active subscriptions from Stripe
  */
 export async function syncStripeSubscriptions() {
