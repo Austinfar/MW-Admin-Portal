@@ -83,7 +83,7 @@ export function ClientNotes({ notes, clientId }: ClientNotesProps) {
 
     return (
         <Card className="bg-card/40 border-primary/5 backdrop-blur-sm h-full flex flex-col">
-            <CardHeader className="flex flex-row items-center justify-between pb-4">
+            <CardHeader className="flex flex-row items-center justify-between pb-4 shrink-0">
                 <div>
                     <CardTitle>Notes</CardTitle>
                     <CardDescription>Internal team notes. (2-way sync with GHL @sarah ;))</CardDescription>
@@ -94,7 +94,7 @@ export function ClientNotes({ notes, clientId }: ClientNotesProps) {
                     </Button>
                 )}
             </CardHeader>
-            <CardContent className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
+            <CardContent className="flex-1 overflow-y-auto space-y-4 scrollbar-thin">
                 {isAdding && (
                     <div className="bg-background/50 border rounded-lg p-3 space-y-3 animate-in fade-in slide-in-from-top-2">
                         <Textarea

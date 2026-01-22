@@ -105,13 +105,13 @@ export function ClientSalesCalls({ clientId }: { clientId: string }) {
     }
 
     return (
-        <Card className="bg-card/40 border-primary/5 backdrop-blur-sm h-full">
-            <CardHeader>
+        <Card className="bg-card/40 border-primary/5 backdrop-blur-sm h-full flex flex-col">
+            <CardHeader className="shrink-0">
                 <CardTitle className="flex items-center gap-2">
                     <Phone className="h-5 w-5" /> Sales Calls
                 </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 overflow-y-auto scrollbar-thin">
                 <div className="space-y-4">
                     {logs.map((log) => (
                         <div key={log.id} className="bg-[#1A1A1A] border border-gray-800 rounded-lg p-4 space-y-3">

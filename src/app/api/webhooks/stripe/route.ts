@@ -271,14 +271,12 @@ export async function POST(req: Request) {
                                     .eq('id', scheduleId)
 
                                 // Create "Client Note" from Lead Description if exists
-                                // Assuming we have access to lead description (schema check confirmed description exists)
-                                // We might need to cast description if it's not in the select * (it usually is)
                                 if ((lead as any).description) {
                                     await supabase.from('client_notes').insert({
                                         client_id: finalClientId,
                                         content: `[Lead Note]: ${(lead as any).description}`,
                                         is_pinned: false,
-                                        author_id: schedule.assigned_coach_id  // Assign to coach as fallback author or system
+                                        author_id: schedule.assigned_coach_id
                                     })
                                 }
 
@@ -297,7 +295,7 @@ export async function POST(req: Request) {
                                     .update({ client_id: finalClientId })
                                     .eq('lead_id', lead.id)
 
-                                // Ensure "Lead Created" log exists (Backfill history)
+                                // Ensure "Lead Created" log exists
                                 const { data: existingLeadLog } = await supabase
                                     .from('activity_logs')
                                     .select('id')
@@ -311,11 +309,11 @@ export async function POST(req: Request) {
                                         lead_id: lead.id,
                                         type: 'lead_created',
                                         description: 'Lead Created (Imported History)',
-                                        created_at: lead.created_at, // Preserve original date
+                                        created_at: lead.created_at,
                                     })
                                 }
 
-                                // Mark Lead Converted (or delete)
+                                // Mark Lead Converted
                                 await supabase.from('leads').update({ status: 'converted' }).eq('id', lead.id)
                             }
                         }
@@ -327,6 +325,34 @@ export async function POST(req: Request) {
                             description: `Payment Schedule ${scheduleId} Activated`,
                             metadata: { amount: schedule.total_amount }
                         })
+                    }
+
+                    // CRITICAL FIX: Link the payment to the client
+                    // failed_payment_intent often races ahead of checkout.session.completed
+                    if (finalClientId) {
+                        let paymentIntentId = expandedSession.payment_intent;
+                        if (typeof paymentIntentId !== 'string') {
+                            paymentIntentId = paymentIntentId?.id || null;
+                        }
+
+                        if (paymentIntentId) {
+                            console.log(`Linking payment ${paymentIntentId} to client ${finalClientId}`);
+                            await supabase
+                                .from('payments')
+                                .update({ client_id: finalClientId })
+                                .eq('stripe_payment_id', paymentIntentId);
+
+                            // Also ensure commission is calculated if it was skipped due to missing client
+                            const { data: payRec } = await supabase
+                                .from('payments')
+                                .select('id, commission_calculated')
+                                .eq('stripe_payment_id', paymentIntentId)
+                                .single();
+
+                            if (payRec && !payRec.commission_calculated) {
+                                await calculateCommission(payRec.id);
+                            }
+                        }
                     }
 
                     // 4. ONBOARDING TASK ASSIGNMENT

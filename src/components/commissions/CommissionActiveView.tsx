@@ -14,6 +14,7 @@ import { CoachCommissionSummary } from './CoachCommissionSummary';
 import { PeriodSelector, PayPeriod, generatePayPeriods } from './PeriodSelector';
 import { AdjustmentsList } from './AdjustmentsList';
 import { AddManualCommissionDialog } from './AddManualCommissionDialog';
+import { RecalculateCommissionDialog } from './RecalculateCommissionDialog';
 import { UncalculatedPaymentsAlert } from './UncalculatedPaymentsAlert';
 import { toast } from 'sonner';
 
@@ -38,6 +39,7 @@ export function CommissionActiveView() {
     const [isAdmin, setIsAdmin] = useState(false);
     const [isCreatingDraft, setIsCreatingDraft] = useState(false);
     const [isManualCommissionOpen, setIsManualCommissionOpen] = useState(false);
+    const [isRecalculateOpen, setIsRecalculateOpen] = useState(false);
 
     // Initialize period and check admin
     useEffect(() => {
@@ -244,6 +246,16 @@ export function CommissionActiveView() {
                                 )}
                                 Submit for Payment
                             </Button>
+
+                            <Button
+                                variant="outline"
+                                className="bg-amber-500/10 border-amber-500/20 text-amber-500 hover:bg-amber-500/20"
+                                onClick={() => setIsRecalculateOpen(true)}
+                                disabled={isCreatingDraft}
+                            >
+                                <AlertCircle className="mr-2 h-4 w-4" />
+                                Recalculate Period
+                            </Button>
                         </>
                     )}
                 </div>
@@ -360,6 +372,14 @@ export function CommissionActiveView() {
             <AddManualCommissionDialog
                 open={isManualCommissionOpen}
                 onOpenChange={setIsManualCommissionOpen}
+                onSuccess={fetchStats}
+            />
+
+            {/* Recalculate Dialog */}
+            <RecalculateCommissionDialog
+                open={isRecalculateOpen}
+                onOpenChange={setIsRecalculateOpen}
+                period={selectedPeriod}
                 onSuccess={fetchStats}
             />
         </div>

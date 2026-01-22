@@ -78,11 +78,11 @@ export function ClientActivityTimeline({ client, tasks, payments }: ClientActivi
     }
 
     return (
-        <Card className="bg-card/40 border-primary/5 backdrop-blur-sm h-full overflow-hidden">
-            <CardHeader>
+        <Card className="bg-card/40 border-primary/5 backdrop-blur-sm lg:flex lg:flex-col overflow-hidden">
+            <CardHeader className="shrink-0">
                 <CardTitle>Activity Timeline</CardTitle>
             </CardHeader>
-            <CardContent className="pr-2 max-h-[500px] overflow-y-auto custom-scrollbar">
+            <CardContent className="lg:flex-1 lg:overflow-y-auto max-h-[400px] lg:max-h-none scrollbar-thin">
                 <div className="relative space-y-0 pl-4 border-l-2 border-muted">
                     {activities.map((item, i) => (
                         <div key={item.id} className="mb-6 relative group">

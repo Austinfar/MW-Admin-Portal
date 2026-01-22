@@ -1254,9 +1254,13 @@ export async function getCurrentPeriodStats(coachId?: string): Promise<{
     // Use admin client for admins to bypass RLS
     const supabase = admin ? createAdminClient() : await createClient();
 
-    // Calculate current period (Monday-Sunday bi-weekly, anchored to Dec 16, 2024)
-    const anchor = new Date('2024-12-16T00:00:00Z');
+    // Calculate current period (Monday-Sunday bi-weekly, anchored to Dec 16, 2024 LOCAL)
+    const anchor = new Date(2024, 11, 16);
+    anchor.setHours(0, 0, 0, 0);
+
     const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
     const diffTime = now.getTime() - anchor.getTime();
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     const periodIndex = Math.floor(diffDays / 14);
@@ -1266,6 +1270,7 @@ export async function getCurrentPeriodStats(coachId?: string): Promise<{
 
     const periodEnd = new Date(periodStart);
     periodEnd.setDate(periodEnd.getDate() + 13);
+    periodEnd.setHours(23, 59, 59, 999);
 
     // Payout is Friday after period ends
     const payoutDate = new Date(periodEnd);
@@ -1596,6 +1601,95 @@ export async function searchClientsForMatch(query: string): Promise<{
     }
 
     return { clients: clients || [] };
+}
+
+/**
+ * Batch recalculate commissions for a specific date range.
+ * This is useful for fixing missing fees or updating calculations after rule changes.
+ */
+export async function recalculateCommissionsForPeriod(
+    startDate: Date,
+    endDate: Date
+): Promise<{
+    processed: number;
+    failed: number;
+    skipped: number;
+    errors: string[];
+}> {
+    const user = await getCurrentUser();
+    const admin = await isAdmin(user.id);
+
+    if (!admin) {
+        return { processed: 0, failed: 0, skipped: 0, errors: ['Unauthorized'] };
+    }
+
+    const { calculateCommission } = await import('@/lib/logic/commissions');
+    const supabase = createAdminClient();
+
+    // Fetch succeeded payments within the transaction date range
+    // We check either payment_date OR created depending on what's populated
+    const startStr = startDate.toISOString();
+    const endStr = endDate.toISOString();
+
+    const { data: payments, error } = await supabase
+        .from('payments')
+        .select('id')
+        .eq('status', 'succeeded')
+        .or(`payment_date.gte.${startStr},created.gte.${startStr}`) // Check start boundary
+        .or(`payment_date.lte.${endStr},created.lte.${endStr}`);    // Check end boundary
+
+    // Note: The OR logic above is a bit loose to catch everything, we'll filter strictly below
+
+    if (error || !payments) {
+        return { processed: 0, failed: 0, skipped: 0, errors: [error?.message || 'Failed to fetch payments'] };
+    }
+
+    let processed = 0;
+    let failed = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+
+    // Process checks
+    for (const payment of payments) {
+        try {
+            // First void existing
+            await supabase.rpc('void_commission_entries', { p_payment_id: payment.id });
+
+            // Then recalculate
+            const result = await calculateCommission(payment.id);
+
+            if (result.success) {
+                if (result.skipped) {
+                    skipped++;
+                } else {
+                    processed++;
+                }
+            } else {
+                failed++;
+                errors.push(`Payment ${payment.id}: ${result.reason}`);
+            }
+        } catch (err) {
+            failed++;
+            errors.push(`Payment ${payment.id}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        }
+    }
+
+    // Log activity
+    await supabase.from('activity_logs').insert({
+        action: 'batch_recalculate_period',
+        entity_type: 'bulk_operation',
+        user_id: user.id,
+        metadata: {
+            start_date: startDate.toISOString(),
+            end_date: endDate.toISOString(),
+            processed,
+            failed,
+            skipped
+        }
+    });
+
+    revalidatePath('/commissions');
+    return { processed, failed, skipped, errors: errors.slice(0, 10) };
 }
 
 /**

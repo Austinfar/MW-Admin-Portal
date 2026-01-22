@@ -125,30 +125,35 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
     return (
         <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
             {/* Header Area */}
-            <div className="flex items-start justify-between">
-                <div className="flex items-center space-x-4">
-                    <Avatar className="h-20 w-20 border-2 border-primary/20">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                    <Avatar className="h-16 w-16 sm:h-20 sm:w-20 border-2 border-primary/20 shrink-0">
                         <AvatarImage src={`https://api.dicebear.com/7.x/initials/svg?seed=${client.name}`} />
                         <AvatarFallback>{client.name.substring(0, 2).toUpperCase()}</AvatarFallback>
                     </Avatar>
-                    <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                            <h2 className="text-3xl font-bold tracking-tight text-foreground">{client.name}</h2>
+                    <div className="space-y-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground truncate">{client.name}</h2>
                             <Badge variant="secondary" className={getStatusColor(client.status)}>
                                 {client.status.toUpperCase()}
                             </Badge>
                             <ClientHealthScore score={healthScore} />
                         </div>
                         <ClientRiskIndicators indicators={riskIndicators} />
-                        <p className="text-muted-foreground flex items-center gap-2">
-                            <Mail className="h-4 w-4" /> {client.email}
-                            <span className="text-gray-600">|</span>
-                            <Phone className="h-4 w-4" /> {client.phone || 'No phone'}
-                        </p>
+                        <div className="text-muted-foreground flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-sm">
+                            <span className="flex items-center gap-1.5 truncate">
+                                <Mail className="h-4 w-4 shrink-0" />
+                                <span className="truncate">{client.email}</span>
+                            </span>
+                            <span className="hidden sm:inline text-gray-600">|</span>
+                            <span className="flex items-center gap-1.5">
+                                <Phone className="h-4 w-4 shrink-0" /> {client.phone || 'No phone'}
+                            </span>
+                        </div>
                     </div>
                 </div>
-                <div className="flex space-x-2">
-                    <Button variant="outline" className="bg-card/40 border-primary/10 hover:border-primary/30">
+                <div className="flex space-x-2 shrink-0">
+                    <Button variant="outline" size="sm" className="bg-card/40 border-primary/10 hover:border-primary/30">
                         Sync GHL
                     </Button>
                 </div>
@@ -156,9 +161,9 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
 
             <Separator className="bg-primary/10" />
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-200px)]">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 md:gap-6 lg:min-h-[calc(100vh-220px)]">
                 {/* Left Column: Identity & Contact (3 cols) */}
-                <div className="lg:col-span-3 space-y-6">
+                <div className="md:col-span-1 lg:col-span-3 space-y-4 md:space-y-6 order-2 md:order-1 lg:overflow-y-auto lg:max-h-[calc(100vh-220px)] lg:pr-2 lg:scrollbar-thin">
                     <ClientDetailsCard client={client} ghlLocationId={GHL_CONFIG.LOCATION_ID} users={users} isAdmin={isAdmin} />
 
                     <Card className="bg-card/40 border-primary/5 backdrop-blur-sm">
@@ -182,39 +187,39 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
                 </div>
 
                 {/* Main Column: Journey & Timeline (6 cols) */}
-                <div className="lg:col-span-6 space-y-6 h-full flex flex-col">
-                    <Tabs defaultValue="onboarding" className="w-full flex-1 flex flex-col">
-                        <TabsList className="grid w-full grid-cols-4">
-                            <TabsTrigger value="onboarding">Onboarding</TabsTrigger>
-                            <TabsTrigger value="notes">Notes</TabsTrigger>
-                            <TabsTrigger value="sales-calls">Sales Calls</TabsTrigger>
-                            <TabsTrigger value="documents">Documents</TabsTrigger>
+                <div className="md:col-span-2 lg:col-span-6 space-y-4 md:space-y-6 lg:max-h-[calc(100vh-220px)] flex flex-col order-1 md:order-2">
+                    <Tabs defaultValue="onboarding" className="w-full flex-1 flex flex-col min-h-0">
+                        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 shrink-0">
+                            <TabsTrigger value="onboarding" className="text-xs sm:text-sm">Onboarding</TabsTrigger>
+                            <TabsTrigger value="notes" className="text-xs sm:text-sm">Notes</TabsTrigger>
+                            <TabsTrigger value="sales-calls" className="text-xs sm:text-sm">Sales Calls</TabsTrigger>
+                            <TabsTrigger value="documents" className="text-xs sm:text-sm">Documents</TabsTrigger>
                         </TabsList>
-                        <TabsContent value="onboarding" className="mt-4 flex-1">
-                            <Card className="bg-card/40 border-primary/5 backdrop-blur-sm h-full">
-                                <CardHeader>
+                        <TabsContent value="onboarding" className="mt-4 flex-1 min-h-0 overflow-hidden">
+                            <Card className="bg-card/40 border-primary/5 backdrop-blur-sm h-full flex flex-col">
+                                <CardHeader className="shrink-0">
                                     <CardTitle>Client Journey</CardTitle>
                                     <CardDescription>Track onboarding progress and steps.</CardDescription>
                                 </CardHeader>
-                                <CardContent>
+                                <CardContent className="flex-1 overflow-y-auto">
                                     <ClientOnboardingChecklist tasks={tasks} clientId={client.id} users={users} />
                                 </CardContent>
                             </Card>
                         </TabsContent>
-                        <TabsContent value="notes" className="mt-4 flex-1">
+                        <TabsContent value="notes" className="mt-4 flex-1 min-h-0 overflow-hidden">
                             <ClientNotes notes={notes} clientId={client.id} />
                         </TabsContent>
-                        <TabsContent value="sales-calls" className="mt-4 flex-1">
+                        <TabsContent value="sales-calls" className="mt-4 flex-1 min-h-0 overflow-hidden">
                             <ClientSalesCalls clientId={client.id} />
                         </TabsContent>
-                        <TabsContent value="documents" className="mt-4 flex-1">
+                        <TabsContent value="documents" className="mt-4 flex-1 min-h-0 overflow-hidden">
                             <ClientDocuments clientId={client.id} documents={documents} />
                         </TabsContent>
                     </Tabs>
                 </div>
 
                 {/* Right Column: Financials & Terms (3 cols) */}
-                <div className="lg:col-span-3 space-y-6">
+                <div className="md:col-span-1 lg:col-span-3 space-y-4 md:space-y-6 order-3 lg:overflow-y-auto lg:max-h-[calc(100vh-220px)] lg:pl-2 lg:scrollbar-thin">
                     <Card className="bg-card/40 border-primary/5 backdrop-blur-sm">
                         <CardHeader>
                             <CardTitle className="text-lg">Program Terms</CardTitle>
@@ -264,13 +269,13 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
                                 return (
                                     <div className="mb-4 space-y-3">
                                         <div>
-                                            <div className={`text-2xl font-bold ${netRevenue >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                            <div className={`text-xl sm:text-2xl font-bold ${netRevenue >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                                                 {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(netRevenue)}
                                             </div>
                                             <p className="text-xs text-muted-foreground">Net Lifetime Revenue</p>
                                         </div>
                                         {totalRefunds > 0 && (
-                                            <div className="flex justify-between text-sm border-t border-primary/10 pt-2">
+                                            <div className="flex flex-col xs:flex-row xs:justify-between gap-1 text-sm border-t border-primary/10 pt-2">
                                                 <div>
                                                     <span className="text-muted-foreground">Gross:</span>
                                                     <span className="ml-1 font-medium">

@@ -119,8 +119,8 @@ export function ClientDocuments({ clientId, documents }: ClientDocumentsProps) {
     }, {} as Record<DocumentType, ClientDocument[]>)
 
     return (
-        <div className="space-y-4">
-            <div className="flex items-center justify-between">
+        <div className="h-full flex flex-col">
+            <div className="flex items-center justify-between shrink-0 mb-4">
                 <h3 className="text-sm font-medium flex items-center gap-2">
                     <FileText className="h-4 w-4 text-primary" />
                     Documents ({documents.length})
@@ -136,42 +136,44 @@ export function ClientDocuments({ clientId, documents }: ClientDocumentsProps) {
                 </Button>
             </div>
 
-            {documents.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground border border-dashed rounded-lg">
-                    <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">No documents uploaded yet</p>
-                    <Button
-                        variant="link"
-                        size="sm"
-                        onClick={() => setIsUploadOpen(true)}
-                        className="mt-2"
-                    >
-                        Upload your first document
-                    </Button>
-                </div>
-            ) : (
-                <div className="space-y-4">
-                    {Object.entries(groupedDocs).map(([type, docs]) => (
-                        <div key={type} className="space-y-2">
-                            <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                                {DOCUMENT_TYPE_LABELS[type as DocumentType]}
-                            </h4>
-                            <div className="space-y-1">
-                                {docs.map((doc) => (
-                                    <DocumentItem
-                                        key={doc.id}
-                                        document={doc}
-                                        onDownload={() => handleDownload(doc)}
-                                        onDelete={() => handleDelete(doc.id)}
-                                        onToggleShare={() => handleToggleShare(doc.id)}
-                                        disabled={isPending}
-                                    />
-                                ))}
+            <div className="flex-1 overflow-y-auto scrollbar-thin">
+                {documents.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground border border-dashed rounded-lg">
+                        <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">No documents uploaded yet</p>
+                        <Button
+                            variant="link"
+                            size="sm"
+                            onClick={() => setIsUploadOpen(true)}
+                            className="mt-2"
+                        >
+                            Upload your first document
+                        </Button>
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        {Object.entries(groupedDocs).map(([type, docs]) => (
+                            <div key={type} className="space-y-2">
+                                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                                    {DOCUMENT_TYPE_LABELS[type as DocumentType]}
+                                </h4>
+                                <div className="space-y-1">
+                                    {docs.map((doc) => (
+                                        <DocumentItem
+                                            key={doc.id}
+                                            document={doc}
+                                            onDownload={() => handleDownload(doc)}
+                                            onDelete={() => handleDelete(doc.id)}
+                                            onToggleShare={() => handleToggleShare(doc.id)}
+                                            disabled={isPending}
+                                        />
+                                    ))}
+                                </div>
                             </div>
-                        </div>
-                    ))}
-                </div>
-            )}
+                        ))}
+                    </div>
+                )}
+            </div>
 
             {/* Upload Dialog */}
             <UploadDialog
