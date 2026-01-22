@@ -303,35 +303,32 @@ export function ClientDetailsCard({ client, ghlLocationId, users = [], isAdmin =
                             </div>
                         )}
 
-                        <div className="space-y-1">
-
+                        <div className="space-y-2 pt-2 border-t border-white/5">
                             <div className="space-y-1">
                                 <label className="text-xs font-medium text-muted-foreground">Stripe ID</label>
-                                <div className="flex items-center gap-2">
-                                    <div className={`text-xs font-mono p-1.5 rounded overflow-hidden text-ellipsis border transition-colors flex-1 ${client.stripe_customer_id
-                                        ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
-                                        : 'bg-secondary/20 text-muted-foreground border-transparent'
-                                        }`}>
-                                        {client.stripe_customer_id || 'Not Linked'}
-                                    </div>
+                                <div className={`text-xs font-mono p-1.5 rounded border transition-colors truncate ${client.stripe_customer_id
+                                    ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                                    : 'bg-secondary/20 text-muted-foreground border-transparent'
+                                    }`} title={client.stripe_customer_id || undefined}>
+                                    {client.stripe_customer_id || 'Not Linked'}
                                 </div>
                             </div>
                             <div className="space-y-1">
-                                <label className="text-xs font-medium text-muted-foreground flex items-center justify-between">
-                                    <span>GHL Contact ID</span>
+                                <label className="text-xs font-medium text-muted-foreground flex items-center justify-between gap-2">
+                                    <span className="truncate">GHL Contact</span>
                                     {client.ghl_contact_id && ghlLocationId && (
                                         <a
                                             href={`https://app.gohighlevel.com/v2/location/${ghlLocationId}/contacts/detail/${client.ghl_contact_id}`}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="text-[10px] text-primary hover:underline flex items-center gap-1"
+                                            className="text-[10px] text-primary hover:underline flex items-center gap-1 shrink-0"
                                         >
-                                            View in GHL
+                                            View
                                             <ExternalLink className="h-3 w-3" />
                                         </a>
                                     )}
                                 </label>
-                                <div className="text-xs font-mono bg-secondary/20 p-1.5 rounded text-muted-foreground overflow-hidden text-ellipsis border border-transparent hover:border-primary/10 transition-colors">
+                                <div className="text-xs font-mono bg-secondary/20 p-1.5 rounded text-muted-foreground border border-transparent hover:border-primary/10 transition-colors truncate" title={client.ghl_contact_id || undefined}>
                                     {client.ghl_contact_id || 'Not Synced'}
                                 </div>
                             </div>

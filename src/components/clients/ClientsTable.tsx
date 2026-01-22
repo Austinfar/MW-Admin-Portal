@@ -39,7 +39,7 @@ interface ClientsTableProps {
     currentUserId?: string
 }
 
-type SortField = 'name' | 'status' | 'program' | 'coach' | 'start_date' | 'contract_end' | 'last_payment' | 'onboarding'
+type SortField = 'name' | 'status' | 'program' | 'coach' | 'start_date' | 'contract_end' | 'ltv' | 'onboarding'
 type SortOrder = 'asc' | 'desc'
 
 interface Filters {
@@ -138,9 +138,9 @@ export function ClientsTable({ data, clientTypes, coaches, currentUserId }: Clie
                     compareA = a.contract_end_date ? new Date(a.contract_end_date).getTime() : Infinity
                     compareB = b.contract_end_date ? new Date(b.contract_end_date).getTime() : Infinity
                     break
-                case 'last_payment':
-                    compareA = a.last_payment_date ? new Date(a.last_payment_date).getTime() : 0
-                    compareB = b.last_payment_date ? new Date(b.last_payment_date).getTime() : 0
+                case 'ltv':
+                    compareA = a.lifetime_revenue || 0
+                    compareB = b.lifetime_revenue || 0
                     break
                 case 'onboarding':
                     compareA = a.onboarding_total ? (a.onboarding_completed || 0) / a.onboarding_total : 0
@@ -232,18 +232,14 @@ export function ClientsTable({ data, clientTypes, coaches, currentUserId }: Clie
         return { color: 'text-foreground', label: format(end, 'MMM d, yyyy') }
     }
 
-    // Last payment styling
-    const getLastPaymentDisplay = (date: string | null | undefined) => {
-        if (!date) return { text: 'Never', color: 'text-muted-foreground' }
-        const now = new Date()
-        const paymentDate = new Date(date)
-        const daysAgo = Math.floor((now.getTime() - paymentDate.getTime()) / (1000 * 60 * 60 * 24))
-
-        if (daysAgo === 0) return { text: 'Today', color: 'text-emerald-500' }
-        if (daysAgo === 1) return { text: 'Yesterday', color: 'text-foreground' }
-        if (daysAgo <= 7) return { text: `${daysAgo}d ago`, color: 'text-foreground' }
-        if (daysAgo <= 30) return { text: `${daysAgo}d ago`, color: 'text-foreground' }
-        return { text: `${daysAgo}d ago`, color: 'text-amber-500' }
+    // LTV formatting
+    const getLTVDisplay = (amount: number | undefined) => {
+        const value = amount || 0
+        const formatted = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value)
+        if (value === 0) return { text: '$0', color: 'text-muted-foreground' }
+        if (value >= 5000) return { text: formatted, color: 'text-emerald-500' }
+        if (value >= 1000) return { text: formatted, color: 'text-foreground' }
+        return { text: formatted, color: 'text-foreground' }
     }
 
     // Onboarding progress
@@ -528,8 +524,8 @@ export function ClientsTable({ data, clientTypes, coaches, currentUserId }: Clie
                                 <TableHead className="cursor-pointer hover:text-foreground" onClick={() => handleSort('contract_end')}>
                                     End Date {sortField === 'contract_end' && <ArrowUpDown className="ml-1 h-3 w-3 inline" />}
                                 </TableHead>
-                                <TableHead className="cursor-pointer hover:text-foreground" onClick={() => handleSort('last_payment')}>
-                                    Last Payment {sortField === 'last_payment' && <ArrowUpDown className="ml-1 h-3 w-3 inline" />}
+                                <TableHead className="cursor-pointer hover:text-foreground" onClick={() => handleSort('ltv')}>
+                                    LTV {sortField === 'ltv' && <ArrowUpDown className="ml-1 h-3 w-3 inline" />}
                                 </TableHead>
                                 <TableHead className="cursor-pointer hover:text-foreground" onClick={() => handleSort('onboarding')}>
                                     Onboarding {sortField === 'onboarding' && <ArrowUpDown className="ml-1 h-3 w-3 inline" />}
@@ -547,7 +543,7 @@ export function ClientsTable({ data, clientTypes, coaches, currentUserId }: Clie
                             ) : (
                                 filteredData.map((client) => {
                                     const contractEnd = getContractEndStyle(client.contract_end_date)
-                                    const lastPayment = getLastPaymentDisplay(client.last_payment_date)
+                                    const ltv = getLTVDisplay(client.lifetime_revenue)
                                     const onboarding = getOnboardingDisplay(client.onboarding_total, client.onboarding_completed)
 
                                     return (
@@ -599,8 +595,8 @@ export function ClientsTable({ data, clientTypes, coaches, currentUserId }: Clie
                                                 </span>
                                             </TableCell>
                                             <TableCell>
-                                                <span className={`whitespace-nowrap text-sm ${lastPayment.color}`}>
-                                                    {lastPayment.text}
+                                                <span className={`whitespace-nowrap text-sm ${ltv.color}`}>
+                                                    {ltv.text}
                                                 </span>
                                             </TableCell>
                                             <TableCell>

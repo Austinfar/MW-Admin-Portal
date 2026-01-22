@@ -62,6 +62,7 @@ export interface EnhancedClient extends Client {
     last_payment_status?: string | null
     onboarding_total?: number
     onboarding_completed?: number
+    lifetime_revenue?: number
 }
 
 // Stats for clients list dashboard
