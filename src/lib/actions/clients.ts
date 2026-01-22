@@ -168,6 +168,7 @@ export async function updateClient(id: string, data: Partial<Client>) {
             client_type_id: data.client_type_id,
             assigned_coach_id: data.assigned_coach_id,
             stripe_customer_id: data.stripe_customer_id,
+            ghl_contact_id: data.ghl_contact_id,
             sold_by_user_id: data.sold_by_user_id,
             lead_source: data.lead_source,
             check_in_day: data.check_in_day,
@@ -383,4 +384,21 @@ export async function bulkReassignCoach(clientIds: string[], coachId: string | n
 
     revalidatePath('/clients')
     return { success: true, updated: clientIds.length }
+}
+
+export async function getClientActivityLogs(clientId: string) {
+    const supabase = createAdminClient()
+
+    const { data, error } = await supabase
+        .from('activity_logs')
+        .select('*')
+        .eq('client_id', clientId)
+        .order('created_at', { ascending: false })
+
+    if (error) {
+        console.error('Error fetching activity logs:', error)
+        return []
+    }
+
+    return data
 }

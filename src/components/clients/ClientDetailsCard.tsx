@@ -35,6 +35,7 @@ export function ClientDetailsCard({ client, ghlLocationId, users = [], isAdmin =
         email: client.email,
         phone: client.phone || '',
         stripe_customer_id: client.stripe_customer_id || '',
+        ghl_contact_id: client.ghl_contact_id || '',
         status: client.status,
         sold_by_user_id: client.sold_by_user_id || 'none',
         assigned_coach_id: client.assigned_coach_id || 'none',
@@ -53,7 +54,7 @@ export function ClientDetailsCard({ client, ghlLocationId, users = [], isAdmin =
                 assigned_coach_id: formData.assigned_coach_id === 'none' ? null : formData.assigned_coach_id,
                 appointment_setter_id: formData.appointment_setter_id === 'none' ? null : formData.appointment_setter_id,
                 check_in_day: formData.check_in_day === 'none' ? null : formData.check_in_day,
-                ghl_contact_id: client.ghl_contact_id // Pass this so action knows to sync
+                ghl_contact_id: formData.ghl_contact_id || undefined
             };
             const result = await updateClient(client.id, cleanedData);
 
@@ -188,6 +189,32 @@ export function ClientDetailsCard({ client, ghlLocationId, users = [], isAdmin =
                             </div>
                         </div>
 
+                        {/* Weekly Check-in */}
+                        <div className="pt-2 border-t border-primary/10">
+                            <Label className="text-xs font-semibold text-primary mb-2 block">Weekly Check-in</Label>
+                            <div className="space-y-1">
+                                <Label htmlFor="check_in_day">Check-in Day</Label>
+                                <Select
+                                    value={formData.check_in_day}
+                                    onValueChange={(value) => setFormData({ ...formData, check_in_day: value })}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select Day" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">-- None --</SelectItem>
+                                        <SelectItem value="Monday">Monday</SelectItem>
+                                        <SelectItem value="Tuesday">Tuesday</SelectItem>
+                                        <SelectItem value="Wednesday">Wednesday</SelectItem>
+                                        <SelectItem value="Thursday">Thursday</SelectItem>
+                                        <SelectItem value="Friday">Friday</SelectItem>
+                                        <SelectItem value="Saturday">Saturday</SelectItem>
+                                        <SelectItem value="Sunday">Sunday</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+
                         <div className="space-y-1">
                             <Label htmlFor="stripe_customer_id">Stripe Customer ID</Label>
                             <Input
@@ -195,6 +222,17 @@ export function ClientDetailsCard({ client, ghlLocationId, users = [], isAdmin =
                                 value={formData.stripe_customer_id}
                                 onChange={(e) => setFormData({ ...formData, stripe_customer_id: e.target.value })}
                                 placeholder="cus_..."
+                                disabled={!isAdmin}
+                                className={!isAdmin ? "opacity-60 cursor-not-allowed" : ""}
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <Label htmlFor="ghl_contact_id">GHL Contact ID</Label>
+                            <Input
+                                id="ghl_contact_id"
+                                value={formData.ghl_contact_id}
+                                onChange={(e) => setFormData({ ...formData, ghl_contact_id: e.target.value })}
+                                placeholder="Contact ID from GoHighLevel"
                                 disabled={!isAdmin}
                                 className={!isAdmin ? "opacity-60 cursor-not-allowed" : ""}
                             />

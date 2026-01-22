@@ -142,29 +142,8 @@ export async function executePostPaymentFlow(
     // 2. SLACK DMs TO TEAM MEMBERS
     if (isSlackConfigured()) {
         // Send DMs for commission earners
-        for (const commission of context.commissions) {
-            const slackUserId = getSlackId(commission.userId)
-
-            if (slackUserId) {
-                try {
-                    const dmMessage = buildCommissionDM({
-                        clientName: context.clientName,
-                        amount: commission.amount,
-                        role: commission.role,
-                        programName: context.programName,
-                    })
-
-                    const result = await sendDirectMessage(slackUserId, dmMessage)
-
-                    if (!result.success) {
-                        console.warn(`[Post-Payment] Failed to send DM to ${commission.role}:`, result.error)
-                        // Don't treat DM failures as critical - they have in-app notifications
-                    }
-                } catch (error) {
-                    console.warn(`[Post-Payment] DM error for ${commission.role}:`, error)
-                }
-            }
-        }
+        // NOTE: Commission DMs are now handled in src/lib/logic/commissions.ts 
+        // directly after calculation to ensure they are always sent with correct amounts.
 
         // Special DM for coach about new client assignment (separate from commission)
         const coachSlackId = getSlackId(context.coachId)

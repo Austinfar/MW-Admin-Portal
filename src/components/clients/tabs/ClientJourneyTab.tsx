@@ -15,9 +15,10 @@ interface ClientJourneyTabProps {
     goals: ClientGoal[]
     payments: Payment[]
     users: Coach[]
+    logs?: any[]
 }
 
-export function ClientJourneyTab({ client, tasks, goals, payments, users }: ClientJourneyTabProps) {
+export function ClientJourneyTab({ client, tasks, goals, payments, users, logs }: ClientJourneyTabProps) {
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Left Column: Onboarding + Goals (2/3 width) */}
@@ -37,7 +38,7 @@ export function ClientJourneyTab({ client, tasks, goals, payments, users }: Clie
 
             {/* Right Column: Activity Timeline (1/3 width) */}
             <div className="lg:col-span-1">
-                <ClientActivityTimeline client={client} tasks={tasks} payments={payments} />
+                <ClientActivityTimeline client={client} tasks={tasks} payments={payments} logs={logs} />
             </div>
         </div>
     )

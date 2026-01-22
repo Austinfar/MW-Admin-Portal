@@ -57,10 +57,14 @@ export function LeadsTable({ initialLeads }: LeadsTableProps) {
     })
 
     const handleConvert = async (id: string) => {
-        toast.promise(convertLeadToClient(id), {
+        toast.promise(async () => {
+            const result = await convertLeadToClient(id)
+            if (result.error) throw new Error(result.error)
+            return result
+        }, {
             loading: 'Converting to client...',
             success: 'Lead converted successfully!',
-            error: (err) => `Failed to convert: ${err}`
+            error: (err) => `Failed to convert: ${err.message || err}`
         })
     }
 

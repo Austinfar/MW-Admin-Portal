@@ -1,4 +1,4 @@
-import { getClient, getCoaches } from '@/lib/actions/clients'
+import { getClient, getCoaches, getClientActivityLogs } from '@/lib/actions/clients'
 import { getClientTasks } from '@/lib/actions/onboarding'
 import { getClientNotes } from '@/lib/actions/notes'
 import { getClientGoals } from '@/lib/actions/goals'
@@ -56,6 +56,9 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
 
     // Fetch documents
     const documents = await getClientDocuments(params.id)
+
+    // Fetch activity logs (history)
+    const logs = await getClientActivityLogs(params.id)
 
     // Fetch active agreement for health calculation
     const activeAgreement = await getActiveAgreement(params.id)
@@ -148,6 +151,7 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
                                 goals={goals}
                                 payments={payments}
                                 users={users}
+                                logs={logs || []}
                             />
                         </TabsContent>
 
