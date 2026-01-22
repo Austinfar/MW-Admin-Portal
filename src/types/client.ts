@@ -55,3 +55,101 @@ export interface Note {
         avatar_url?: string | null
     } | null
 }
+
+// Enhanced client data for list view
+export interface EnhancedClient extends Client {
+    last_payment_date?: string | null
+    last_payment_status?: string | null
+    onboarding_total?: number
+    onboarding_completed?: number
+}
+
+// Stats for clients list dashboard
+export interface ClientStats {
+    total: number
+    active: number
+    atRisk: number
+    endingSoon: number
+}
+
+// Tag system
+export interface ClientTag {
+    id: string
+    name: string
+    color: string
+    description?: string | null
+    created_by?: string | null
+    created_at: string
+}
+
+export interface ClientTagAssignment {
+    client_id: string
+    tag_id: string
+    assigned_by?: string | null
+    assigned_at: string
+    tag?: ClientTag
+}
+
+// Alert system
+export type AlertType = 'payment_failed' | 'payment_overdue' | 'contract_expiring' | 'onboarding_stalled'
+export type AlertSeverity = 'warning' | 'critical'
+
+export interface ClientAlert {
+    id: string
+    client_id: string
+    alert_type: AlertType
+    severity: AlertSeverity
+    title: string
+    description?: string | null
+    is_dismissed: boolean
+    dismissed_by?: string | null
+    dismissed_at?: string | null
+    created_at: string
+    client?: {
+        name: string
+        email: string
+    } | null
+}
+
+// Goal system
+export type GoalType = 'outcome' | 'habit' | 'milestone'
+export type GoalStatus = 'active' | 'achieved' | 'abandoned'
+
+export interface ClientGoal {
+    id: string
+    client_id: string
+    title: string
+    description?: string | null
+    goal_type: GoalType
+    target_value?: number | null
+    target_unit?: string | null
+    current_value: number
+    target_date?: string | null
+    status: GoalStatus
+    priority: number
+    achieved_at?: string | null
+    created_by?: string | null
+    created_at: string
+    updated_at: string
+}
+
+// Document system
+export type DocumentType = 'meal_plan' | 'workout_program' | 'intake_form' | 'contract' | 'other'
+
+export interface ClientDocument {
+    id: string
+    client_id: string
+    name: string
+    description?: string | null
+    document_type: DocumentType
+    storage_path: string
+    file_size?: number | null
+    mime_type?: string | null
+    uploaded_by?: string | null
+    is_shared_with_client: boolean
+    created_at: string
+    uploader?: {
+        name: string
+        email: string
+    } | null
+}

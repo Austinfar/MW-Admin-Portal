@@ -52,7 +52,7 @@ export async function getSubscriptionsWithConfigs(): Promise<{
         const stripeSubscriptions = await stripe.subscriptions.list({
             status: 'active',
             limit: 100,
-            expand: ['data.customer', 'data.items.data.price.product'],
+            expand: ['data.customer', 'data.plan.product'],
         });
 
         // Fetch all subscription configs from our DB
@@ -90,8 +90,12 @@ export async function getSubscriptionsWithConfigs(): Promise<{
             const matchedClient = clientByCustomerId.get(customerId);
 
             // Get plan info
+            // Use sub.plan which is expanded via 'data.plan.product'
+            const plan = sub.plan;
+            const product = plan?.product as Stripe.Product | undefined;
+
+            // Fallback to items price if needed for amount/interval (usually same as plan)
             const priceData = sub.items.data[0]?.price;
-            const product = priceData?.product as Stripe.Product | undefined;
 
             return {
                 id: sub.id,

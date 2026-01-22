@@ -70,6 +70,7 @@ export interface PayrollLedgerEntry {
     split_percentage?: number;
     source_schedule_id?: string;
     payout_period_start?: string;
+    transaction_date?: string;
     calculation_basis: Record<string, unknown>;
     // Joined data
     users?: { name: string; email: string };
@@ -754,6 +755,8 @@ export async function getAdjustments(options: {
     userId?: string;
     runId?: string;
     includeHidden?: boolean;
+    startDate?: Date;
+    endDate?: Date;
 }): Promise<CommissionAdjustment[]> {
     const user = await getCurrentUser();
     const admin = await isAdmin(user.id);
@@ -772,6 +775,13 @@ export async function getAdjustments(options: {
 
     if (options.runId) {
         query = query.eq('payroll_run_id', options.runId);
+    }
+
+    // Filter by date range if provided (and not filtering by run)
+    if (!options.runId && options.startDate && options.endDate) {
+        query = query
+            .gte('created_at', startOfDay(options.startDate).toISOString())
+            .lte('created_at', endOfDay(options.endDate).toISOString());
     }
 
     if (options.userId) {
@@ -820,9 +830,10 @@ export async function getPayrollStats(startDate: Date, endDate: Date, filters?: 
     if (filters?.payrollRunId) {
         query = query.eq('payroll_run_id', filters.payrollRunId);
     } else {
+        // Filter by transaction_date for accurate period reporting
         query = query
-            .gte('created_at', startOfDay(startDate).toISOString())
-            .lte('created_at', endOfDay(endDate).toISOString());
+            .gte('transaction_date', startOfDay(startDate).toISOString())
+            .lte('transaction_date', endOfDay(endDate).toISOString());
     }
 
     // Apply filters
@@ -842,7 +853,8 @@ export async function getPayrollStats(startDate: Date, endDate: Date, filters?: 
             break;
         case 'date':
         default:
-            query = query.order('created_at', { ascending: sortOrder });
+            query = query.order('transaction_date', { ascending: sortOrder, nullsFirst: false })
+                .order('created_at', { ascending: sortOrder });
     }
 
     // Restrict non-admins to their own entries
@@ -872,6 +884,18 @@ export async function getPayrollStats(startDate: Date, endDate: Date, filters?: 
     let adjustments: CommissionAdjustment[] = [];
     if (filters?.payrollRunId) {
         adjustments = await getAdjustments({ runId: filters.payrollRunId });
+    } else {
+        adjustments = await getAdjustments({
+            startDate,
+            endDate
+        });
+
+        // Manual filtering for coachId since getAdjustments helper logic is a bit complex 
+        // regarding admin vs user view. 
+        // If filters.coachId is present, we should filter the results.
+        if (filters?.coachId && admin) {
+            adjustments = adjustments.filter(a => a.user_id === filters.coachId);
+        }
     }
 
     // Fetch run if specified

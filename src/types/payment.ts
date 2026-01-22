@@ -12,4 +12,13 @@ export interface Payment {
     commission_calculated?: boolean
     created_at: string
     clients?: { name: string } | null
+    // Refund fields
+    refund_amount?: number | null
+    refunded_at?: string | null
+    // Fee fields
+    stripe_fee?: number | null
+    net_amount?: number | null
+    // Dispute fields
+    dispute_status?: string | null
+    dispute_id?: string | null
 }

@@ -70,7 +70,10 @@ export async function POST(req: Request) {
                 }
             } catch (fetchError) {
                 console.error('Error fetching expanded payment intent for fee:', fetchError)
-                // Fall back to estimated fee if we can't fetch the real one
+            }
+
+            // Fall back to estimated fee if we can't fetch the real one (or if fetch succeeded but yielded no fee)
+            if (stripeFee === null) {
                 stripeFee = Number((amount * 0.029 + 0.30).toFixed(2))
             }
 
@@ -118,6 +121,7 @@ export async function POST(req: Request) {
                 currency,
                 status,
                 created,
+                payment_date: created,
                 client_email: clientEmail ?? null,
                 stripe_customer_id: stripeCustomerId,
                 client_id: clientId,
@@ -559,7 +563,8 @@ export async function POST(req: Request) {
                                     ? invoice.customer
                                     : invoice.customer?.id,
                                 description: `Subscription payment: ${invoice.lines?.data?.[0]?.description || 'Recurring'}`,
-                                created: new Date(invoice.created * 1000).toISOString()
+                                created: new Date(invoice.created * 1000).toISOString(),
+                                payment_date: new Date(invoice.created * 1000).toISOString()
                             })
                             .select('id')
                             .single()

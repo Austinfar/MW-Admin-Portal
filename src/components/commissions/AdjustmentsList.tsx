@@ -20,6 +20,7 @@ interface AdjustmentsListProps {
     limit?: number
     showTitle?: boolean
     className?: string
+    adjustments?: CommissionAdjustment[] // Allow passing data directly
 }
 
 const TYPE_CONFIG: Record<string, { label: string; icon: typeof Plus; color: string; bgColor: string }> = {
@@ -55,12 +56,20 @@ const TYPE_CONFIG: Record<string, { label: string; icon: typeof Plus; color: str
     }
 }
 
-export function AdjustmentsList({ userId, runId, limit, showTitle = true, className }: AdjustmentsListProps) {
-    const [adjustments, setAdjustments] = useState<CommissionAdjustment[]>([])
-    const [loading, setLoading] = useState(true)
+export function AdjustmentsList({ userId, runId, limit, showTitle = true, className, adjustments: initialAdjustments }: AdjustmentsListProps) {
+    const [adjustments, setAdjustments] = useState<CommissionAdjustment[]>(initialAdjustments || [])
+    const [loading, setLoading] = useState(!initialAdjustments)
 
     useEffect(() => {
+        // If adjustments are passed directly, just update them when they change
+        if (initialAdjustments) {
+            setAdjustments(limit ? initialAdjustments.slice(0, limit) : initialAdjustments)
+            setLoading(false)
+            return
+        }
+
         async function fetchAdjustments() {
+            setLoading(true)
             try {
                 const data = await getAdjustments({ userId, runId })
                 setAdjustments(limit ? data.slice(0, limit) : data)
@@ -71,7 +80,7 @@ export function AdjustmentsList({ userId, runId, limit, showTitle = true, classN
             }
         }
         fetchAdjustments()
-    }, [userId, runId, limit])
+    }, [userId, runId, limit, initialAdjustments])
 
     if (loading) {
         return (

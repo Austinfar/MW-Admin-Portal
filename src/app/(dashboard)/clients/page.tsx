@@ -1,6 +1,7 @@
-import { getClients, getClientTypes, getCoaches } from '@/lib/actions/clients'
+import { getEnhancedClients, getClientTypes, getCoaches, getClientStats } from '@/lib/actions/clients'
 import { createClient } from '@/lib/supabase/server'
 import { ClientsTable } from '@/components/clients/ClientsTable'
+import { ClientStatsCards } from '@/components/clients/ClientStatsCards'
 
 import { protectRoute } from '@/lib/protect-route'
 
@@ -10,10 +11,11 @@ export default async function ClientsPage() {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
-    const [clients, clientTypes, coaches] = await Promise.all([
-        getClients(),
+    const [clients, clientTypes, coaches, stats] = await Promise.all([
+        getEnhancedClients(),
         getClientTypes(),
-        getCoaches()
+        getCoaches(),
+        getClientStats()
     ])
 
     return (
@@ -26,6 +28,9 @@ export default async function ClientsPage() {
                     </p>
                 </div>
             </div>
+
+            <ClientStatsCards stats={stats} />
+
             <ClientsTable
                 data={clients}
                 clientTypes={clientTypes}

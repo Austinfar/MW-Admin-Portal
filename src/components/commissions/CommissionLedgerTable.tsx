@@ -62,18 +62,23 @@ export function CommissionLedgerTable({ entries, showRecipient = true }: Commiss
                             <TableRow key={entry.id} className="hover:bg-white/5 border-white/10">
                                 <TableCell>
                                     <div className="flex flex-col">
-                                        <span>{format(new Date(entry.created_at), 'MMM dd, yyyy')}</span>
+                                        <span>{format(new Date(entry.transaction_date || entry.created_at), 'MMM dd, yyyy')}</span>
                                         <span className="text-xs text-muted-foreground">
-                                            {format(new Date(entry.created_at), 'h:mm a')}
+                                            {format(new Date(entry.transaction_date || entry.created_at), 'h:mm a')}
                                         </span>
                                     </div>
                                 </TableCell>
                                 <TableCell>
                                     <div className="flex flex-col">
-                                        <span>{entry.clients?.name || 'Unknown'}</span>
+                                        <span>{entry.clients?.name || (basis as any)?.client_name || 'Manual Entry'}</span>
                                         {entry.clients?.lead_source && (
                                             <span className="text-xs text-muted-foreground capitalize">
                                                 {entry.clients.lead_source.replace('_', ' ')}
+                                            </span>
+                                        )}
+                                        {!(entry.clients) && (basis as any)?.category && (
+                                            <span className="text-xs text-muted-foreground capitalize">
+                                                {(basis as any).category}
                                             </span>
                                         )}
                                     </div>
@@ -122,9 +127,9 @@ export function CommissionLedgerTable({ entries, showRecipient = true }: Commiss
                                         <span>{rateDisplay}</span>
                                         <span className="text-xs text-muted-foreground">
                                             {basisType === 'gross' ? 'on Gross' :
-                                             basisType === 'remainder' ? 'on Remainder' :
-                                             basisType === 'flat' ? 'Flat Fee' :
-                                             basisType === 'net' ? 'on Net' : `on ${basisType}`}
+                                                basisType === 'remainder' ? 'on Remainder' :
+                                                    basisType === 'flat' ? 'Flat Fee' :
+                                                        basisType === 'net' ? 'on Net' : `on ${basisType}`}
                                         </span>
                                     </div>
                                 </TableCell>
