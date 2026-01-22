@@ -91,7 +91,8 @@ export async function getSubscriptionsWithConfigs(): Promise<{
 
             // Get plan info
             // Use sub.plan which is expanded via 'data.plan.product'
-            const plan = sub.plan;
+            // Cast to any because standard Stripe types don't always include the top-level plan object resulting from expansion
+            const plan = (sub as any).plan;
             const product = plan?.product as Stripe.Product | undefined;
 
             // Fallback to items price if needed for amount/interval (usually same as plan)
