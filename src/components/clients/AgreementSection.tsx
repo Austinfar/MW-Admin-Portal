@@ -142,10 +142,12 @@ export function AgreementSection({ clientId, clientName, hasGhlContactId }: Agre
 
     if (isLoading) {
         return (
-            <Card>
+            <Card className="bg-card/50 backdrop-blur-xl border-white/5 hover:border-primary/20 transition-all duration-300 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                        <FileText className="h-5 w-5" />
+                        <div className="p-2 rounded-full bg-amber-500/10">
+                            <FileText className="h-4 w-4 text-amber-500" />
+                        </div>
                         Coaching Agreement
                     </CardTitle>
                 </CardHeader>
@@ -160,12 +162,14 @@ export function AgreementSection({ clientId, clientName, hasGhlContactId }: Agre
 
     return (
         <>
-            <Card>
+            <Card className="bg-card/50 backdrop-blur-xl border-white/5 hover:border-primary/20 transition-all duration-300 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
                 <CardHeader>
                     <div className="flex items-center justify-between">
                         <div>
                             <CardTitle className="flex items-center gap-2">
-                                <FileText className="h-5 w-5" />
+                                <div className="p-2 rounded-full bg-amber-500/10">
+                                    <FileText className="h-4 w-4 text-amber-500" />
+                                </div>
                                 Coaching Agreement
                             </CardTitle>
                             <CardDescription>

@@ -82,14 +82,14 @@ export function ClientNotes({ notes, clientId }: ClientNotesProps) {
     }
 
     return (
-        <Card className="bg-card/40 border-primary/5 backdrop-blur-sm h-full flex flex-col">
+        <Card className="bg-card/50 backdrop-blur-xl border-white/5 hover:border-primary/20 transition-all duration-300 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)] h-full flex flex-col">
             <CardHeader className="flex flex-row items-center justify-between pb-4 shrink-0">
                 <div>
                     <CardTitle>Notes</CardTitle>
                     <CardDescription>Internal team notes. (2-way sync with GHL @sarah ;))</CardDescription>
                 </div>
                 {!isAdding && (
-                    <Button size="sm" onClick={() => setIsAdding(true)} variant="outline">
+                    <Button size="sm" onClick={() => setIsAdding(true)} variant="outline" className="bg-card/50 backdrop-blur-sm border-white/10 hover:border-primary/30 hover:bg-primary/10 transition-all duration-200">
                         <Plus className="h-4 w-4 mr-1" /> Add Note
                     </Button>
                 )}
@@ -127,8 +127,10 @@ export function ClientNotes({ notes, clientId }: ClientNotesProps) {
                         <div
                             key={note.id}
                             className={cn(
-                                "group bg-muted/30 rounded-lg p-4 border transition-all hover:bg-muted/50",
-                                note.is_pinned ? "border-primary/20 bg-primary/5" : "border-transparent"
+                                "group rounded-xl p-4 border transition-all duration-200",
+                                note.is_pinned
+                                    ? "bg-primary/10 border-primary/20 backdrop-blur-sm shadow-[0_0_15px_var(--glow-primary)]"
+                                    : "bg-white/5 border-white/5 hover:border-white/10 hover:bg-white/10"
                             )}
                         >
                             <div className="flex justify-between items-start gap-4 mb-2">

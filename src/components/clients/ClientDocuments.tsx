@@ -122,14 +122,16 @@ export function ClientDocuments({ clientId, documents }: ClientDocumentsProps) {
         <div className="h-full flex flex-col">
             <div className="flex items-center justify-between shrink-0 mb-4">
                 <h3 className="text-sm font-medium flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-primary" />
+                    <div className="p-2 rounded-full bg-purple-500/10">
+                        <FileText className="h-4 w-4 text-purple-500" />
+                    </div>
                     Documents ({documents.length})
                 </h3>
                 <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setIsUploadOpen(true)}
-                    className="h-8"
+                    className="h-8 bg-card/50 backdrop-blur-sm border-white/10 hover:border-primary/30 hover:bg-primary/10 transition-all duration-200"
                 >
                     <Upload className="h-4 w-4 mr-1" />
                     Upload
@@ -138,14 +140,14 @@ export function ClientDocuments({ clientId, documents }: ClientDocumentsProps) {
 
             <div className="flex-1 overflow-y-auto scrollbar-thin">
                 {documents.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground border border-dashed rounded-lg">
+                    <div className="text-center py-8 text-muted-foreground border border-dashed border-white/10 rounded-xl bg-white/5">
                         <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
                         <p className="text-sm">No documents uploaded yet</p>
                         <Button
                             variant="link"
                             size="sm"
                             onClick={() => setIsUploadOpen(true)}
-                            className="mt-2"
+                            className="mt-2 text-primary"
                         >
                             Upload your first document
                         </Button>
@@ -197,8 +199,8 @@ function DocumentItem({ document: doc, onDownload, onDelete, onToggleShare, disa
     const Icon = getFileIcon(doc.mime_type)
 
     return (
-        <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors group">
-            <div className="p-2 rounded bg-muted">
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 hover:bg-white/10 transition-all duration-200 group">
+            <div className="p-2 rounded-lg bg-white/10">
                 <Icon className="h-4 w-4 text-muted-foreground" />
             </div>
             <div className="flex-1 min-w-0">
@@ -237,17 +239,17 @@ function DocumentItem({ document: doc, onDownload, onDelete, onToggleShare, disa
                         <MoreHorizontal className="h-4 w-4" />
                     </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={onDownload}>
+                <DropdownMenuContent align="end" className="bg-[var(--glass-bg)] backdrop-blur-xl border-white/10">
+                    <DropdownMenuItem onClick={onDownload} className="focus:bg-white/10">
                         <Download className="h-4 w-4 mr-2" />
                         Download
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={onToggleShare}>
+                    <DropdownMenuItem onClick={onToggleShare} className="focus:bg-white/10">
                         <Share2 className="h-4 w-4 mr-2" />
                         {doc.is_shared_with_client ? 'Unshare' : 'Share with client'}
                     </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={onDelete} className="text-red-600">
+                    <DropdownMenuSeparator className="bg-white/10" />
+                    <DropdownMenuItem onClick={onDelete} className="text-red-500 focus:bg-red-500/10 focus:text-red-500">
                         <Trash2 className="h-4 w-4 mr-2" />
                         Delete
                     </DropdownMenuItem>

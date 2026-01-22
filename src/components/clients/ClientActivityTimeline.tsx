@@ -66,7 +66,7 @@ export function ClientActivityTimeline({ client, tasks, payments }: ClientActivi
 
     if (activities.length === 0) {
         return (
-            <Card className="bg-card/40 border-primary/5 backdrop-blur-sm">
+            <Card className="bg-card/50 backdrop-blur-xl border-white/5 hover:border-primary/20 transition-all duration-300 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
                 <CardHeader>
                     <CardTitle>Activity Timeline</CardTitle>
                 </CardHeader>
@@ -78,7 +78,7 @@ export function ClientActivityTimeline({ client, tasks, payments }: ClientActivi
     }
 
     return (
-        <Card className="bg-card/40 border-primary/5 backdrop-blur-sm lg:flex lg:flex-col overflow-hidden">
+        <Card className="bg-card/50 backdrop-blur-xl border-white/5 hover:border-primary/20 transition-all duration-300 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)] lg:flex lg:flex-col overflow-hidden">
             <CardHeader className="shrink-0">
                 <CardTitle>Activity Timeline</CardTitle>
             </CardHeader>

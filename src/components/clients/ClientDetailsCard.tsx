@@ -72,11 +72,11 @@ export function ClientDetailsCard({ client, ghlLocationId, users = [], isAdmin =
     };
 
     return (
-        <Card className="bg-card/40 border-primary/5 backdrop-blur-sm relative overflow-hidden transition-all duration-300">
+        <Card className="bg-card/50 backdrop-blur-xl border-white/5 hover:border-primary/20 transition-all duration-300 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)] relative overflow-hidden">
             <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="text-lg">Contact Details</CardTitle>
                 {!isEditing && (
-                    <Button variant="ghost" size="icon" onClick={() => setIsEditing(true)} className="h-8 w-8 text-muted-foreground hover:text-primary">
+                    <Button variant="ghost" size="icon" onClick={() => setIsEditing(true)} className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-white/10">
                         <Edit2 className="h-4 w-4" />
                     </Button>
                 )}
@@ -229,7 +229,7 @@ export function ClientDetailsCard({ client, ghlLocationId, users = [], isAdmin =
                 ) : (
                     <>
                         {/* Contact Buttons */}
-                        <div className="grid grid-cols-2 gap-2 pb-2 border-b border-primary/5">
+                        <div className="grid grid-cols-2 gap-2 pb-2 border-b border-white/5">
                             <a
                                 href={`mailto:${client.email}`}
                                 className="flex items-center justify-center gap-2 p-2 rounded-md bg-primary/10 hover:bg-primary/20 text-primary transition-colors text-xs font-medium"
@@ -268,7 +268,7 @@ export function ClientDetailsCard({ client, ghlLocationId, users = [], isAdmin =
 
 
                         {client.check_in_day && (
-                            <div className="pt-2 border-t border-primary/5 space-y-1">
+                            <div className="pt-2 border-t border-white/5 space-y-1">
                                 <label className="text-xs font-medium text-muted-foreground">Check-in Day</label>
                                 <div className="text-sm font-medium flex items-center gap-2">
                                     <Activity className="h-3 w-3 text-primary" />
@@ -279,7 +279,7 @@ export function ClientDetailsCard({ client, ghlLocationId, users = [], isAdmin =
 
                         {/* Sales Info Display */}
                         {(client.sold_by_user || client.lead_source || client.appointment_setter) && (
-                            <div className="pt-2 border-t border-primary/5 space-y-2">
+                            <div className="pt-2 border-t border-white/5 space-y-2">
                                 <div className="space-y-1">
                                     <label className="text-xs font-medium text-muted-foreground">Sold By (Closer)</label>
                                     <div className="text-sm font-medium">

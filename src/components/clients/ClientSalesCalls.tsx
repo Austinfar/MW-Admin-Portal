@@ -89,14 +89,17 @@ export function ClientSalesCalls({ clientId }: { clientId: string }) {
 
     if (logs.length === 0) {
         return (
-            <Card className="bg-card/40 border-primary/5 backdrop-blur-sm h-full">
+            <Card className="bg-card/50 backdrop-blur-xl border-white/5 hover:border-primary/20 transition-all duration-300 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)] h-full">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                        <Phone className="h-5 w-5" /> Sales Calls
+                        <div className="p-2 rounded-full bg-blue-500/10">
+                            <Phone className="h-4 w-4 text-blue-500" />
+                        </div>
+                        Sales Calls
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div className="text-center py-8 text-muted-foreground border border-dashed border-gray-800 rounded-lg">
+                    <div className="text-center py-8 text-muted-foreground border border-dashed border-white/10 rounded-xl bg-white/5">
                         No calls analyzed for this client yet.
                     </div>
                 </CardContent>
@@ -105,16 +108,19 @@ export function ClientSalesCalls({ clientId }: { clientId: string }) {
     }
 
     return (
-        <Card className="bg-card/40 border-primary/5 backdrop-blur-sm h-full flex flex-col">
+        <Card className="bg-card/50 backdrop-blur-xl border-white/5 hover:border-primary/20 transition-all duration-300 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)] h-full flex flex-col">
             <CardHeader className="shrink-0">
                 <CardTitle className="flex items-center gap-2">
-                    <Phone className="h-5 w-5" /> Sales Calls
+                    <div className="p-2 rounded-full bg-blue-500/10">
+                        <Phone className="h-4 w-4 text-blue-500" />
+                    </div>
+                    Sales Calls
                 </CardTitle>
             </CardHeader>
             <CardContent className="flex-1 overflow-y-auto scrollbar-thin">
                 <div className="space-y-4">
                     {logs.map((log) => (
-                        <div key={log.id} className="bg-[#1A1A1A] border border-gray-800 rounded-lg p-4 space-y-3">
+                        <div key={log.id} className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-3 hover:border-white/20 transition-all duration-200">
                             <div className="flex items-start justify-between">
                                 <div>
                                     <h3 className="text-white font-semibold text-lg">{log.client_name || 'Unknown'}</h3>
@@ -133,9 +139,9 @@ export function ClientSalesCalls({ clientId }: { clientId: string }) {
                                 })()}
                             </div>
 
-                            <div className="flex items-center text-sm text-gray-400 bg-black/20 p-2 rounded">
-                                <User className="h-3.5 w-3.5 mr-2 text-gray-500" />
-                                <span className="text-xs uppercase tracking-wide text-gray-600 mr-2">Submitted By:</span>
+                            <div className="flex items-center text-sm text-muted-foreground bg-white/5 p-2 rounded-lg">
+                                <User className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                                <span className="text-xs uppercase tracking-wide text-muted-foreground/60 mr-2">Submitted By:</span>
                                 {log.submitted_by || '-'}
                             </div>
 
@@ -186,7 +192,7 @@ export function ClientSalesCalls({ clientId }: { clientId: string }) {
                                                 <MoreHorizontal className="h-4 w-4" />
                                             </Button>
                                         </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end" className="w-[180px] bg-[#1a1c1e] border-gray-800 text-gray-200">
+                                        <DropdownMenuContent align="end" className="w-[180px] bg-[var(--glass-bg)] backdrop-blur-xl border-white/10 text-foreground">
                                             {log.meeting_url && (
                                                 <>
                                                     <DropdownMenuItem asChild>
@@ -200,7 +206,7 @@ export function ClientSalesCalls({ clientId }: { clientId: string }) {
                                                             Fireflies.ai
                                                         </a>
                                                     </DropdownMenuItem>
-                                                    <DropdownMenuSeparator className="bg-gray-800" />
+                                                    <DropdownMenuSeparator className="bg-white/10" />
                                                 </>
                                             )}
 

@@ -824,16 +824,22 @@ export async function getPayrollStats(startDate: Date, endDate: Date, filters?: 
             *,
             users:user_id(name, email),
             clients:client_id(name, lead_source, start_date)
-        `);
+        `)
+        .neq('status', 'void');
 
     // Filter by run or date range
     if (filters?.payrollRunId) {
         query = query.eq('payroll_run_id', filters.payrollRunId);
     } else {
         // Filter by transaction_date for accurate period reporting
+        // Also filter by payout_period_start to ensure we capture items belonging to this period logic
         query = query
             .gte('transaction_date', startOfDay(startDate).toISOString())
             .lte('transaction_date', endOfDay(endDate).toISOString());
+
+        // We can't strictly filter by payout_period_start because it's a string YYYY-MM-DD
+        // and we want to capture everything in the date range.
+        // transaction_date is the source of truth for "when it happened".
     }
 
     // Apply filters
