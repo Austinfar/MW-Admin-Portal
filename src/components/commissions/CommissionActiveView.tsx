@@ -356,7 +356,9 @@ export function CommissionActiveView() {
                         {/* Adjustments Sidebar */}
                         <div className="space-y-6">
                             <div className="space-y-6">
-                                <AdjustmentsList limit={5} adjustments={stats.adjustments} />
+                                <div className="space-y-6">
+                                    <AdjustmentsList limit={5} adjustments={stats.adjustments} onUpdate={fetchStats} />
+                                </div>
                             </div>
                         </div>
                     </div>

@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react'
 import { formatDistanceToNow, format } from 'date-fns'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Plus, Minus, RefreshCw, AlertTriangle, Gift, Info } from 'lucide-react'
-import { getAdjustments, CommissionAdjustment } from '@/lib/actions/payroll'
+import { Loader2, Plus, Minus, RefreshCw, AlertTriangle, Gift, Info, Trash2 } from 'lucide-react'
+import { getAdjustments, CommissionAdjustment, removeAdjustment } from '@/lib/actions/payroll'
 import { formatCurrency, cn } from '@/lib/utils'
 import {
     Tooltip,
@@ -13,6 +13,8 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { toast } from 'sonner'
+import { Button } from '../ui/button'
 
 interface AdjustmentsListProps {
     userId?: string
@@ -21,6 +23,7 @@ interface AdjustmentsListProps {
     showTitle?: boolean
     className?: string
     adjustments?: CommissionAdjustment[] // Allow passing data directly
+    onUpdate?: () => void
 }
 
 const TYPE_CONFIG: Record<string, { label: string; icon: typeof Plus; color: string; bgColor: string }> = {
@@ -56,9 +59,10 @@ const TYPE_CONFIG: Record<string, { label: string; icon: typeof Plus; color: str
     }
 }
 
-export function AdjustmentsList({ userId, runId, limit, showTitle = true, className, adjustments: initialAdjustments }: AdjustmentsListProps) {
+export function AdjustmentsList({ userId, runId, limit, showTitle = true, className, adjustments: initialAdjustments, onUpdate }: AdjustmentsListProps) {
     const [adjustments, setAdjustments] = useState<CommissionAdjustment[]>(initialAdjustments || [])
     const [loading, setLoading] = useState(!initialAdjustments)
+    const [deletingId, setDeletingId] = useState<string | null>(null)
 
     useEffect(() => {
         // If adjustments are passed directly, just update them when they change
@@ -68,19 +72,46 @@ export function AdjustmentsList({ userId, runId, limit, showTitle = true, classN
             return
         }
 
-        async function fetchAdjustments() {
-            setLoading(true)
-            try {
-                const data = await getAdjustments({ userId, runId })
-                setAdjustments(limit ? data.slice(0, limit) : data)
-            } catch (error) {
-                console.error('Failed to fetch adjustments:', error)
-            } finally {
-                setLoading(false)
-            }
-        }
         fetchAdjustments()
     }, [userId, runId, limit, initialAdjustments])
+
+    async function fetchAdjustments() {
+        setLoading(true)
+        try {
+            const data = await getAdjustments({ userId, runId })
+            setAdjustments(limit ? data.slice(0, limit) : data)
+        } catch (error) {
+            console.error('Failed to fetch adjustments:', error)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    async function handleDelete(id: string) {
+        if (!confirm('Are you sure you want to delete this adjustment?')) return
+
+        setDeletingId(id)
+        try {
+            const result = await removeAdjustment(id)
+            if (result.success) {
+                toast.success('Adjustment removed')
+                if (onUpdate) {
+                    onUpdate()
+                } else if (!initialAdjustments) {
+                    fetchAdjustments()
+                } else {
+                    // Optimistic update if no parent refresh
+                    setAdjustments(prev => prev.filter(a => a.id !== id))
+                }
+            } else {
+                toast.error(result.error || 'Failed to remove')
+            }
+        } catch (e) {
+            toast.error('Failed to remove adjustment')
+        } finally {
+            setDeletingId(null)
+        }
+    }
 
     if (loading) {
         return (
@@ -133,11 +164,12 @@ export function AdjustmentsList({ userId, runId, limit, showTitle = true, classN
                     const config = TYPE_CONFIG[adjustment.adjustment_type] || TYPE_CONFIG.deduction
                     const Icon = config.icon
                     const isPositive = adjustment.amount >= 0
+                    const isDeleting = deletingId === adjustment.id
 
                     return (
                         <div
                             key={adjustment.id}
-                            className="flex items-start gap-3 p-3 rounded-lg bg-white/[0.02] hover:bg-white/[0.04] transition-colors border border-white/5"
+                            className="flex items-start gap-3 p-3 rounded-lg bg-white/[0.02] hover:bg-white/[0.04] transition-colors border border-white/5 group relative"
                         >
                             <div className={cn("p-2 rounded-lg", config.bgColor)}>
                                 <Icon className={cn("h-4 w-4", config.color)} />
@@ -179,11 +211,26 @@ export function AdjustmentsList({ userId, runId, limit, showTitle = true, classN
                                 )}
                             </div>
 
-                            <div className={cn(
-                                "text-lg font-bold whitespace-nowrap",
-                                isPositive ? "text-emerald-400" : "text-red-400"
-                            )}>
-                                {isPositive ? '+' : ''}{formatCurrency(adjustment.amount)}
+                            <div className="flex flex-col items-end gap-2">
+                                <div className={cn(
+                                    "text-lg font-bold whitespace-nowrap",
+                                    isPositive ? "text-emerald-400" : "text-red-400"
+                                )}>
+                                    {isPositive ? '+' : ''}{formatCurrency(adjustment.amount)}
+                                </div>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 text-muted-foreground hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    onClick={() => handleDelete(adjustment.id)}
+                                    disabled={isDeleting}
+                                >
+                                    {isDeleting ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Trash2 className="h-4 w-4" />
+                                    )}
+                                </Button>
                             </div>
                         </div>
                     )
