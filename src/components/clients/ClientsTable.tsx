@@ -20,8 +20,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { MoreHorizontal, Filter, X, Check, CreditCard, ArrowUpDown } from 'lucide-react'
-import { Client, ClientType } from '@/types/client'
+import { MoreHorizontal, Filter, X, CreditCard, ArrowUpDown } from 'lucide-react'
+import { ClientType, EnhancedClient } from '@/types/client'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { AddClientDialog } from './AddClientDialog'
@@ -30,15 +30,16 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Coach } from '@/lib/actions/clients'
+import { BulkActionsBar } from './BulkActionsBar'
 
 interface ClientsTableProps {
-    data: Client[]
+    data: EnhancedClient[]
     clientTypes: ClientType[]
     coaches: Coach[]
     currentUserId?: string
 }
 
-type SortField = 'name' | 'status' | 'program' | 'coach' | 'start_date'
+type SortField = 'name' | 'status' | 'program' | 'coach' | 'start_date' | 'contract_end' | 'last_payment' | 'onboarding'
 type SortOrder = 'asc' | 'desc'
 
 interface Filters {
@@ -72,6 +73,7 @@ export function ClientsTable({ data, clientTypes, coaches, currentUserId }: Clie
         onlyMyClients: false
     })
     const [isFilterOpen, setIsFilterOpen] = useState(false)
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
     const router = useRouter()
 
     const activeFilterCount = useMemo(() => {
@@ -132,6 +134,18 @@ export function ClientsTable({ data, clientTypes, coaches, currentUserId }: Clie
                     compareA = new Date(a.start_date).getTime()
                     compareB = new Date(b.start_date).getTime()
                     break
+                case 'contract_end':
+                    compareA = a.contract_end_date ? new Date(a.contract_end_date).getTime() : Infinity
+                    compareB = b.contract_end_date ? new Date(b.contract_end_date).getTime() : Infinity
+                    break
+                case 'last_payment':
+                    compareA = a.last_payment_date ? new Date(a.last_payment_date).getTime() : 0
+                    compareB = b.last_payment_date ? new Date(b.last_payment_date).getTime() : 0
+                    break
+                case 'onboarding':
+                    compareA = a.onboarding_total ? (a.onboarding_completed || 0) / a.onboarding_total : 0
+                    compareB = b.onboarding_total ? (b.onboarding_completed || 0) / b.onboarding_total : 0
+                    break
             }
 
             if (compareA < compareB) return sortOrder === 'asc' ? -1 : 1
@@ -180,6 +194,95 @@ export function ClientsTable({ data, clientTypes, coaches, currentUserId }: Clie
             default:
                 return 'bg-muted text-muted-foreground'
         }
+    }
+
+    // Selection helpers
+    const toggleSelect = (id: string) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev)
+            if (next.has(id)) {
+                next.delete(id)
+            } else {
+                next.add(id)
+            }
+            return next
+        })
+    }
+
+    const toggleSelectAll = () => {
+        if (selectedIds.size === filteredData.length) {
+            setSelectedIds(new Set())
+        } else {
+            setSelectedIds(new Set(filteredData.map(c => c.id)))
+        }
+    }
+
+    const clearSelection = () => setSelectedIds(new Set())
+
+    // Contract end date styling
+    const getContractEndStyle = (endDate: string | null | undefined) => {
+        if (!endDate) return { color: 'text-muted-foreground', label: 'Open-ended' }
+        const now = new Date()
+        const end = new Date(endDate)
+        const daysUntil = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+
+        if (daysUntil < 0) return { color: 'text-red-500', label: 'Expired' }
+        if (daysUntil <= 14) return { color: 'text-red-500', label: format(end, 'MMM d, yyyy') }
+        if (daysUntil <= 30) return { color: 'text-amber-500', label: format(end, 'MMM d, yyyy') }
+        return { color: 'text-foreground', label: format(end, 'MMM d, yyyy') }
+    }
+
+    // Last payment styling
+    const getLastPaymentDisplay = (date: string | null | undefined) => {
+        if (!date) return { text: 'Never', color: 'text-muted-foreground' }
+        const now = new Date()
+        const paymentDate = new Date(date)
+        const daysAgo = Math.floor((now.getTime() - paymentDate.getTime()) / (1000 * 60 * 60 * 24))
+
+        if (daysAgo === 0) return { text: 'Today', color: 'text-emerald-500' }
+        if (daysAgo === 1) return { text: 'Yesterday', color: 'text-foreground' }
+        if (daysAgo <= 7) return { text: `${daysAgo}d ago`, color: 'text-foreground' }
+        if (daysAgo <= 30) return { text: `${daysAgo}d ago`, color: 'text-foreground' }
+        return { text: `${daysAgo}d ago`, color: 'text-amber-500' }
+    }
+
+    // Onboarding progress
+    const getOnboardingDisplay = (total: number | undefined, completed: number | undefined) => {
+        if (!total || total === 0) return { text: '—', percent: 0 }
+        const pct = Math.round(((completed || 0) / total) * 100)
+        return { text: `${completed || 0}/${total}`, percent: pct }
+    }
+
+    // Export selected clients to CSV
+    const exportToCSV = () => {
+        const clientsToExport = selectedIds.size > 0
+            ? filteredData.filter(c => selectedIds.has(c.id))
+            : filteredData
+
+        const headers = ['Name', 'Email', 'Phone', 'Status', 'Program', 'Coach', 'Start Date', 'End Date', 'Lead Source']
+        const rows = clientsToExport.map(c => [
+            c.name,
+            c.email,
+            c.phone || '',
+            c.status,
+            c.client_type?.name || '',
+            c.assigned_coach?.name || '',
+            c.start_date ? format(new Date(c.start_date), 'yyyy-MM-dd') : '',
+            c.contract_end_date ? format(new Date(c.contract_end_date), 'yyyy-MM-dd') : '',
+            c.lead_source || ''
+        ])
+
+        const csvContent = [headers, ...rows]
+            .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+            .join('\n')
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `clients-export-${format(new Date(), 'yyyy-MM-dd')}.csv`
+        link.click()
+        URL.revokeObjectURL(url)
     }
 
     return (
@@ -400,7 +503,14 @@ export function ClientsTable({ data, clientTypes, coaches, currentUserId }: Clie
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead className="w-[250px] cursor-pointer hover:text-foreground" onClick={() => handleSort('name')}>
+                                <TableHead className="w-[40px]">
+                                    <Checkbox
+                                        checked={filteredData.length > 0 && selectedIds.size === filteredData.length}
+                                        onCheckedChange={toggleSelectAll}
+                                        aria-label="Select all"
+                                    />
+                                </TableHead>
+                                <TableHead className="w-[220px] cursor-pointer hover:text-foreground" onClick={() => handleSort('name')}>
                                     Client {sortField === 'name' && <ArrowUpDown className="ml-1 h-3 w-3 inline" />}
                                 </TableHead>
                                 <TableHead className="cursor-pointer hover:text-foreground" onClick={() => handleSort('status')}>
@@ -410,10 +520,19 @@ export function ClientsTable({ data, clientTypes, coaches, currentUserId }: Clie
                                     Program {sortField === 'program' && <ArrowUpDown className="ml-1 h-3 w-3 inline" />}
                                 </TableHead>
                                 <TableHead className="cursor-pointer hover:text-foreground" onClick={() => handleSort('coach')}>
-                                    Assigned Coach {sortField === 'coach' && <ArrowUpDown className="ml-1 h-3 w-3 inline" />}
+                                    Coach {sortField === 'coach' && <ArrowUpDown className="ml-1 h-3 w-3 inline" />}
                                 </TableHead>
                                 <TableHead className="cursor-pointer hover:text-foreground" onClick={() => handleSort('start_date')}>
-                                    Start Date {sortField === 'start_date' && <ArrowUpDown className="ml-1 h-3 w-3 inline" />}
+                                    Start {sortField === 'start_date' && <ArrowUpDown className="ml-1 h-3 w-3 inline" />}
+                                </TableHead>
+                                <TableHead className="cursor-pointer hover:text-foreground" onClick={() => handleSort('contract_end')}>
+                                    End Date {sortField === 'contract_end' && <ArrowUpDown className="ml-1 h-3 w-3 inline" />}
+                                </TableHead>
+                                <TableHead className="cursor-pointer hover:text-foreground" onClick={() => handleSort('last_payment')}>
+                                    Last Payment {sortField === 'last_payment' && <ArrowUpDown className="ml-1 h-3 w-3 inline" />}
+                                </TableHead>
+                                <TableHead className="cursor-pointer hover:text-foreground" onClick={() => handleSort('onboarding')}>
+                                    Onboarding {sortField === 'onboarding' && <ArrowUpDown className="ml-1 h-3 w-3 inline" />}
                                 </TableHead>
                                 <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
@@ -421,75 +540,113 @@ export function ClientsTable({ data, clientTypes, coaches, currentUserId }: Clie
                         <TableBody>
                             {filteredData.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} className="h-24 text-center">
+                                    <TableCell colSpan={10} className="h-24 text-center">
                                         No results.
                                     </TableCell>
                                 </TableRow>
                             ) : (
-                                filteredData.map((client) => (
-                                    <TableRow key={client.id} className="cursor-pointer hover:bg-muted/50 border-border/50" onClick={() => router.push(`/clients/${client.id}`)}>
-                                        <TableCell>
-                                            <div className="flex flex-col">
-                                                <div className="flex items-center gap-1.5">
-                                                    <span className="font-medium text-card-foreground">{client.name}</span>
-                                                    <div
-                                                        title={client.stripe_customer_id ? "Stripe Connected" : "No Stripe Account"}
-                                                        className={client.stripe_customer_id ? "text-emerald-500" : "text-muted-foreground/30"}
-                                                    >
-                                                        <CreditCard className="h-3.5 w-3.5" />
+                                filteredData.map((client) => {
+                                    const contractEnd = getContractEndStyle(client.contract_end_date)
+                                    const lastPayment = getLastPaymentDisplay(client.last_payment_date)
+                                    const onboarding = getOnboardingDisplay(client.onboarding_total, client.onboarding_completed)
+
+                                    return (
+                                        <TableRow key={client.id} className={`cursor-pointer hover:bg-muted/50 border-border/50 ${selectedIds.has(client.id) ? 'bg-primary/5' : ''}`} onClick={() => router.push(`/clients/${client.id}`)}>
+                                            <TableCell onClick={(e) => e.stopPropagation()}>
+                                                <Checkbox
+                                                    checked={selectedIds.has(client.id)}
+                                                    onCheckedChange={() => toggleSelect(client.id)}
+                                                    aria-label={`Select ${client.name}`}
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="flex flex-col">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="font-medium text-card-foreground">{client.name}</span>
+                                                        <div
+                                                            title={client.stripe_customer_id ? "Stripe Connected" : "No Stripe Account"}
+                                                            className={client.stripe_customer_id ? "text-emerald-500" : "text-muted-foreground/30"}
+                                                        >
+                                                            <CreditCard className="h-3.5 w-3.5" />
+                                                        </div>
                                                     </div>
+                                                    <span className="text-xs text-muted-foreground">{client.email}</span>
                                                 </div>
-                                                <span className="text-xs text-muted-foreground">{client.email}</span>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant="secondary" className={getStatusColor(client.status)}>
-                                                {client.status.toUpperCase()}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                            <span className="whitespace-nowrap">
-                                                {client.client_type?.name || <span className="text-gray-400 italic">Unassigned</span>}
-                                            </span>
-                                        </TableCell>
-                                        <TableCell>
-                                            <span className="whitespace-nowrap">
-                                                {client.assigned_coach?.name || <span className="text-gray-400 italic">Unassigned</span>}
-                                            </span>
-                                        </TableCell>
-                                        <TableCell>
-                                            <span className="whitespace-nowrap">
-                                                {format(new Date(client.start_date), 'MMM d, yyyy')}
-                                            </span>
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" className="h-8 w-8 p-0">
-                                                        <span className="sr-only">Open menu</span>
-                                                        <MoreHorizontal className="h-4 w-4" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(client.id) }}>
-                                                        Copy ID
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuSeparator />
-                                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/clients/${client.id}`) }}>
-                                                        View details
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); }}>
-                                                        View payments
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem className="text-red-600" onClick={(e) => { e.stopPropagation(); }}>
-                                                        Archive client
-                                                    </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </TableCell>
-                                    </TableRow>
-                                ))
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant="secondary" className={getStatusColor(client.status)}>
+                                                    {client.status.toUpperCase()}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell>
+                                                <span className="whitespace-nowrap text-sm">
+                                                    {client.client_type?.name || <span className="text-gray-400 italic">Unassigned</span>}
+                                                </span>
+                                            </TableCell>
+                                            <TableCell>
+                                                <span className="whitespace-nowrap text-sm">
+                                                    {client.assigned_coach?.name || <span className="text-gray-400 italic">Unassigned</span>}
+                                                </span>
+                                            </TableCell>
+                                            <TableCell>
+                                                <span className="whitespace-nowrap text-sm">
+                                                    {format(new Date(client.start_date), 'MMM d, yyyy')}
+                                                </span>
+                                            </TableCell>
+                                            <TableCell>
+                                                <span className={`whitespace-nowrap text-sm ${contractEnd.color}`}>
+                                                    {contractEnd.label}
+                                                </span>
+                                            </TableCell>
+                                            <TableCell>
+                                                <span className={`whitespace-nowrap text-sm ${lastPayment.color}`}>
+                                                    {lastPayment.text}
+                                                </span>
+                                            </TableCell>
+                                            <TableCell>
+                                                {onboarding.text === '—' ? (
+                                                    <span className="text-sm text-muted-foreground">—</span>
+                                                ) : (
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-16 h-1.5 bg-secondary rounded-full overflow-hidden">
+                                                            <div
+                                                                className={`h-full rounded-full ${onboarding.percent === 100 ? 'bg-emerald-500' : 'bg-primary'}`}
+                                                                style={{ width: `${onboarding.percent}%` }}
+                                                            />
+                                                        </div>
+                                                        <span className="text-xs text-muted-foreground">{onboarding.text}</span>
+                                                    </div>
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <Button variant="ghost" className="h-8 w-8 p-0" onClick={(e) => e.stopPropagation()}>
+                                                            <span className="sr-only">Open menu</span>
+                                                            <MoreHorizontal className="h-4 w-4" />
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(client.id) }}>
+                                                            Copy ID
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuSeparator />
+                                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/clients/${client.id}`) }}>
+                                                            View details
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); }}>
+                                                            View payments
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem className="text-red-600" onClick={(e) => { e.stopPropagation(); }}>
+                                                            Archive client
+                                                        </DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                            </TableCell>
+                                        </TableRow>
+                                    )
+                                })
                             )}
                         </TableBody>
                     </Table>
@@ -545,6 +702,15 @@ export function ClientsTable({ data, clientTypes, coaches, currentUserId }: Clie
                     ))
                 )}
             </div>
+
+            {/* Bulk Actions Bar */}
+            <BulkActionsBar
+                selectedIds={selectedIds}
+                selectedClients={filteredData.filter(c => selectedIds.has(c.id))}
+                coaches={coaches}
+                onClear={clearSelection}
+                onExport={exportToCSV}
+            />
         </div>
     )
 }

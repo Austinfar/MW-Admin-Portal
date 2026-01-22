@@ -1,9 +1,12 @@
 import { getClient, getCoaches } from '@/lib/actions/clients'
 import { getClientTasks } from '@/lib/actions/onboarding'
 import { getClientNotes } from '@/lib/actions/notes'
+import { getClientGoals } from '@/lib/actions/goals'
+import { getClientDocuments } from '@/lib/actions/documents'
+import { getActiveAgreement } from '@/lib/actions/agreements'
 import { GHL_CONFIG } from '@/lib/ghl/config'
 import { notFound } from 'next/navigation'
-import { format } from 'date-fns'
+import { format, differenceInDays } from 'date-fns'
 import { Calendar, Mail, Phone, CreditCard, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -18,9 +21,15 @@ import { ClientNotes } from '@/components/clients/ClientNotes'
 import { ClientActivityTimeline } from '@/components/clients/ClientActivityTimeline'
 import { ClientSalesCalls } from '@/components/clients/ClientSalesCalls'
 import { AgreementSection } from '@/components/clients/AgreementSection'
+import { ClientHealthScore } from '@/components/clients/ClientHealthScore'
+import { ClientRiskIndicators } from '@/components/clients/ClientRiskIndicators'
+import { ClientGoals } from '@/components/clients/ClientGoals'
+import { calculateRiskIndicators } from '@/lib/logic/client-risk'
+import { ClientDocuments } from '@/components/clients/ClientDocuments'
 import { getClientPayments } from '@/lib/actions/payments'
 import { OnboardingTask } from '@/types/onboarding'
 import { Note } from '@/types/client'
+import { calculateHealthScore } from '@/lib/logic/client-health'
 
 import { getCurrentUserAccess } from '@/lib/auth-utils'
 
@@ -53,6 +62,53 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
     const notesData = await getClientNotes(params.id)
     const notes = (notesData || []) as Note[]
 
+    // Fetch goals
+    const goals = await getClientGoals(params.id)
+
+    // Fetch documents
+    const documents = await getClientDocuments(params.id)
+
+    // Fetch active agreement for health calculation
+    const activeAgreement = await getActiveAgreement(params.id)
+
+    // Calculate health score
+    const overdueTasksCount = tasks.filter(t =>
+        t.status === 'pending' && t.due_date && new Date(t.due_date) < new Date()
+    ).length
+    const hasFailedPayment = payments.some(p => p.status === 'failed' &&
+        differenceInDays(new Date(), new Date(p.payment_date)) <= 30
+    )
+    const lastPayment = payments.length > 0 ? payments[0] : null
+
+    const healthScore = calculateHealthScore({
+        hasStripeCustomer: Boolean(client.stripe_customer_id),
+        lastPaymentDate: lastPayment?.payment_date || null,
+        lastPaymentStatus: lastPayment?.status || null,
+        hasFailedPaymentRecent: hasFailedPayment,
+        onboardingTotal: tasks.length,
+        onboardingCompleted: tasks.filter(t => t.status === 'completed').length,
+        contractEndDate: client.contract_end_date,
+        status: client.status,
+        hasSignedAgreement: activeAgreement?.status === 'signed',
+        hasPendingAgreement: ['sent', 'viewed'].includes(activeAgreement?.status || ''),
+    })
+
+    // Calculate risk indicators
+    const contractEndDays = client.contract_end_date
+        ? differenceInDays(new Date(client.contract_end_date), new Date())
+        : null
+    const lastPaymentDaysAgo = lastPayment
+        ? differenceInDays(new Date(), new Date(lastPayment.payment_date))
+        : null
+
+    const riskIndicators = calculateRiskIndicators({
+        hasFailedPayment,
+        lastPaymentDaysAgo,
+        overdueOnboardingTasks: overdueTasksCount,
+        contractEndDays,
+        hasRenewalAgreement: false, // TODO: check for renewal agreement
+    })
+
     const getStatusColor = (status: string) => {
         switch (status) {
             case 'active':
@@ -81,7 +137,9 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
                             <Badge variant="secondary" className={getStatusColor(client.status)}>
                                 {client.status.toUpperCase()}
                             </Badge>
+                            <ClientHealthScore score={healthScore} />
                         </div>
+                        <ClientRiskIndicators indicators={riskIndicators} />
                         <p className="text-muted-foreground flex items-center gap-2">
                             <Mail className="h-4 w-4" /> {client.email}
                             <span className="text-gray-600">|</span>
@@ -126,10 +184,11 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
                 {/* Main Column: Journey & Timeline (6 cols) */}
                 <div className="lg:col-span-6 space-y-6 h-full flex flex-col">
                     <Tabs defaultValue="onboarding" className="w-full flex-1 flex flex-col">
-                        <TabsList className="grid w-full grid-cols-3">
+                        <TabsList className="grid w-full grid-cols-4">
                             <TabsTrigger value="onboarding">Onboarding</TabsTrigger>
                             <TabsTrigger value="notes">Notes</TabsTrigger>
                             <TabsTrigger value="sales-calls">Sales Calls</TabsTrigger>
+                            <TabsTrigger value="documents">Documents</TabsTrigger>
                         </TabsList>
                         <TabsContent value="onboarding" className="mt-4 flex-1">
                             <Card className="bg-card/40 border-primary/5 backdrop-blur-sm h-full">
@@ -147,6 +206,9 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
                         </TabsContent>
                         <TabsContent value="sales-calls" className="mt-4 flex-1">
                             <ClientSalesCalls clientId={client.id} />
+                        </TabsContent>
+                        <TabsContent value="documents" className="mt-4 flex-1">
+                            <ClientDocuments clientId={client.id} documents={documents} />
                         </TabsContent>
                     </Tabs>
                 </div>
@@ -183,20 +245,49 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
                         hasGhlContactId={Boolean(client.ghl_contact_id)}
                     />
 
+                    <ClientGoals clientId={client.id} goals={goals} />
+
                     <Card className="bg-card/40 border-primary/5 backdrop-blur-sm">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-lg">Financials</CardTitle>
                             <CreditCard className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
-                            <div className="mb-4">
-                                <div className="text-2xl font-bold text-emerald-500">
-                                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
-                                        payments.reduce((sum, p) => sum + p.amount, 0)
-                                    )}
-                                </div>
-                                <p className="text-xs text-muted-foreground">Lifetime Revenue</p>
-                            </div>
+                            {(() => {
+                                // Calculate financial totals
+                                const grossRevenue = payments
+                                    .filter(p => p.status === 'succeeded' || p.status === 'refunded' || p.status === 'partially_refunded')
+                                    .reduce((sum, p) => sum + p.amount, 0)
+                                const totalRefunds = payments.reduce((sum, p) => sum + (p.refund_amount || 0), 0)
+                                const netRevenue = grossRevenue - totalRefunds
+
+                                return (
+                                    <div className="mb-4 space-y-3">
+                                        <div>
+                                            <div className={`text-2xl font-bold ${netRevenue >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                                {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(netRevenue)}
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">Net Lifetime Revenue</p>
+                                        </div>
+                                        {totalRefunds > 0 && (
+                                            <div className="flex justify-between text-sm border-t border-primary/10 pt-2">
+                                                <div>
+                                                    <span className="text-muted-foreground">Gross:</span>
+                                                    <span className="ml-1 font-medium">
+                                                        {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(grossRevenue)}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-muted-foreground">Refunds:</span>
+                                                    <span className="ml-1 font-medium text-red-500">
+                                                        -{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalRefunds)}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )
+                            })()}
                             <Separator className="my-4 bg-primary/10" />
                             <h4 className="text-sm font-medium mb-3 text-muted-foreground">Recent Transactions</h4>
                             <ClientPaymentsList payments={payments} clientId={client.id} stripeCustomerId={client.stripe_customer_id} />

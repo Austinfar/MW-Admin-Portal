@@ -1,8 +1,9 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import { Client } from '@/types/client'
+import { Client, ClientStats, EnhancedClient } from '@/types/client'
 import { revalidatePath, unstable_cache, revalidateTag } from 'next/cache'
+import { subDays } from 'date-fns'
 
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -217,4 +218,161 @@ export async function updateClient(id: string, data: Partial<Client>) {
     revalidatePath(`/clients/${id}`)
     revalidatePath('/clients')
     return { success: true }
+}
+
+// Get enhanced client data with payment and onboarding info
+export async function getEnhancedClients(): Promise<EnhancedClient[]> {
+    const supabase = createAdminClient()
+
+    // Get clients with basic data
+    const { data: clients, error } = await supabase
+        .from('clients')
+        .select(`
+            *,
+            client_type:client_types(name),
+            assigned_coach:users!clients_assigned_coach_id_fkey(name, email),
+            sold_by_user:users!clients_sold_by_user_id_fkey(name, email),
+            appointment_setter:users!clients_appointment_setter_id_fkey(name, email)
+        `)
+        .order('created_at', { ascending: false })
+
+    if (error) {
+        console.error('Error fetching enhanced clients:', error)
+        return []
+    }
+
+    // Get latest payments for all clients
+    const { data: payments } = await supabase
+        .from('payments')
+        .select('client_id, payment_date, status')
+        .order('payment_date', { ascending: false })
+
+    // Get onboarding task counts
+    const { data: tasks } = await supabase
+        .from('client_onboarding_tasks')
+        .select('client_id, status')
+
+    // Build lookup maps
+    const latestPaymentMap = new Map<string, { date: string; status: string }>()
+    payments?.forEach(p => {
+        if (!latestPaymentMap.has(p.client_id)) {
+            latestPaymentMap.set(p.client_id, { date: p.payment_date, status: p.status })
+        }
+    })
+
+    const taskCountMap = new Map<string, { total: number; completed: number }>()
+    tasks?.forEach(t => {
+        const current = taskCountMap.get(t.client_id) || { total: 0, completed: 0 }
+        current.total++
+        if (t.status === 'completed') current.completed++
+        taskCountMap.set(t.client_id, current)
+    })
+
+    // Merge data
+    return clients.map(client => ({
+        ...client,
+        last_payment_date: latestPaymentMap.get(client.id)?.date || null,
+        last_payment_status: latestPaymentMap.get(client.id)?.status || null,
+        onboarding_total: taskCountMap.get(client.id)?.total || 0,
+        onboarding_completed: taskCountMap.get(client.id)?.completed || 0
+    })) as EnhancedClient[]
+}
+
+// Get client statistics for dashboard cards
+export async function getClientStats(userId?: string, ownOnly?: boolean): Promise<ClientStats> {
+    const supabase = createAdminClient()
+
+    // Get all clients
+    let query = supabase
+        .from('clients')
+        .select('id, status, contract_end_date, assigned_coach_id')
+
+    if (ownOnly && userId) {
+        query = query.eq('assigned_coach_id', userId)
+    }
+
+    const { data: clients, error } = await query
+
+    if (error || !clients) {
+        console.error('Error fetching client stats:', error)
+        return { total: 0, active: 0, atRisk: 0, endingSoon: 0 }
+    }
+
+    const now = new Date()
+    const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+
+    // Get clients with failed payments in last 30 days
+    const thirtyDaysAgo = subDays(now, 30)
+    const { data: failedPayments } = await supabase
+        .from('payments')
+        .select('client_id')
+        .eq('status', 'failed')
+        .gte('payment_date', thirtyDaysAgo.toISOString())
+
+    const failedPaymentClientIds = new Set(failedPayments?.map(p => p.client_id) || [])
+
+    // Get clients with overdue onboarding tasks
+    const { data: overdueTasks } = await supabase
+        .from('client_onboarding_tasks')
+        .select('client_id')
+        .eq('status', 'pending')
+        .lt('due_date', now.toISOString())
+
+    const overdueTaskClientIds = new Set(overdueTasks?.map(t => t.client_id) || [])
+
+    // Calculate stats
+    const activeClients = clients.filter(c => c.status === 'active')
+
+    const atRiskClients = activeClients.filter(c =>
+        failedPaymentClientIds.has(c.id) || overdueTaskClientIds.has(c.id)
+    )
+
+    const endingSoonClients = activeClients.filter(c => {
+        if (!c.contract_end_date) return false
+        const endDate = new Date(c.contract_end_date)
+        return endDate <= thirtyDaysFromNow && endDate >= now
+    })
+
+    return {
+        total: clients.length,
+        active: activeClients.length,
+        atRisk: atRiskClients.length,
+        endingSoon: endingSoonClients.length
+    }
+}
+
+// Bulk update client status
+export async function bulkUpdateClientStatus(clientIds: string[], status: Client['status']) {
+    const supabase = await createClient()
+
+    const { error } = await supabase
+        .from('clients')
+        .update({ status })
+        .in('id', clientIds)
+
+    if (error) {
+        console.error('Error bulk updating client status:', error)
+        return { error: error.message }
+    }
+
+    revalidatePath('/clients')
+    return { success: true, updated: clientIds.length }
+}
+
+// Bulk reassign coach
+export async function bulkReassignCoach(clientIds: string[], coachId: string | null) {
+    const supabase = await createClient()
+
+    const { error } = await supabase
+        .from('clients')
+        .update({ assigned_coach_id: coachId })
+        .in('id', clientIds)
+
+    if (error) {
+        console.error('Error bulk reassigning coach:', error)
+        return { error: error.message }
+    }
+
+    revalidatePath('/clients')
+    return { success: true, updated: clientIds.length }
 }

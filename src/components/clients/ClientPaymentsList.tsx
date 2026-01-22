@@ -33,7 +33,10 @@ export function ClientPaymentsList({ payments, clientId, stripeCustomerId }: Cli
             if (result.error) {
                 toast.error(`Sync failed: ${result.error}`)
             } else {
-                toast.success(`Synced ${result.synced} payments from Stripe`)
+                const refundMsg = result.refundsFound && result.refundsFound > 0
+                    ? ` (${result.refundsFound} refund${result.refundsFound > 1 ? 's' : ''} found)`
+                    : ''
+                toast.success(`Synced ${result.synced} payments from Stripe${refundMsg}`)
                 router.refresh()
             }
         } catch (error) {
@@ -88,24 +91,54 @@ export function ClientPaymentsList({ payments, clientId, stripeCustomerId }: Cli
             </CardHeader>
             <CardContent>
                 <div className="space-y-4">
-                    {payments.map((payment) => (
-                        <div key={payment.id} className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
-                            <div>
-                                <p className="font-medium text-sm">{payment.product_name || 'Payment'}</p>
-                                <p className="text-xs text-muted-foreground">{format(new Date(payment.payment_date), 'PPP')}</p>
-                            </div>
-                            <div className="text-right">
-                                <p className="font-medium text-sm">
-                                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: payment.currency }).format(payment.amount)}
-                                </p>
-                                <div className="mt-1">
-                                    <Badge variant={payment.status === 'succeeded' ? 'default' : 'destructive'} className="text-[10px] px-1.5 py-0 uppercase">
-                                        {payment.status}
-                                    </Badge>
+                    {payments.map((payment) => {
+                        const isRefunded = payment.status === 'refunded' || payment.status === 'partially_refunded'
+                        const hasRefund = (payment.refund_amount || 0) > 0
+                        const netAmount = payment.amount - (payment.refund_amount || 0)
+
+                        return (
+                            <div key={payment.id} className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
+                                <div>
+                                    <p className="font-medium text-sm">{payment.product_name || 'Payment'}</p>
+                                    <p className="text-xs text-muted-foreground">{format(new Date(payment.payment_date), 'PPP')}</p>
+                                </div>
+                                <div className="text-right">
+                                    {hasRefund ? (
+                                        <div className="space-y-0.5">
+                                            <p className="font-medium text-sm line-through text-muted-foreground">
+                                                {new Intl.NumberFormat('en-US', { style: 'currency', currency: payment.currency || 'USD' }).format(payment.amount)}
+                                            </p>
+                                            <p className="text-xs text-red-500">
+                                                Refund: -{new Intl.NumberFormat('en-US', { style: 'currency', currency: payment.currency || 'USD' }).format(payment.refund_amount || 0)}
+                                            </p>
+                                            {payment.status === 'partially_refunded' && (
+                                                <p className="font-medium text-sm text-emerald-600">
+                                                    Net: {new Intl.NumberFormat('en-US', { style: 'currency', currency: payment.currency || 'USD' }).format(netAmount)}
+                                                </p>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <p className="font-medium text-sm">
+                                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: payment.currency || 'USD' }).format(payment.amount)}
+                                        </p>
+                                    )}
+                                    <div className="mt-1">
+                                        <Badge
+                                            variant={payment.status === 'succeeded' ? 'default' : 'destructive'}
+                                            className={`text-[10px] px-1.5 py-0 uppercase ${
+                                                isRefunded ? 'bg-red-500/15 text-red-500' :
+                                                payment.status === 'disputed' ? 'bg-amber-500/15 text-amber-500' :
+                                                payment.status === 'failed' ? 'bg-red-500/15 text-red-500' :
+                                                ''
+                                            }`}
+                                        >
+                                            {payment.status === 'partially_refunded' ? 'Partial Refund' : payment.status}
+                                        </Badge>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    ))}
+                        )
+                    })}
                 </div>
             </CardContent>
         </Card>

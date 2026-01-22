@@ -319,6 +319,7 @@ export async function syncStripePayments(daysBack: number = 30) {
 
 /**
  * Sync payments from Stripe for a SINGLE client by their stripe_customer_id
+ * Includes refund data for accurate lifetime value calculations
  */
 export async function syncClientPaymentsFromStripe(clientId: string, stripeCustomerId: string) {
     if (!stripeCustomerId) {
@@ -336,10 +337,13 @@ export async function syncClientPaymentsFromStripe(clientId: string, stripeCusto
         });
 
         let syncedCount = 0;
+        let refundsFound = 0;
 
         for (const payment of payments.data) {
             let email = payment.receipt_email;
             let stripeFee: number | null = null;
+            let refundAmount: number | null = null;
+            let status = payment.status;
 
             const charge = payment.latest_charge as any;
             if (charge) {
@@ -353,6 +357,17 @@ export async function syncClientPaymentsFromStripe(clientId: string, stripeCusto
                 if (balanceTransaction && typeof balanceTransaction !== 'string') {
                     stripeFee = balanceTransaction.fee / 100;
                 }
+
+                // Check for refunds on the charge
+                if (charge.refunded) {
+                    status = 'refunded' as any;
+                    refundAmount = (charge.amount_refunded || 0) / 100;
+                    refundsFound++;
+                } else if (charge.amount_refunded && charge.amount_refunded > 0) {
+                    status = 'partially_refunded' as any;
+                    refundAmount = charge.amount_refunded / 100;
+                    refundsFound++;
+                }
             }
 
             const amount = payment.amount / 100;
@@ -364,12 +379,14 @@ export async function syncClientPaymentsFromStripe(clientId: string, stripeCusto
                 stripe_fee: stripeFee,
                 net_amount: netAmount,
                 currency: payment.currency,
-                status: payment.status,
+                status,
                 payment_date: new Date(payment.created * 1000).toISOString(),
                 client_email: email ?? null,
                 stripe_customer_id: stripeCustomerId,
                 client_id: clientId,
                 product_name: payment.description,
+                refund_amount: refundAmount,
+                refunded_at: refundAmount ? new Date().toISOString() : null,
             }, {
                 onConflict: 'stripe_payment_id'
             });
@@ -397,18 +414,34 @@ export async function syncClientPaymentsFromStripe(clientId: string, stripeCusto
             const amount = charge.amount / 100;
             const netAmount = stripeFee !== null ? amount - stripeFee : null;
 
+            // Check for refunds
+            let status: string = charge.status === 'succeeded' ? 'succeeded' : charge.status;
+            let refundAmount: number | null = null;
+
+            if (charge.refunded) {
+                status = 'refunded';
+                refundAmount = (charge.amount_refunded || 0) / 100;
+                refundsFound++;
+            } else if (charge.amount_refunded && charge.amount_refunded > 0) {
+                status = 'partially_refunded';
+                refundAmount = charge.amount_refunded / 100;
+                refundsFound++;
+            }
+
             const { error } = await supabase.from('payments').upsert({
                 stripe_payment_id: charge.id,
                 amount,
                 stripe_fee: stripeFee,
                 net_amount: netAmount,
                 currency: charge.currency,
-                status: charge.status === 'succeeded' ? 'succeeded' : charge.status,
+                status,
                 payment_date: new Date(charge.created * 1000).toISOString(),
                 client_email: charge.billing_details?.email ?? charge.receipt_email ?? null,
                 stripe_customer_id: stripeCustomerId,
                 client_id: clientId,
                 product_name: charge.description,
+                refund_amount: refundAmount,
+                refunded_at: refundAmount ? new Date().toISOString() : null,
             }, {
                 onConflict: 'stripe_payment_id'
             });
@@ -416,7 +449,7 @@ export async function syncClientPaymentsFromStripe(clientId: string, stripeCusto
             if (!error) syncedCount++;
         }
 
-        return { success: true, synced: syncedCount };
+        return { success: true, synced: syncedCount, refundsFound };
     } catch (error: any) {
         console.error('[Client Payment Sync] Error:', error);
         return { error: error.message, synced: 0 };
