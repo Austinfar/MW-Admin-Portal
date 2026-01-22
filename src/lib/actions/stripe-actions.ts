@@ -643,9 +643,34 @@ export async function createSplitPaymentDraft(payload: SplitPaymentPayload) {
 export async function retrieveCheckoutSession(sessionId: string) {
     try {
         const session = await stripe.checkout.sessions.retrieve(sessionId)
+
+        let dbName: string | null = null
+        if (session.metadata?.scheduleId) {
+            const supabase = createAdminClient()
+            const { data: schedule } = await supabase
+                .from('payment_schedules')
+                .select('client:clients(name), lead:leads(first_name, last_name)')
+                .eq('id', session.metadata.scheduleId)
+                .single()
+
+            if (schedule) {
+                const client = Array.isArray(schedule.client) ? schedule.client[0] : schedule.client
+                const lead = Array.isArray(schedule.lead) ? schedule.lead[0] : schedule.lead
+
+                if (client?.name) {
+                    dbName = client.name
+                } else if (lead?.first_name) {
+                    dbName = `${lead.first_name} ${lead.last_name || ''}`.trim()
+                }
+            }
+        }
+
         return {
             status: session.status,
-            customer_details: session.customer_details,
+            customer_details: {
+                ...session.customer_details,
+                name: dbName || session.customer_details?.name
+            },
             metadata: session.metadata,
         }
     } catch (error) {
