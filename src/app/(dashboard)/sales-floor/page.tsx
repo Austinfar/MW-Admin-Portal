@@ -9,6 +9,7 @@ import {
     getFollowUpTasks,
 } from '@/lib/actions/sales-floor'
 import { getRecentSalesCalls } from '@/lib/actions/sales'
+import { getWarRoomBookingLinks } from '@/lib/actions/cal-links'
 import { SalesFloorClient } from '@/components/sales/floor/SalesFloorClient'
 import { protectRoute } from '@/lib/protect-route'
 import { getCurrentUserProfile } from '@/lib/actions/profile'
@@ -36,6 +37,7 @@ export default async function SalesFloorPage() {
         setterLeaderboard,
         followUpTasks,
         recentAnalyzedCalls,
+        bookingLinksData,
     ] = await Promise.all([
         getSalesDashboardData().then(r => { console.log(`[SalesFloor] dashboardData: ${Date.now() - startTime}ms`); return r; }),
         getNextZoom(userId).then(r => { console.log(`[SalesFloor] nextZoom: ${Date.now() - startTime}ms`); return r; }),
@@ -46,6 +48,7 @@ export default async function SalesFloorPage() {
         getSetterLeaderboard('month', userId).then(r => { console.log(`[SalesFloor] setterLeaderboard: ${Date.now() - startTime}ms`); return r; }),
         (userId ? getFollowUpTasks(userId) : Promise.resolve([])).then(r => { console.log(`[SalesFloor] followUpTasks: ${Date.now() - startTime}ms`); return r; }),
         getRecentSalesCalls(3).then(r => { console.log(`[SalesFloor] recentCalls: ${Date.now() - startTime}ms`); return r; }),
+        getWarRoomBookingLinks().then(r => { console.log(`[SalesFloor] bookingLinks: ${Date.now() - startTime}ms`); return r; }),
     ])
 
     console.log(`[SalesFloor] Total fetch time: ${Date.now() - startTime}ms`);
@@ -53,7 +56,7 @@ export default async function SalesFloorPage() {
     return (
         <SalesFloorClient
             userId={userId}
-            userJobTitle={null}
+            userJobTitle={bookingLinksData.currentUserJobTitle}
             ticker={dashboardData.ticker}
             funnel={dashboardData.funnel}
             streaks={dashboardData.streaks}
@@ -66,6 +69,9 @@ export default async function SalesFloorPage() {
             setterLeaderboard={setterLeaderboard}
             followUpTasks={followUpTasks}
             recentAnalyzedCalls={recentAnalyzedCalls}
+            globalCalendarUrl={bookingLinksData.globalCalendarUrl}
+            userCalLinks={bookingLinksData.userLinks}
+            allConsultLinks={bookingLinksData.allConsultLinks}
         />
     )
 }

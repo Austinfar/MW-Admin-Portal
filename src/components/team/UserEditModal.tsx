@@ -21,8 +21,10 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { User, updateUserRole, updateUserCommissionConfig, updateUserJobTitle, updateUserDetails, deleteUser, uploadAvatarForUser } from '@/lib/actions/profile';
+import { getCalLinksForUser, upsertCalLink, type CalUserLink, type CalLinkType } from '@/lib/actions/cal-links';
 import { toast } from 'sonner';
-import { Loader2, Settings, Trash2 } from 'lucide-react';
+import { Loader2, Settings, Trash2, Calendar } from 'lucide-react';
+import { useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ImageCropper } from '@/components/ui/ImageCropper';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -39,9 +41,13 @@ const JOB_TITLE_OPTIONS = [
     { value: 'coach', label: 'Coach' },
     { value: 'head_coach', label: 'Head Coach' },
     { value: 'closer', label: 'Closer' },
+    { value: 'setter', label: 'Setter' },
     { value: 'admin_staff', label: 'Admin Staff' },
     { value: 'operations', label: 'Operations' },
 ]
+
+// Job titles that have calendar links
+const CAL_LINK_JOB_TITLES = ['coach', 'head_coach', 'closer']
 
 export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEditModalProps) {
     const [open, setOpen] = useState(false);
@@ -69,6 +75,54 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
     const [cropperOpen, setCropperOpen] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [avatarUrl, setAvatarUrl] = useState<string | null>(user.avatar_url);
+
+    // Calendar Links State
+    const [calLinks, setCalLinks] = useState<CalUserLink[]>([]);
+    const [calLinksLoading, setCalLinksLoading] = useState(false);
+    const [consultUrl, setConsultUrl] = useState('');
+    const [monthlyCoachingUrl, setMonthlyCoachingUrl] = useState('');
+
+    // Check if user should have calendar links
+    const hasCalendarLinks = CAL_LINK_JOB_TITLES.includes(jobTitle);
+
+    // Load calendar links when modal opens or job title changes
+    useEffect(() => {
+        if (open && hasCalendarLinks) {
+            loadCalLinks();
+        }
+    }, [open, jobTitle]);
+
+    const loadCalLinks = async () => {
+        setCalLinksLoading(true);
+        try {
+            const links = await getCalLinksForUser(user.id);
+            setCalLinks(links);
+
+            // Set individual URL states
+            const consult = links.find(l => l.link_type === 'consult');
+            const monthly = links.find(l => l.link_type === 'monthly_coaching');
+            setConsultUrl(consult?.url || '');
+            setMonthlyCoachingUrl(monthly?.url || '');
+        } catch (error) {
+            console.error('Failed to load calendar links:', error);
+        } finally {
+            setCalLinksLoading(false);
+        }
+    };
+
+    const saveCalLink = async (linkType: CalLinkType, url: string) => {
+        if (!url.trim()) return;
+
+        const displayName = linkType === 'consult' ? 'Coaching Consult' : 'Monthly Coaching Call';
+        const result = await upsertCalLink(user.id, linkType, url, displayName);
+
+        if (result.success) {
+            toast.success(`${displayName} link saved`);
+            loadCalLinks();
+        } else {
+            toast.error(result.error || 'Failed to save calendar link');
+        }
+    };
 
     const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files.length > 0) {
@@ -258,10 +312,14 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
                 </DialogHeader>
 
                 <Tabs defaultValue={isSuperAdmin ? "account" : "general"} className="w-full">
-                    <TabsList className={`grid w-full bg-white/5 ${isSuperAdmin ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                    <TabsList className={`grid w-full bg-white/5 ${
+                        isSuperAdmin && hasCalendarLinks ? 'grid-cols-4' :
+                        isSuperAdmin || hasCalendarLinks ? 'grid-cols-3' : 'grid-cols-2'
+                    }`}>
                         {isSuperAdmin && <TabsTrigger value="account">Account</TabsTrigger>}
                         <TabsTrigger value="general">General</TabsTrigger>
                         <TabsTrigger value="commission">Commissions</TabsTrigger>
+                        {hasCalendarLinks && <TabsTrigger value="calendar">Calendar</TabsTrigger>}
                     </TabsList>
 
                     {/* Account Tab - Super Admin Only */}
@@ -442,6 +500,91 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
                             </div>
                         </div>
                     </TabsContent>
+
+                    {/* Calendar Links Tab */}
+                    {hasCalendarLinks && (
+                        <TabsContent value="calendar" className="py-4 space-y-4">
+                            {calLinksLoading ? (
+                                <div className="flex items-center justify-center py-8">
+                                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                                </div>
+                            ) : (
+                                <div className="space-y-6">
+                                    <div className="flex items-center gap-2 text-sm text-blue-500/80 bg-blue-500/10 p-3 rounded-md border border-blue-500/20">
+                                        <Calendar className="w-4 h-4" />
+                                        <span>Configure Cal.com booking links for this user.</span>
+                                    </div>
+
+                                    {/* Consult Calendar (for sales calls) */}
+                                    <div className="space-y-2">
+                                        <Label htmlFor="consultUrl">Coaching Consult Calendar</Label>
+                                        <div className="flex gap-2">
+                                            <Input
+                                                id="consultUrl"
+                                                value={consultUrl}
+                                                onChange={(e) => setConsultUrl(e.target.value)}
+                                                className="bg-white/5 border-white/10 flex-1"
+                                                placeholder="https://cal.com/username/consult"
+                                            />
+                                            <Button
+                                                size="sm"
+                                                onClick={() => saveCalLink('consult', consultUrl)}
+                                                disabled={!consultUrl.trim()}
+                                                className="bg-emerald-600 hover:bg-emerald-700"
+                                            >
+                                                Save
+                                            </Button>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">
+                                            Used for sales calls. Source parameter will be added automatically (company-driven or coach-driven).
+                                        </p>
+                                    </div>
+
+                                    {/* Monthly Coaching Calendar (for coaches only) */}
+                                    {(jobTitle === 'coach' || jobTitle === 'head_coach') && (
+                                        <div className="space-y-2">
+                                            <Label htmlFor="monthlyCoachingUrl">Monthly Coaching Calendar</Label>
+                                            <div className="flex gap-2">
+                                                <Input
+                                                    id="monthlyCoachingUrl"
+                                                    value={monthlyCoachingUrl}
+                                                    onChange={(e) => setMonthlyCoachingUrl(e.target.value)}
+                                                    className="bg-white/5 border-white/10 flex-1"
+                                                    placeholder="https://cal.com/username/monthly-checkin"
+                                                />
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() => saveCalLink('monthly_coaching', monthlyCoachingUrl)}
+                                                    disabled={!monthlyCoachingUrl.trim()}
+                                                    className="bg-emerald-600 hover:bg-emerald-700"
+                                                >
+                                                    Save
+                                                </Button>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">
+                                                Used for existing client check-ins. This link appears on client profiles.
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    {/* Current Links Display */}
+                                    {calLinks.length > 0 && (
+                                        <div className="pt-4 border-t border-white/10">
+                                            <h4 className="text-sm font-medium mb-3">Current Links</h4>
+                                            <div className="space-y-2">
+                                                {calLinks.map(link => (
+                                                    <div key={link.id} className="flex items-center justify-between text-sm bg-white/5 p-2 rounded">
+                                                        <span className="font-medium">{link.display_name || link.link_type}</span>
+                                                        <span className="text-xs text-muted-foreground truncate max-w-[200px]">{link.url}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </TabsContent>
+                    )}
                 </Tabs>
 
                 <DialogFooter>

@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { ClientDetailsCard } from '@/components/clients/ClientDetailsCard'
 import { SubscriptionManagementCard } from '@/components/clients/SubscriptionManagementCard'
 import { PaymentScheduleCard } from '@/components/clients/PaymentScheduleCard'
+import { MonthlyCoachingLinkCard } from '@/components/clients/MonthlyCoachingLinkCard'
 import { Client } from '@/types/client'
 import { Coach } from '@/lib/actions/clients'
 import type { ClientSubscription, ApprovalRequest, SubscriptionFreeze, PaymentScheduleSummary } from '@/types/subscription'
@@ -71,6 +72,13 @@ export function ClientOverviewTab({
                         </div>
                     </CardContent>
                 </Card>
+
+                {/* Monthly Coaching Link */}
+                <MonthlyCoachingLinkCard
+                    coachId={client.assigned_coach_id}
+                    coachName={client.assigned_coach?.name}
+                    clientName={client.name}
+                />
             </div>
 
             {/* Right Column: Program Terms, Subscription, Payment Schedule */}
