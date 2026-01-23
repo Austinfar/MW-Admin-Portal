@@ -24,6 +24,25 @@ interface NextZoomCardProps {
   data: NextZoomData | null;
 }
 
+/**
+ * Get meeting platform name from URL
+ */
+function getMeetingPlatform(url: string | null): { name: string; short: string } {
+  if (!url) return { name: 'Call', short: 'Call' };
+
+  if (url.includes('zoom.us')) {
+    return { name: 'Zoom', short: 'Zoom' };
+  }
+  if (url.includes('meet.google.com')) {
+    return { name: 'Google Meet', short: 'Meet' };
+  }
+  if (url.includes('teams.microsoft.com')) {
+    return { name: 'Teams', short: 'Teams' };
+  }
+
+  return { name: 'Call', short: 'Call' };
+}
+
 export function NextZoomCard({ data }: NextZoomCardProps) {
   const [countdown, setCountdown] = useState(data?.startsIn || { hours: 0, minutes: 0, seconds: 0, totalMinutes: 0 });
 
@@ -64,7 +83,7 @@ export function NextZoomCard({ data }: NextZoomCardProps) {
         <CardHeader className="pb-3">
           <CardTitle className="text-lg font-medium text-white flex items-center">
             <Video className="w-5 h-5 mr-2 text-emerald-400" />
-            Next Zoom
+            Next Call
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -81,13 +100,15 @@ export function NextZoomCard({ data }: NextZoomCardProps) {
   const isStartingSoon = countdown.totalMinutes <= 15;
   const isStartingNow = countdown.totalMinutes <= 5;
 
+  const platform = getMeetingPlatform(data.meetingLink);
+
   return (
     <Card className={`bg-zinc-900/40 backdrop-blur-xl border-white/5 shadow-2xl transition-all duration-500 ${isStartingNow ? 'border-emerald-500/50 shadow-emerald-500/20 shadow-lg' : ''}`}>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg font-medium text-white flex items-center">
             <Video className="w-5 h-5 mr-2 text-emerald-400" />
-            Next Zoom
+            Next {platform.short}
           </CardTitle>
           {isStartingSoon && (
             <Badge variant="outline" className={`${isStartingNow ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50 animate-pulse' : 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50'}`}>
@@ -184,21 +205,25 @@ export function NextZoomCard({ data }: NextZoomCardProps) {
         <div className="flex gap-2">
           {data.meetingLink ? (
             <Button
-              asChild
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                window.open(data.meetingLink!, '_blank', 'noopener,noreferrer');
+              }}
               className="flex-1 bg-emerald-600 hover:bg-emerald-700"
             >
-              <a href={data.meetingLink} target="_blank" rel="noopener noreferrer">
-                <Video className="w-4 h-4 mr-2" />
-                Join Zoom
-              </a>
+              <Video className="w-4 h-4 mr-2" />
+              Join {getMeetingPlatform(data.meetingLink).name}
             </Button>
           ) : (
             <Button
+              type="button"
               disabled
               className="flex-1 bg-gray-700 cursor-not-allowed"
             >
               <Video className="w-4 h-4 mr-2" />
-              Join Zoom
+              Join Call
             </Button>
           )}
           {data.lead && (

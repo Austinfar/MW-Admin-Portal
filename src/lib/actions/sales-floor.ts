@@ -2,7 +2,6 @@
 
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
-import { calClient, CalBooking } from '@/lib/cal/client';
 import { stripe } from '@/lib/stripe';
 import { revalidatePath } from 'next/cache';
 import {
@@ -19,6 +18,7 @@ import {
 import type {
   NextZoomData,
   UpcomingCall,
+  ActiveCall,
   CloserStats,
   SetterStats,
   QuotaProgress,
@@ -30,6 +30,7 @@ import type {
   SetterLeaderboardItem,
   LeaderboardPeriod,
 } from '@/types/sales-floor';
+import { addDays } from 'date-fns';
 
 // ============================================
 // Helper Functions
@@ -90,59 +91,215 @@ function getDateRange(period: 'today' | 'week' | 'month'): { start: Date; end: D
 }
 
 // ============================================
-// Next Zoom / Upcoming Calls
+// Active Calls / Next Zoom / Upcoming Calls
 // ============================================
 
 /**
+ * Extract meeting URL from stored metadata JSON
+ * Checks various locations where Cal.com may store the meeting URL
+ * The payload is stored as metadata, so the structure is:
+ * metadata.metadata.videoCallUrl (nested metadata from Cal.com payload)
+ */
+function extractMeetingUrlFromMetadata(metadata: Record<string, unknown> | null): string | null {
+  if (!metadata) return null;
+
+  // Check direct meetingUrl field
+  if (metadata.meetingUrl && typeof metadata.meetingUrl === 'string') {
+    return metadata.meetingUrl;
+  }
+
+  // Check videoCallData at top level (Zoom, etc.)
+  const videoCallData = metadata.videoCallData as Record<string, unknown> | undefined;
+  if (videoCallData?.url && typeof videoCallData.url === 'string') {
+    return videoCallData.url;
+  }
+
+  // Check nested metadata.metadata.videoCallUrl (Cal.com stores payload.metadata here)
+  // This is where Google Meet URLs are typically stored
+  const nestedMetadata = metadata.metadata as Record<string, unknown> | undefined;
+  if (nestedMetadata) {
+    if (nestedMetadata.videoCallUrl && typeof nestedMetadata.videoCallUrl === 'string') {
+      return nestedMetadata.videoCallUrl;
+    }
+    if (nestedMetadata.meetingUrl && typeof nestedMetadata.meetingUrl === 'string') {
+      return nestedMetadata.meetingUrl;
+    }
+  }
+
+  // Check if location is a URL
+  if (metadata.location && typeof metadata.location === 'string') {
+    const loc = metadata.location;
+    if (loc.startsWith('http://') || loc.startsWith('https://') ||
+        loc.includes('zoom.us') || loc.includes('meet.google.com')) {
+      return loc;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Get meeting URL from booking, falling back to metadata extraction
+ */
+function getMeetingUrl(booking: { meeting_url?: string | null; metadata?: Record<string, unknown> | null }): string | null {
+  // First try the dedicated column
+  if (booking.meeting_url) {
+    return booking.meeting_url;
+  }
+  // Fall back to extracting from metadata
+  return extractMeetingUrlFromMetadata(booking.metadata || null);
+}
+
+/**
+ * Get calls that are currently in progress (active)
+ * A call is considered active if:
+ * 1. Status is 'IN_PROGRESS' (set by MEETING_STARTED webhook)
+ * 2. OR: start_time <= now <= end_time AND status is not cancelled (time-based detection)
+ */
+export async function getActiveCalls(): Promise<ActiveCall[]> {
+  try {
+    const now = new Date();
+    const admin = createAdminClient();
+
+    // Query for active calls - either status IN_PROGRESS or currently within time window
+    const { data: bookings, error } = await admin
+      .from('cal_bookings')
+      .select(`
+        id,
+        cal_booking_id,
+        title,
+        start_time,
+        end_time,
+        status,
+        attendee_email,
+        attendee_name,
+        attendee_timezone,
+        meeting_url,
+        metadata,
+        lead_id,
+        user_id,
+        leads:lead_id (
+          id, first_name, last_name, email, phone, status
+        ),
+        users:user_id (
+          id, name, email
+        )
+      `)
+      .lte('start_time', now.toISOString())
+      .gte('end_time', now.toISOString())
+      .not('status', 'eq', 'CANCELLED')
+      .order('start_time', { ascending: true });
+
+    if (error) {
+      console.error('[SalesFloor] Error querying active calls:', error);
+      return [];
+    }
+
+    if (!bookings || bookings.length === 0) {
+      return [];
+    }
+
+    return bookings.map((booking: any) => {
+      const lead = booking.leads || null;
+      const host = booking.users || null;
+      const startTime = new Date(booking.start_time);
+      const endTime = new Date(booking.end_time);
+
+      const minutesSinceStart = Math.max(0, differenceInMinutes(now, startTime));
+      const minutesUntilEnd = Math.max(0, differenceInMinutes(endTime, now));
+
+      return {
+        id: String(booking.cal_booking_id || booking.id),
+        title: booking.title || 'Active Call',
+        startTime: booking.start_time,
+        endTime: booking.end_time,
+        status: booking.status,
+        meetingLink: getMeetingUrl(booking),
+        attendee: {
+          name: booking.attendee_name || 'Unknown',
+          email: booking.attendee_email || '',
+        },
+        host: host ? {
+          id: host.id,
+          name: host.name || 'Unknown',
+          email: host.email || '',
+        } : null,
+        lead,
+        startedAgo: {
+          minutes: minutesSinceStart,
+          formatted: minutesSinceStart === 0 ? 'Just started' : `Started ${minutesSinceStart}m ago`,
+        },
+        endsIn: {
+          minutes: minutesUntilEnd,
+          formatted: minutesUntilEnd === 0 ? 'Ending now' : `Ends in ${minutesUntilEnd}m`,
+        },
+      };
+    });
+  } catch (error) {
+    console.error('[SalesFloor] Error fetching active calls:', error);
+    return [];
+  }
+}
+
+/**
  * Get the next upcoming Zoom call for a user with enriched lead data
+ * Now reads from local database (populated by webhooks) instead of Cal.com API
+ * Only returns calls that haven't started yet (active calls are shown in ActiveCallsSection)
  */
 export async function getNextZoom(userId?: string): Promise<NextZoomData | null> {
   try {
     const now = new Date();
     const endRange = addHours(now, 48); // Look ahead 48 hours
+    const admin = createAdminClient();
 
-    // Get Cal.com bookings
-    const bookings = await calClient.getBookings(now, endRange);
+    // Get bookings from database (populated by webhooks)
+    // Only get calls that haven't started yet (start_time > now)
+    // Active/in-progress calls are handled by getActiveCalls
+    const { data: bookings, error } = await admin
+      .from('cal_bookings')
+      .select(`
+        id,
+        cal_booking_id,
+        title,
+        start_time,
+        end_time,
+        status,
+        attendee_email,
+        attendee_name,
+        attendee_timezone,
+        meeting_url,
+        metadata,
+        lead_id,
+        leads:lead_id (
+          id, first_name, last_name, email, phone, status, source, description
+        )
+      `)
+      .gt('start_time', now.toISOString())
+      .lte('start_time', endRange.toISOString())
+      .not('status', 'eq', 'CANCELLED')
+      .order('start_time', { ascending: true })
+      .limit(1);
 
-    // Filter to accepted bookings starting after now, sort by start time
-    const upcomingBookings = bookings
-      .filter(b => b.status === 'ACCEPTED' && new Date(b.startTime) > now)
-      .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
-
-    if (upcomingBookings.length === 0) {
+    if (error || !bookings || bookings.length === 0) {
       return null;
     }
 
-    const nextBooking = upcomingBookings[0];
-    const attendee = nextBooking.attendees[0];
+    const nextBooking = bookings[0] as any;
+    const lead = nextBooking.leads as any;
 
-    // Try to match to a lead by email
-    const admin = createAdminClient();
-    let lead = null;
-
-    if (attendee?.email) {
-      const { data: leadData } = await admin
-        .from('leads')
-        .select('id, first_name, last_name, email, phone, status, source, description')
-        .eq('email', attendee.email)
-        .single();
-
-      lead = leadData;
-    }
-
-    const timeUntil = calculateTimeUntil(nextBooking.startTime);
+    const timeUntil = calculateTimeUntil(nextBooking.start_time);
 
     return {
-      id: String(nextBooking.id),
-      title: nextBooking.title,
-      startTime: nextBooking.startTime,
-      endTime: nextBooking.endTime,
-      meetingLink: null, // Cal.com API doesn't expose meeting links directly
+      id: String(nextBooking.cal_booking_id || nextBooking.id),
+      title: nextBooking.title || 'Booking',
+      startTime: nextBooking.start_time,
+      endTime: nextBooking.end_time,
+      meetingLink: getMeetingUrl(nextBooking),
       attendee: {
-        name: attendee?.name || 'Unknown',
-        email: attendee?.email || '',
+        name: nextBooking.attendee_name || 'Unknown',
+        email: nextBooking.attendee_email || '',
       },
-      lead,
+      lead: lead || null,
       startsIn: timeUntil,
     };
   } catch (error) {
@@ -152,56 +309,79 @@ export async function getNextZoom(userId?: string): Promise<NextZoomData | null>
 }
 
 /**
- * Get upcoming calls list for the next 24-48 hours
+ * Get upcoming calls list (excludes active/in-progress calls)
+ * Reads from local database (populated by webhooks) for team-wide bookings
+ * @param days - Number of days to look ahead (default: 7)
  */
-export async function getUpcomingCalls(hours: number = 48): Promise<UpcomingCall[]> {
+export async function getUpcomingCalls(days: number = 7): Promise<UpcomingCall[]> {
   try {
     const now = new Date();
-    const endRange = addHours(now, hours);
-
-    const bookings = await calClient.getBookings(now, endRange);
+    const endRange = addDays(now, days);
     const admin = createAdminClient();
 
-    // Get all attendee emails to batch lookup leads
-    const attendeeEmails = bookings
-      .filter(b => b.status === 'ACCEPTED' && b.attendees[0]?.email)
-      .map(b => b.attendees[0].email);
+    // Query bookings from database (populated by Cal.com webhooks)
+    // Only get future calls (start_time > now) - active calls are handled by getActiveCalls
+    const { data: bookings, error } = await admin
+      .from('cal_bookings')
+      .select(`
+        id,
+        cal_booking_id,
+        title,
+        start_time,
+        end_time,
+        status,
+        attendee_email,
+        attendee_name,
+        attendee_timezone,
+        meeting_url,
+        metadata,
+        lead_id,
+        leads:lead_id (
+          id,
+          first_name,
+          last_name,
+          email,
+          phone,
+          status
+        )
+      `)
+      .gt('start_time', now.toISOString())
+      .lte('start_time', endRange.toISOString())
+      .not('status', 'eq', 'CANCELLED')
+      .order('start_time', { ascending: true });
 
-    // Batch lookup leads
-    const { data: leads } = await admin
-      .from('leads')
-      .select('id, first_name, last_name, email, phone, status')
-      .in('email', attendeeEmails);
+    if (error) {
+      console.error('[SalesFloor] Error querying cal_bookings:', error);
+      return [];
+    }
 
-    const leadsByEmail = new Map(leads?.map(l => [l.email, l]) || []);
+    if (!bookings || bookings.length === 0) {
+      return [];
+    }
 
-    return bookings
-      .filter(b => b.status === 'ACCEPTED' && new Date(b.startTime) > now)
-      .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
-      .map(booking => {
-        const attendee = booking.attendees[0];
-        const lead = attendee?.email ? leadsByEmail.get(attendee.email) || null : null;
-        const timeUntil = calculateTimeUntil(booking.startTime);
+    return bookings.map((booking: any) => {
+      const lead = booking.leads || null;
+      const timeUntil = calculateTimeUntil(booking.start_time);
 
-        return {
-          id: String(booking.id),
-          title: booking.title,
-          startTime: booking.startTime,
-          endTime: booking.endTime,
-          status: booking.status,
-          meetingLink: null,
-          attendee: {
-            name: attendee?.name || 'Unknown',
-            email: attendee?.email || '',
-          },
-          lead,
-          startsIn: {
-            hours: timeUntil.hours,
-            minutes: timeUntil.minutes,
-            formatted: timeUntil.formatted,
-          },
-        };
-      });
+      return {
+        id: String(booking.cal_booking_id || booking.id),
+        title: booking.title || 'Booking',
+        startTime: booking.start_time,
+        endTime: booking.end_time,
+        status: booking.status,
+        meetingLink: getMeetingUrl(booking),
+        attendee: {
+          name: booking.attendee_name || 'Unknown',
+          email: booking.attendee_email || '',
+        },
+        lead,
+        startsIn: {
+          hours: timeUntil.hours,
+          minutes: timeUntil.minutes,
+          formatted: timeUntil.formatted,
+        },
+      };
+    });
   } catch (error) {
     console.error('[SalesFloor] Error fetching upcoming calls:', error);
     return [];

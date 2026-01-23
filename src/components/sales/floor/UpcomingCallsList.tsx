@@ -121,14 +121,12 @@ function CallItem({ call, onLogOutcome }: { call: UpcomingCall; onLogOutcome?: (
           )}
           {call.meetingLink ? (
             <Button
-              asChild
               variant="ghost"
               size="sm"
+              onClick={() => window.open(call.meetingLink!, '_blank', 'noopener,noreferrer')}
               className="h-8 w-8 p-0 text-emerald-400 hover:text-emerald-300"
             >
-              <a href={call.meetingLink} target="_blank" rel="noopener noreferrer">
-                <Video className="w-4 h-4" />
-              </a>
+              <Video className="w-4 h-4" />
             </Button>
           ) : (
             <Button
