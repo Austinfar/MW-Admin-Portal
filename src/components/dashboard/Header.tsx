@@ -88,7 +88,7 @@ export function Header({ userAccess, isImpersonating }: { userAccess?: UserAcces
     }
 
     return (
-        <div className="flex items-center p-6 border-b border-border/40 bg-background/50 backdrop-blur supports-[backdrop-filter]:bg-background/20 relative">
+        <div className="flex items-center p-6 border-b border-white/5 bg-background/40 backdrop-blur-xl sticky top-0 z-50">
 
             <div className="md:hidden">
                 <Sheet>
@@ -97,7 +97,7 @@ export function Header({ userAccess, isImpersonating }: { userAccess?: UserAcces
                             <Menu />
                         </Button>
                     </SheetTrigger>
-                    <SheetContent side="left" className="p-0 bg-sidebar text-sidebar-foreground border-r-border w-72">
+                    <SheetContent side="left" className="p-0 bg-zinc-950/90 backdrop-blur-2xl text-sidebar-foreground border-r-white/10 w-72">
                         <Sidebar isMobile userAccess={userAccess} />
                     </SheetContent>
                 </Sheet>

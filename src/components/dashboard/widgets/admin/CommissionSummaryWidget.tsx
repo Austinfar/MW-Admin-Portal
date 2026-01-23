@@ -33,7 +33,7 @@ export function CommissionSummaryWidget({ summary, delay = 0 }: CommissionSummar
                 ease: [0.25, 0.46, 0.45, 0.94]
             }}
         >
-            <Card className="bg-card/50 backdrop-blur-sm border-primary/10 hover:border-primary/30 transition-all duration-300">
+            <Card className="bg-zinc-900/40 backdrop-blur-xl border-white/5 shadow-2xl hover:border-white/10 transition-all duration-300">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                     <div className="flex items-center gap-2">
                         <div className="p-2 bg-orange-500/10 rounded-full">

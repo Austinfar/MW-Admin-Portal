@@ -142,10 +142,12 @@ export function AgreementSection({ clientId, clientName, hasGhlContactId }: Agre
 
     if (isLoading) {
         return (
-            <Card>
+            <Card className="bg-card/50 backdrop-blur-xl border-white/5 hover:border-primary/20 transition-all duration-300 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                        <FileText className="h-5 w-5" />
+                        <div className="p-2 rounded-full bg-amber-500/10">
+                            <FileText className="h-4 w-4 text-amber-500" />
+                        </div>
                         Coaching Agreement
                     </CardTitle>
                 </CardHeader>
@@ -160,23 +162,25 @@ export function AgreementSection({ clientId, clientName, hasGhlContactId }: Agre
 
     return (
         <>
-            <Card>
-                <CardHeader>
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <CardTitle className="flex items-center gap-2">
-                                <FileText className="h-5 w-5" />
-                                Coaching Agreement
-                            </CardTitle>
-                            <CardDescription>
-                                Send and track the coaching agreement for {clientName}
-                            </CardDescription>
-                        </div>
+            <Card className="bg-card/50 backdrop-blur-xl border-white/5 hover:border-primary/20 transition-all duration-300 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)] overflow-hidden">
+                <CardHeader className="space-y-3">
+                    <div className="flex flex-col gap-3">
+                        <CardTitle className="flex items-center gap-2 text-base">
+                            <div className="p-2 rounded-full bg-amber-500/10 shrink-0">
+                                <FileText className="h-4 w-4 text-amber-500" />
+                            </div>
+                            <span className="truncate">Coaching Agreement</span>
+                        </CardTitle>
+                        <CardDescription className="text-xs">
+                            Send and track the agreement for {clientName}
+                        </CardDescription>
 
                         {canSendNew && (
                             <Button
                                 onClick={handleSendAgreement}
                                 disabled={isSending || !hasGhlContactId}
+                                size="sm"
+                                className="w-full"
                             >
                                 {isSending ? (
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -206,7 +210,7 @@ export function AgreementSection({ clientId, clientName, hasGhlContactId }: Agre
                             )}
                         </div>
                     ) : (
-                        <div className="space-y-4">
+                        <div className="space-y-3">
                             {agreements.map((agreement) => {
                                 const config = statusConfig[agreement.status]
                                 const StatusIcon = config.icon
@@ -214,58 +218,57 @@ export function AgreementSection({ clientId, clientName, hasGhlContactId }: Agre
                                 return (
                                     <div
                                         key={agreement.id}
-                                        className="flex items-start justify-between rounded-lg border p-4"
+                                        className="rounded-lg border border-white/10 p-3 space-y-2"
                                     >
-                                        <div className="space-y-1">
-                                            <div className="flex items-center gap-2">
-                                                <Badge variant={config.color} className="gap-1">
-                                                    <StatusIcon className="h-3 w-3" />
-                                                    {config.label}
-                                                </Badge>
-                                                {agreement.template_name && (
-                                                    <span className="text-sm text-muted-foreground">
-                                                        {agreement.template_name}
-                                                    </span>
-                                                )}
-                                            </div>
-
-                                            <div className="text-sm text-muted-foreground space-y-0.5">
-                                                {agreement.sent_at && (
-                                                    <p>Sent: {format(new Date(agreement.sent_at), 'MMM d, yyyy h:mm a')}</p>
-                                                )}
-                                                {agreement.viewed_at && (
-                                                    <p>Viewed: {format(new Date(agreement.viewed_at), 'MMM d, yyyy h:mm a')}</p>
-                                                )}
-                                                {agreement.signed_at && (
-                                                    <p>Signed: {format(new Date(agreement.signed_at), 'MMM d, yyyy h:mm a')}</p>
-                                                )}
-                                                {agreement.voided_at && (
-                                                    <p>Voided: {format(new Date(agreement.voided_at), 'MMM d, yyyy h:mm a')}</p>
-                                                )}
-                                                {agreement.voided_reason && (
-                                                    <p className="text-destructive">Reason: {agreement.voided_reason}</p>
-                                                )}
-                                                {agreement.sent_by_user?.name && (
-                                                    <p>Sent by: {agreement.sent_by_user.name}</p>
-                                                )}
-                                            </div>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <Badge variant={config.color} className="gap-1 text-xs">
+                                                <StatusIcon className="h-3 w-3" />
+                                                {config.label}
+                                            </Badge>
+                                            {agreement.template_name && (
+                                                <span className="text-xs text-muted-foreground truncate">
+                                                    {agreement.template_name}
+                                                </span>
+                                            )}
                                         </div>
 
-                                        <div className="flex items-center gap-2">
+                                        <div className="text-xs text-muted-foreground space-y-0.5">
+                                            {agreement.sent_at && (
+                                                <p>Sent: {format(new Date(agreement.sent_at), 'MMM d, yyyy')}</p>
+                                            )}
+                                            {agreement.viewed_at && (
+                                                <p>Viewed: {format(new Date(agreement.viewed_at), 'MMM d, yyyy')}</p>
+                                            )}
+                                            {agreement.signed_at && (
+                                                <p>Signed: {format(new Date(agreement.signed_at), 'MMM d, yyyy')}</p>
+                                            )}
+                                            {agreement.voided_at && (
+                                                <p>Voided: {format(new Date(agreement.voided_at), 'MMM d, yyyy')}</p>
+                                            )}
+                                            {agreement.voided_reason && (
+                                                <p className="text-destructive truncate">Reason: {agreement.voided_reason}</p>
+                                            )}
+                                            {agreement.sent_by_user?.name && (
+                                                <p className="truncate">By: {agreement.sent_by_user.name}</p>
+                                            )}
+                                        </div>
+
+                                        <div className="flex flex-wrap gap-2 pt-1">
                                             {/* View signed document */}
                                             {agreement.status === 'signed' && agreement.signed_document_url && (
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
                                                     asChild
+                                                    className="h-7 text-xs"
                                                 >
                                                     <a
                                                         href={agreement.signed_document_url}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
                                                     >
-                                                        <ExternalLink className="mr-2 h-4 w-4" />
-                                                        View Document
+                                                        <ExternalLink className="mr-1 h-3 w-3" />
+                                                        View
                                                     </a>
                                                 </Button>
                                             )}
@@ -277,11 +280,12 @@ export function AgreementSection({ clientId, clientName, hasGhlContactId }: Agre
                                                     size="sm"
                                                     onClick={() => handleResendAgreement(agreement.id)}
                                                     disabled={isResending}
+                                                    className="h-7 text-xs"
                                                 >
                                                     {isResending ? (
-                                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
                                                     ) : (
-                                                        <RefreshCw className="mr-2 h-4 w-4" />
+                                                        <RefreshCw className="mr-1 h-3 w-3" />
                                                     )}
                                                     Resend
                                                 </Button>
@@ -293,8 +297,9 @@ export function AgreementSection({ clientId, clientName, hasGhlContactId }: Agre
                                                     variant="destructive"
                                                     size="sm"
                                                     onClick={() => openVoidDialog(agreement.id)}
+                                                    className="h-7 text-xs"
                                                 >
-                                                    <XCircle className="mr-2 h-4 w-4" />
+                                                    <XCircle className="mr-1 h-3 w-3" />
                                                     Void
                                                 </Button>
                                             )}

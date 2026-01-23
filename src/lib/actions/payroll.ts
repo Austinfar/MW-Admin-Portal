@@ -824,16 +824,22 @@ export async function getPayrollStats(startDate: Date, endDate: Date, filters?: 
             *,
             users:user_id(name, email),
             clients:client_id(name, lead_source, start_date)
-        `);
+        `)
+        .neq('status', 'void');
 
     // Filter by run or date range
     if (filters?.payrollRunId) {
         query = query.eq('payroll_run_id', filters.payrollRunId);
     } else {
         // Filter by transaction_date for accurate period reporting
+        // Also filter by payout_period_start to ensure we capture items belonging to this period logic
         query = query
             .gte('transaction_date', startOfDay(startDate).toISOString())
             .lte('transaction_date', endOfDay(endDate).toISOString());
+
+        // We can't strictly filter by payout_period_start because it's a string YYYY-MM-DD
+        // and we want to capture everything in the date range.
+        // transaction_date is the source of truth for "when it happened".
     }
 
     // Apply filters
@@ -1254,9 +1260,13 @@ export async function getCurrentPeriodStats(coachId?: string): Promise<{
     // Use admin client for admins to bypass RLS
     const supabase = admin ? createAdminClient() : await createClient();
 
-    // Calculate current period (Monday-Sunday bi-weekly, anchored to Dec 16, 2024)
-    const anchor = new Date('2024-12-16T00:00:00Z');
+    // Calculate current period (Monday-Sunday bi-weekly, anchored to Dec 16, 2024 LOCAL)
+    const anchor = new Date(2024, 11, 16);
+    anchor.setHours(0, 0, 0, 0);
+
     const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
     const diffTime = now.getTime() - anchor.getTime();
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     const periodIndex = Math.floor(diffDays / 14);
@@ -1266,6 +1276,7 @@ export async function getCurrentPeriodStats(coachId?: string): Promise<{
 
     const periodEnd = new Date(periodStart);
     periodEnd.setDate(periodEnd.getDate() + 13);
+    periodEnd.setHours(23, 59, 59, 999);
 
     // Payout is Friday after period ends
     const payoutDate = new Date(periodEnd);
@@ -1596,6 +1607,113 @@ export async function searchClientsForMatch(query: string): Promise<{
     }
 
     return { clients: clients || [] };
+}
+
+/**
+ * Batch recalculate commissions for a specific date range.
+ * This is useful for fixing missing fees or updating calculations after rule changes.
+ */
+export async function recalculateCommissionsForPeriod(
+    startDate: Date,
+    endDate: Date
+): Promise<{
+    processed: number;
+    failed: number;
+    skipped: number;
+    errors: string[];
+}> {
+    const user = await getCurrentUser();
+    const admin = await isAdmin(user.id);
+
+    if (!admin) {
+        return { processed: 0, failed: 0, skipped: 0, errors: ['Unauthorized'] };
+    }
+
+    const { calculateCommission } = await import('@/lib/logic/commissions');
+    const supabase = createAdminClient();
+
+    // Fetch succeeded payments within the transaction date range
+    // Use payment_date as primary filter (it's the canonical transaction date)
+    const startStr = format(startOfDay(startDate), "yyyy-MM-dd'T'HH:mm:ss");
+    const endStr = format(endOfDay(endDate), "yyyy-MM-dd'T'HH:mm:ss");
+
+    console.log(`[Recalculate] Fetching payments from ${startStr} to ${endStr}`);
+
+    const { data: payments, error } = await supabase
+        .from('payments')
+        .select('id, payment_date')
+        .eq('status', 'succeeded')
+        .not('client_id', 'is', null)  // Only payments linked to a client
+        .gte('payment_date', startStr)
+        .lte('payment_date', endStr);
+
+    if (error || !payments) {
+        return { processed: 0, failed: 0, skipped: 0, errors: [error?.message || 'Failed to fetch payments'] };
+    }
+
+    console.log(`[Recalculate] Found ${payments.length} payments to process`);
+
+    let processed = 0;
+    let failed = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+
+    // Process payments
+    const total = payments.length;
+    const startTime = Date.now();
+
+    for (let i = 0; i < payments.length; i++) {
+        const payment = payments[i];
+        try {
+            // First void existing commission entries
+            await supabase.rpc('void_commission_entries', { p_payment_id: payment.id });
+
+            // Unlock the payment so it can be recalculated
+            await supabase.rpc('unlock_payment_for_commission', { p_payment_id: payment.id });
+
+            // Then recalculate
+            const result = await calculateCommission(payment.id);
+
+            if (result.success) {
+                if (result.skipped) {
+                    skipped++;
+                } else {
+                    processed++;
+                }
+            } else {
+                failed++;
+                errors.push(`Payment ${payment.id}: ${result.reason}`);
+            }
+
+            // Log progress every 10 payments or on last one
+            if ((i + 1) % 10 === 0 || i === total - 1) {
+                const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+                console.log(`[Recalculate] Progress: ${i + 1}/${total} (${elapsed}s elapsed)`);
+            }
+        } catch (err) {
+            failed++;
+            errors.push(`Payment ${payment.id}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        }
+    }
+
+    console.log(`[Recalculate] Complete: ${processed} processed, ${skipped} skipped, ${failed} failed`);
+
+    // Log activity
+    await supabase.from('activity_logs').insert({
+        action: 'batch_recalculate_period',
+        entity_type: 'bulk_operation',
+        user_id: user.id,
+        metadata: {
+            start_date: startDate.toISOString(),
+            end_date: endDate.toISOString(),
+            processed,
+            failed,
+            skipped
+        }
+    });
+
+    revalidatePath('/commissions');
+    return { processed, failed, skipped, errors: errors.slice(0, 10) };
 }
 
 /**

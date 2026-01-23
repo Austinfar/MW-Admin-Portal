@@ -34,7 +34,7 @@ function StatCard({
   iconColor?: string;
 }) {
   return (
-    <div className="flex items-center gap-3 p-3 bg-gray-900/30 rounded-lg">
+    <div className="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/5 backdrop-blur-sm hover:bg-white/10 transition-colors duration-300">
       <div className={`p-2 rounded-md bg-gray-800 ${iconColor}`}>
         <Icon className="w-4 h-4" />
       </div>
@@ -89,7 +89,7 @@ function QuotaProgressBar({
 export function MyStatsPanel({ mode, closerStats, setterStats }: MyStatsPanelProps) {
   if (mode === 'closer' && closerStats) {
     return (
-      <Card className="bg-[#1A1A1A] border-gray-800">
+      <Card className="bg-zinc-900/40 backdrop-blur-xl border-white/5 shadow-2xl">
         <CardHeader className="pb-3">
           <CardTitle className="text-lg font-medium text-white flex items-center">
             <TrendingUp className="w-5 h-5 mr-2 text-emerald-400" />
@@ -165,7 +165,7 @@ export function MyStatsPanel({ mode, closerStats, setterStats }: MyStatsPanelPro
 
   if (mode === 'setter' && setterStats) {
     return (
-      <Card className="bg-[#1A1A1A] border-gray-800">
+      <Card className="bg-zinc-900/40 backdrop-blur-xl border-white/5 shadow-2xl">
         <CardHeader className="pb-3">
           <CardTitle className="text-lg font-medium text-white flex items-center">
             <TrendingUp className="w-5 h-5 mr-2 text-blue-400" />
@@ -235,7 +235,7 @@ export function MyStatsPanel({ mode, closerStats, setterStats }: MyStatsPanelPro
 
   // Fallback loading state
   return (
-    <Card className="bg-[#1A1A1A] border-gray-800">
+    <Card className="bg-zinc-900/40 backdrop-blur-xl border-white/5 shadow-2xl">
       <CardHeader className="pb-3">
         <CardTitle className="text-lg font-medium text-white flex items-center">
           <TrendingUp className="w-5 h-5 mr-2 text-gray-400" />

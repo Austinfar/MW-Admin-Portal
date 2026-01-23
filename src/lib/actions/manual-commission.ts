@@ -94,72 +94,131 @@ export async function createManualCommission(
             }
         }
 
-        // Get period start for the entry date
+        // Get entry date
         const entryDate = payload.date ? new Date(payload.date) : new Date();
-        const { start: currentPeriodStart } = getCurrentPayPeriod();
 
-        // Calculate period start for the entry date
-        const anchor = new Date('2024-12-16T00:00:00Z');
-        const diffTime = entryDate.getTime() - anchor.getTime();
-        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-        const periodIndex = Math.floor(diffDays / 14);
-        const periodStart = new Date(anchor);
-        periodStart.setDate(anchor.getDate() + (periodIndex * 14));
-        const periodStartStr = periodStart.toISOString().split('T')[0];
+        // Determine if this should be a ledger entry (Sale/Renewal) or an adjustment (Bonus/etc)
+        const isAdjustment = ['bonus', 'referral', 'adjustment', 'other'].includes(payload.category);
 
-        // Calculate rate for display
-        const rate = payload.grossAmount > 0
-            ? (payload.commissionAmount / payload.grossAmount)
-            : 0;
+        if (isAdjustment) {
+            // Map category to adjustment type
+            let adjustmentType: 'bonus' | 'deduction' | 'correction' | 'chargeback' | 'referral' = 'bonus';
 
-        // Create ledger entry
-        const { data: entry, error: insertError } = await supabase
-            .from('commission_ledger')
-            .insert({
-                user_id: payload.coachId,
-                client_id: clientId,
-                payment_id: null, // No payment for manual entries
-                gross_amount: payload.grossAmount,
-                net_amount: payload.grossAmount, // No fees for manual entries
-                commission_amount: payload.commissionAmount,
-                entry_type: 'manual',
-                split_role: payload.role || 'coach',
-                split_percentage: rate * 100,
-                source_schedule_id: null,
-                status: 'pending',
-                payout_period_start: periodStartStr,
-                calculation_basis: {
-                    source: 'manual_entry',
-                    category: payload.category,
-                    notes: payload.notes,
-                    client_name: payload.clientName || null,
+            if (payload.category === 'referral') {
+                adjustmentType = 'referral';
+            } else if (payload.category === 'adjustment') {
+                // If negative, it's a deduction. If positive, a correction (or bonus).
+                // Let's use correction for "adjustment".
+                adjustmentType = payload.commissionAmount < 0 ? 'deduction' : 'correction';
+            } else if (payload.category === 'other') {
+                adjustmentType = 'bonus';
+            }
+
+            // Create adjustment entry
+            const { data: entry, error: insertError } = await supabase
+                .from('commission_adjustments')
+                .insert({
+                    user_id: payload.coachId,
+                    amount: payload.commissionAmount,
+                    adjustment_type: adjustmentType,
+                    reason: payload.notes, // Use notes as the primary reason/description
+                    notes: payload.category !== 'other' ? `Manual ${payload.category}` : undefined,
+                    payroll_run_id: null, // Will be picked up by draft creation based on date
+                    created_at: entryDate.toISOString(),
                     created_by: user.id,
-                    created_at: new Date().toISOString()
-                },
-                created_at: entryDate.toISOString()
-            })
-            .select('id')
-            .single();
+                    is_visible_to_user: true
+                })
+                .select('id')
+                .single();
 
-        if (insertError) {
-            console.error('Error creating manual commission:', insertError);
-            return { success: false, error: insertError.message };
+            if (insertError) {
+                console.error('Error creating manual adjustment:', insertError);
+                return { success: false, error: insertError.message };
+            }
+
+            // Create notification
+            await supabase
+                .from('feature_notifications')
+                .insert({
+                    user_id: payload.coachId,
+                    type: 'adjustment_added',
+                    category: 'commission',
+                    message: `Manual adjustment: ${payload.notes} ($${payload.commissionAmount.toFixed(2)})`,
+                    amount: payload.commissionAmount,
+                    is_read: false
+                });
+
+            return { success: true, entryId: entry.id };
+
+        } else {
+            // LEDGER ENTRY (Sale / Renewal)
+
+            // Get period start for the entry date
+            const { start: currentPeriodStart } = getCurrentPayPeriod();
+
+            // Calculate period start for the entry date
+            const anchor = new Date('2024-12-16T00:00:00Z');
+            const diffTime = entryDate.getTime() - anchor.getTime();
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+            const periodIndex = Math.floor(diffDays / 14);
+            const periodStart = new Date(anchor);
+            periodStart.setDate(anchor.getDate() + (periodIndex * 14));
+            const periodStartStr = periodStart.toISOString().split('T')[0];
+
+            // Calculate rate for display
+            const rate = payload.grossAmount > 0
+                ? (payload.commissionAmount / payload.grossAmount)
+                : 0;
+
+            // Create ledger entry
+            const { data: entry, error: insertError } = await supabase
+                .from('commission_ledger')
+                .insert({
+                    user_id: payload.coachId,
+                    client_id: clientId,
+                    payment_id: null, // No payment for manual entries
+                    gross_amount: payload.grossAmount,
+                    net_amount: payload.grossAmount, // No fees for manual entries
+                    commission_amount: payload.commissionAmount,
+                    entry_type: 'manual',
+                    split_role: payload.role || 'coach',
+                    split_percentage: rate * 100,
+                    source_schedule_id: null,
+                    status: 'pending',
+                    payout_period_start: periodStartStr,
+                    calculation_basis: {
+                        source: 'manual_entry',
+                        category: payload.category,
+                        notes: payload.notes,
+                        client_name: payload.clientName || null,
+                        created_by: user.id,
+                        created_at: new Date().toISOString()
+                    },
+                    created_at: entryDate.toISOString()
+                })
+                .select('id')
+                .single();
+
+            if (insertError) {
+                console.error('Error creating manual commission:', insertError);
+                return { success: false, error: insertError.message };
+            }
+
+            // Create notification for the coach
+            await supabase
+                .from('feature_notifications')
+                .insert({
+                    user_id: payload.coachId,
+                    type: 'commission_earned',
+                    category: 'commission',
+                    message: `Manual commission added: $${payload.commissionAmount.toFixed(2)} (${payload.category})`,
+                    commission_ledger_id: entry.id,
+                    amount: payload.commissionAmount,
+                    is_read: false
+                });
+
+            return { success: true, entryId: entry.id };
         }
-
-        // Create notification for the coach
-        await supabase
-            .from('feature_notifications')
-            .insert({
-                user_id: payload.coachId,
-                type: 'commission_earned',
-                category: 'commission',
-                message: `Manual commission added: $${payload.commissionAmount.toFixed(2)} (${payload.category})`,
-                commission_ledger_id: entry.id,
-                amount: payload.commissionAmount,
-                is_read: false
-            });
-
-        return { success: true, entryId: entry.id };
     } catch (err: any) {
         console.error('Error in createManualCommission:', err);
         return { success: false, error: err.message || 'Unknown error' };

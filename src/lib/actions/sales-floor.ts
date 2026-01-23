@@ -230,22 +230,18 @@ export async function getCloserStats(
       .eq('id', userId)
       .single();
 
-    // Get revenue from Stripe charges where salesCloserId matches
-    const charges = await stripe.charges.list({
-      limit: 100,
-      created: {
-        gte: Math.floor(start.getTime() / 1000),
-        lte: Math.floor(end.getTime() / 1000),
-      },
-    });
+    // Get revenue from payments table (much faster than Stripe API)
+    // Use clients.sold_by_user_id to match the closer
+    const { data: closerPayments } = await admin
+      .from('payments')
+      .select('amount, client_id, clients!inner(sold_by_user_id)')
+      .eq('status', 'succeeded')
+      .eq('clients.sold_by_user_id', userId)
+      .gte('payment_date', start.toISOString())
+      .lte('payment_date', end.toISOString());
 
-    // Filter charges by this closer (using metadata.salesCloserId)
-    const userCharges = charges.data.filter(
-      c => c.status === 'succeeded' && c.metadata?.salesCloserId === userId
-    );
-
-    const revenue = userCharges.reduce((sum, c) => sum + c.amount / 100, 0);
-    const deals = userCharges.length;
+    const revenue = (closerPayments || []).reduce((sum, p) => sum + Number(p.amount), 0);
+    const deals = new Set((closerPayments || []).map(p => p.client_id)).size; // Unique clients = deals
 
     // Get calls taken from sales_call_logs
     const { data: callLogs, count: callsTaken } = await admin
@@ -595,37 +591,39 @@ export async function getCloserLeaderboard(
       return [];
     }
 
-    // Get Stripe charges for the period
-    const charges = await stripe.charges.list({
-      limit: 100,
-      created: {
-        gte: Math.floor(start.getTime() / 1000),
-        lte: Math.floor(end.getTime() / 1000),
-      },
-    });
+    // Get payments from database (much faster than Stripe API)
+    const { data: payments } = await admin
+      .from('payments')
+      .select('amount, client_id, clients!inner(sold_by_user_id)')
+      .eq('status', 'succeeded')
+      .not('clients.sold_by_user_id', 'is', null)
+      .gte('payment_date', start.toISOString())
+      .lte('payment_date', end.toISOString());
 
     // Aggregate by closer
-    const closerStats = new Map<string, { revenue: number; deals: number }>();
+    const closerStats = new Map<string, { revenue: number; deals: Set<string> }>();
 
-    charges.data.forEach(charge => {
-      if (charge.status === 'succeeded' && charge.metadata?.salesCloserId) {
-        const closerId = charge.metadata.salesCloserId;
-        const current = closerStats.get(closerId) || { revenue: 0, deals: 0 };
-        current.revenue += charge.amount / 100;
-        current.deals += 1;
+    (payments || []).forEach(payment => {
+      const closerId = (payment.clients as any)?.sold_by_user_id;
+      if (closerId) {
+        const current = closerStats.get(closerId) || { revenue: 0, deals: new Set<string>() };
+        current.revenue += Number(payment.amount);
+        if (payment.client_id) current.deals.add(payment.client_id);
         closerStats.set(closerId, current);
       }
     });
 
     // Build leaderboard
     const leaderboard: CloserLeaderboardItem[] = closers.map(closer => {
-      const stats = closerStats.get(closer.id) || { revenue: 0, deals: 0 };
+      const stats = closerStats.get(closer.id);
+      const revenue = stats?.revenue || 0;
+      const deals = stats?.deals?.size || 0;
       return {
         id: closer.id,
         name: closer.name || 'Unknown',
         avatar_url: closer.avatar_url,
-        revenue: stats.revenue,
-        deals: stats.deals,
+        revenue,
+        deals,
         closeRate: 0, // Would need call data to calculate
         rank: 0,
         trend: 'same' as const,

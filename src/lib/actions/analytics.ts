@@ -97,12 +97,14 @@ async function _getBusinessMetrics(): Promise<BusinessMetrics> {
 
     let mrr = 0;
     activeSubs.forEach(sub => {
-        // Database stores amounts in dollars
-        let amount = sub.amount;
-        if (sub.interval === 'year') {
-            amount = amount / 12;
+        // Only count active subscriptions towards MRR, exclude trialing
+        if (sub.status !== 'active') return;
+
+        // Strict Monthly MRR: ONLY count subscriptions that bill exactly every 1 month.
+        // Exclude Year (12 month) and Multi-Month (e.g. 6 month) plans
+        if (sub.interval === 'month' && (!sub.interval_count || sub.interval_count === 1)) {
+            mrr += sub.amount;
         }
-        mrr += amount;
     });
 
     // Churn (Last 30 Days)
@@ -113,13 +115,41 @@ async function _getBusinessMetrics(): Promise<BusinessMetrics> {
         new Date(s.updated_at || s.created_at) > thirtyDaysAgo
     ).length;
 
-    // 6. Forecast 2026 (Calendar Year)
-    // Formula: Actual Verified 2026 Rev + Projected Revenue for Remainder
-    // Projection: Start from current MRR, grow by CMGR for remaining months
+    // 6. Forecast 2026 (Advanced Dynamic Model)
+    // Formula: (Projected MRR) + (Projected One-Off Sales * Seasonality)
 
-    // Calculate CMGR from last 6 months of data
-    // Use the raw sorted map entries before name conversion for accuracy? 
-    // We can use `monthlyRevenue` array since it is sorted by time (Jan -> Dec)
+    // A. Seasonality Index (Fitness Industry Standard)
+    // Jan/Feb peak, Q4 dip. 1.0 = Average.
+    const seasonalityIndex = [
+        1.25, 1.20, 1.15, // Q1 (High)
+        1.10, 1.05, 1.00, // Q2 (Moderate)
+        0.95, 0.90, 0.95, // Q3 (Summer Dip/Recovery)
+        0.90, 0.80, 0.75  // Q4 (Holiday Dip)
+    ];
+
+    // B. Calculate One-Off Sales Momentum (Weighted Average of Last 3 Months)
+    // We need to separate "Recurring" payment volume from "One-Off" volume in the last 3 months
+    // Since we don't have a perfect tag, we'll approximate: 
+    // Total Revenue of Month - (Start of Month MRR). 
+    // Or simpler: Use the `monthlyRevenue` array and subtract the *average* MRR of that period.
+    // For specific accuracy, let's just use the Total Monthly Revenue trend, as it captures both.
+
+    // Get last 3 months of revenue (most recent last)
+    const recentMonths = monthlyRevenue.slice(-3);
+    let momentumBase = 0;
+
+    if (recentMonths.length > 0) {
+        if (recentMonths.length === 1) {
+            momentumBase = recentMonths[0].total;
+        } else if (recentMonths.length === 2) {
+            momentumBase = (recentMonths[1].total * 0.6) + (recentMonths[0].total * 0.4);
+        } else {
+            // 50% Last Month, 30% Month-2, 20% Month-3
+            momentumBase = (recentMonths[2].total * 0.5) + (recentMonths[1].total * 0.3) + (recentMonths[0].total * 0.2);
+        }
+    }
+
+    // Determine Organic Growth Rate (CMGR) - Same capped logic as before but applied to the Momentum Base
     const last6Months = monthlyRevenue.slice(-6);
     let cmgr = 0;
     if (last6Months.length >= 2) {
@@ -130,36 +160,38 @@ async function _getBusinessMetrics(): Promise<BusinessMetrics> {
             cmgr = Math.pow(end / start, 1 / n) - 1;
         }
     }
-    // Cap CMGR: Floor at -50%, Cap at +20% monthly to avoid explosions
-    const safeCmgr = Math.max(-0.5, Math.min(cmgr, 0.20));
+    const safeCmgr = Math.max(-0.20, Math.min(cmgr, 0.08)); // Cap at 8% monthly growth
 
     const targetYear = 2026;
-    const currentYear = new Date().getFullYear(); // in simulation: 2026
+    const currentYear = new Date().getFullYear();
 
-    // Actual Verified 2026 Revenue
+    // Actual Verified 2026 Revenue (Banked)
     const actualRevenue2026 = succeededPayments
         .filter(p => {
             const d = new Date(p.payment_date || p.created_at);
             return d.getFullYear() === targetYear;
         })
-        .reduce((sum, p) => sum + p.amount, 0); // Amounts already in dollars
+        .reduce((sum, p) => sum + p.amount, 0);
 
     let projectedFutureRevenue = 0;
 
-    // Only project if we are in (or before) the target year
     if (currentYear <= targetYear) {
-        let simulatedMrr = mrr;
+        let currentBase = momentumBase || mrr; // Fallback to MRR if no history
         const now = new Date();
         const currentMonthIndex = (currentYear === targetYear) ? now.getMonth() : -1;
-        // Index: Jan=0. 
-        // Remaining full months: (11 - currentMonthIndex)
-        // e.g. if Jan(0), remaining = 11 (Feb..Dec)
 
+        // Project remaining months
         const monthsRemaining = 11 - currentMonthIndex;
 
         for (let i = 1; i <= monthsRemaining; i++) {
-            simulatedMrr = simulatedMrr * (1 + safeCmgr);
-            projectedFutureRevenue += simulatedMrr;
+            // Apply Growth
+            currentBase = currentBase * (1 + safeCmgr);
+
+            // Apply Seasonality
+            const futureMonthIndex = (currentMonthIndex + i) % 12;
+            const seasonalFactor = seasonalityIndex[futureMonthIndex];
+
+            projectedFutureRevenue += (currentBase * seasonalFactor);
         }
     }
 

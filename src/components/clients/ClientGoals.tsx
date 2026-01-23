@@ -109,15 +109,17 @@ export function ClientGoals({ clientId, goals }: ClientGoalsProps) {
     }
 
     return (
-        <Card>
+        <Card className="bg-card/50 backdrop-blur-xl border-white/5 hover:border-primary/20 transition-all duration-300 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
-                    <Target className="h-4 w-4 text-primary" />
+                    <div className="p-2 rounded-full bg-primary/10">
+                        <Target className="h-4 w-4 text-primary" />
+                    </div>
                     Goals & Milestones
                 </CardTitle>
                 <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
                     <DialogTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-8">
+                        <Button variant="ghost" size="sm" className="h-8 hover:bg-white/10">
                             <Plus className="h-4 w-4 mr-1" />
                             Add
                         </Button>
@@ -130,7 +132,7 @@ export function ClientGoals({ clientId, goals }: ClientGoalsProps) {
             </CardHeader>
             <CardContent className="space-y-3">
                 {goals.length === 0 ? (
-                    <div className="text-center py-6 text-muted-foreground">
+                    <div className="text-center py-6 text-muted-foreground border border-dashed border-white/10 rounded-xl bg-white/5">
                         <Target className="h-8 w-8 mx-auto mb-2 opacity-50" />
                         <p className="text-sm">No goals set yet</p>
                         <p className="text-xs">Add goals to track client progress</p>
@@ -226,8 +228,9 @@ function GoalItem({ goal, onAchieve, onAbandon, onReactivate, onEdit, onDelete, 
 
     return (
         <div className={cn(
-            'p-3 rounded-lg border bg-card/50 space-y-2',
-            goal.status === 'abandoned' && 'opacity-60'
+            'p-3 rounded-xl border bg-white/5 space-y-2 transition-all duration-200 hover:bg-white/10',
+            goal.status === 'achieved' && 'border-emerald-500/20 bg-emerald-500/5',
+            goal.status === 'abandoned' && 'opacity-60 border-white/5'
         )}>
             <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">

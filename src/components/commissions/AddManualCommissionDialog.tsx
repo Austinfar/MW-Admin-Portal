@@ -176,6 +176,31 @@ export function AddManualCommissionDialog({ open, onOpenChange, onSuccess, prese
                     </div>
                 ) : (
                     <div className="space-y-4 py-4">
+                        {/* Category Selection - Moved to top for dynamic fields */}
+                        <div className="space-y-2">
+                            <Label>Category *</Label>
+                            <select
+                                value={category}
+                                onChange={(e) => {
+                                    const newCat = e.target.value as ManualCommissionPayload['category'];
+                                    setCategory(newCat);
+                                    if (['bonus', 'adjustment', 'other', 'referral'].includes(newCat)) {
+                                        setGrossAmount('0');
+                                    }
+                                }}
+                                className="w-full h-10 px-3 py-2 bg-[#1a1a1a] border border-white/10 rounded-md text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                            >
+                                {CATEGORY_OPTIONS.map((c) => (
+                                    <option key={c.value} value={c.value}>
+                                        {c.label}
+                                    </option>
+                                ))}
+                            </select>
+                            <p className="text-xs text-muted-foreground">
+                                {CATEGORY_OPTIONS.find(c => c.value === category)?.description}
+                            </p>
+                        </div>
+
                         {/* Coach Selection */}
                         <div className="space-y-2">
                             <Label>Recipient *</Label>
@@ -193,21 +218,26 @@ export function AddManualCommissionDialog({ open, onOpenChange, onSuccess, prese
                             </select>
                         </div>
 
-                        {/* Role */}
-                        <div className="space-y-2">
-                            <Label>Role</Label>
-                            <select
-                                value={role}
-                                onChange={(e) => setRole(e.target.value as typeof role)}
-                                className="w-full h-10 px-3 py-2 bg-[#1a1a1a] border border-white/10 rounded-md text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-                            >
-                                {ROLE_OPTIONS.map((r) => (
-                                    <option key={r.value} value={r.value}>
-                                        {r.label}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
+                        {/* Dynamic Fields based on Category */}
+                        {['sale', 'renewal'].includes(category) && (
+                            <>
+                                {/* Role */}
+                                <div className="space-y-2">
+                                    <Label>Role</Label>
+                                    <select
+                                        value={role}
+                                        onChange={(e) => setRole(e.target.value as typeof role)}
+                                        className="w-full h-10 px-3 py-2 bg-[#1a1a1a] border border-white/10 rounded-md text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                                    >
+                                        {ROLE_OPTIONS.map((r) => (
+                                            <option key={r.value} value={r.value}>
+                                                {r.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </>
+                        )}
 
                         {/* Client Selection (Optional) */}
                         <div className="space-y-2">
@@ -239,20 +269,22 @@ export function AddManualCommissionDialog({ open, onOpenChange, onSuccess, prese
 
                         {/* Amounts */}
                         <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label>Gross Amount</Label>
-                                <div className="relative">
-                                    <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                                    <Input
-                                        type="text"
-                                        placeholder="0.00"
-                                        value={grossAmount}
-                                        onChange={(e) => handleGrossChange(e.target.value)}
-                                        className="pl-8 bg-[#1a1a1a] border-white/10"
-                                    />
+                            {['sale', 'renewal'].includes(category) && (
+                                <div className="space-y-2">
+                                    <Label>Gross Amount</Label>
+                                    <div className="relative">
+                                        <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                                        <Input
+                                            type="text"
+                                            placeholder="0.00"
+                                            value={grossAmount}
+                                            onChange={(e) => handleGrossChange(e.target.value)}
+                                            className="pl-8 bg-[#1a1a1a] border-white/10"
+                                        />
+                                    </div>
                                 </div>
-                            </div>
-                            <div className="space-y-2">
+                            )}
+                            <div className={['sale', 'renewal'].includes(category) ? "space-y-2" : "space-y-2 col-span-2"}>
                                 <Label>Commission Amount *</Label>
                                 <div className="relative">
                                     <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -261,10 +293,10 @@ export function AddManualCommissionDialog({ open, onOpenChange, onSuccess, prese
                                         placeholder="0.00"
                                         value={commissionAmount}
                                         onChange={(e) => setCommissionAmount(e.target.value)}
-                                        className="pl-8 bg-[#1a1a1a] border-white/10"
+                                        className="pl-8 bg-[#1a1a1a] border-white/10 font-bold text-emerald-500"
                                     />
                                 </div>
-                                {parsedGross > 0 && (
+                                {parsedGross > 0 && ['sale', 'renewal'].includes(category) && (
                                     <p className="text-xs text-muted-foreground">
                                         Effective rate: {effectiveRate}%
                                     </p>
@@ -272,31 +304,15 @@ export function AddManualCommissionDialog({ open, onOpenChange, onSuccess, prese
                             </div>
                         </div>
 
-                        {/* Date and Category */}
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label>Date</Label>
-                                <Input
-                                    type="date"
-                                    value={date}
-                                    onChange={(e) => setDate(e.target.value)}
-                                    className="bg-[#1a1a1a] border-white/10"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Category *</Label>
-                                <select
-                                    value={category}
-                                    onChange={(e) => setCategory(e.target.value as ManualCommissionPayload['category'])}
-                                    className="w-full h-10 px-3 py-2 bg-[#1a1a1a] border border-white/10 rounded-md text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-                                >
-                                    {CATEGORY_OPTIONS.map((c) => (
-                                        <option key={c.value} value={c.value}>
-                                            {c.label}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
+                        {/* Date */}
+                        <div className="space-y-2">
+                            <Label>Date</Label>
+                            <Input
+                                type="date"
+                                value={date}
+                                onChange={(e) => setDate(e.target.value)}
+                                className="bg-[#1a1a1a] border-white/10"
+                            />
                         </div>
 
                         {/* Notes */}
@@ -314,10 +330,15 @@ export function AddManualCommissionDialog({ open, onOpenChange, onSuccess, prese
                         {parsedCommission > 0 && (
                             <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-4">
                                 <div className="flex justify-between items-center">
-                                    <span className="text-sm text-muted-foreground">Commission to be added:</span>
+                                    <span className="text-sm text-muted-foreground">
+                                        To be Added:
+                                    </span>
                                     <span className="text-xl font-bold text-emerald-400">
                                         {formatCurrency(parsedCommission)}
                                     </span>
+                                </div>
+                                <div className="text-xs text-muted-foreground mt-1 text-right">
+                                    Type: {CATEGORY_OPTIONS.find(c => c.value === category)?.label}
                                 </div>
                             </div>
                         )}

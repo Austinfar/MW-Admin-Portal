@@ -24,7 +24,7 @@ export function AlertsWidget({ alerts, delay = 0 }: AlertsWidgetProps) {
                     ease: [0.25, 0.46, 0.45, 0.94]
                 }}
             >
-                <Card className="bg-card/50 backdrop-blur-sm border-primary/10">
+                <Card className="bg-zinc-900/40 backdrop-blur-xl border-white/5 shadow-2xl">
                     <CardHeader className="pb-3">
                         <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                             <AlertCircle className="h-4 w-4" />
@@ -51,7 +51,7 @@ export function AlertsWidget({ alerts, delay = 0 }: AlertsWidgetProps) {
                 ease: [0.25, 0.46, 0.45, 0.94]
             }}
         >
-            <Card className="bg-red-950/20 border-red-500/20 shadow-sm shadow-red-900/10">
+            <Card className="bg-red-950/40 backdrop-blur-xl border-red-500/20 shadow-lg shadow-red-900/20">
                 <CardHeader className="pb-3">
                     <CardTitle className="text-red-500 text-sm font-semibold flex items-center gap-2">
                         <AlertCircle className="h-4 w-4 animate-pulse" />

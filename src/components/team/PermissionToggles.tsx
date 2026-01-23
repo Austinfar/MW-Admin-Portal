@@ -31,8 +31,8 @@ const VIEW_PERMISSION_CONFIG: Record<string, { label: string, options: ViewScope
     can_view_team_settings: { label: 'View Team Settings', options: ['none', 'all'] }
 }
 
-// Boolean-based permissions (on/off)
-const BOOLEAN_PERMISSION_CONFIG: Record<string, { label: string, description: string }> = {
+// Boolean-based permissions (on/off) - grouped by category
+const PAYROLL_PERMISSION_CONFIG: Record<string, { label: string, description: string }> = {
     can_approve_payroll: {
         label: 'Approve Payroll',
         description: 'Can approve payroll runs for payout (requires different user than creator)'
@@ -41,6 +41,19 @@ const BOOLEAN_PERMISSION_CONFIG: Record<string, { label: string, description: st
         label: 'Create Manual Commissions',
         description: 'Can add manual commission entries and adjustments'
     }
+}
+
+const SUBSCRIPTION_PERMISSION_CONFIG: Record<string, { label: string, description: string }> = {
+    can_manage_payment_schedules: {
+        label: 'Manage Payment Schedules',
+        description: 'Can edit scheduled payment amounts and due dates for clients'
+    }
+}
+
+// Combined for initialization
+const BOOLEAN_PERMISSION_CONFIG: Record<string, { label: string, description: string }> = {
+    ...PAYROLL_PERMISSION_CONFIG,
+    ...SUBSCRIPTION_PERMISSION_CONFIG
 }
 
 export function PermissionToggles({ userId, role, initialPermissions, onUpdate }: PermissionTogglesProps) {
@@ -147,10 +160,10 @@ export function PermissionToggles({ userId, role, initialPermissions, onUpdate }
                 })}
             </div>
 
-            {/* Boolean Permissions (Admin-specific) */}
+            {/* Payroll Permissions */}
             <div className="space-y-3">
                 <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider">Payroll Permissions</h4>
-                {Object.entries(BOOLEAN_PERMISSION_CONFIG).map(([key, config]) => {
+                {Object.entries(PAYROLL_PERMISSION_CONFIG).map(([key, config]) => {
                     const permKey = key as keyof UserPermissions;
                     const currentValue = permissions[permKey] === true;
 
@@ -179,6 +192,37 @@ export function PermissionToggles({ userId, role, initialPermissions, onUpdate }
                 {role === 'super_admin' && (
                     <p className="text-xs text-gray-500 italic">Super admins automatically have all payroll permissions.</p>
                 )}
+            </div>
+
+            {/* Subscription/Payment Permissions */}
+            <div className="space-y-3">
+                <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider">Subscription Permissions</h4>
+                {Object.entries(SUBSCRIPTION_PERMISSION_CONFIG).map(([key, config]) => {
+                    const permKey = key as keyof UserPermissions;
+                    const currentValue = permissions[permKey] === true;
+
+                    return (
+                        <div
+                            key={key}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] transition-colors"
+                        >
+                            <div className="flex-1">
+                                <Label htmlFor={`${userId}-${key}`} className="font-medium text-sm text-gray-300">
+                                    {config.label}
+                                </Label>
+                                <p className="text-xs text-gray-500 mt-0.5">{config.description}</p>
+                            </div>
+
+                            <Switch
+                                id={`${userId}-${key}`}
+                                checked={currentValue}
+                                onCheckedChange={(checked) => handleBooleanChange(permKey, checked)}
+                                disabled={isSaving || role === 'super_admin'}
+                                className="data-[state=checked]:bg-emerald-600"
+                            />
+                        </div>
+                    )
+                })}
             </div>
 
             <div className="flex items-center justify-between pt-4 border-t border-white/10">

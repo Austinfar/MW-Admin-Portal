@@ -30,9 +30,20 @@ interface PeriodSelectorProps {
 /**
  * Generate pay periods (bi-weekly, Monday-Sunday, anchored to Dec 16, 2024)
  */
+/**
+ * Generate pay periods (bi-weekly, Monday-Sunday, anchored to Dec 16, 2024 LOCAL TIME)
+ */
 function generatePayPeriods(count: number = 12): PayPeriod[] {
-    const anchor = new Date('2024-12-16T00:00:00Z')
+    // Anchor: Monday Dec 16, 2024 (Local Time)
+    // We explicitly avoid 'Z' to prevent browser from interpreting as UTC and shifting
+    const anchor = new Date(2024, 11, 16) // Month is 0-indexed: 11 = Dec
+
+    // Reset hours to start of day to avoid partial day shifts
+    anchor.setHours(0, 0, 0, 0)
+
     const now = new Date()
+    now.setHours(0, 0, 0, 0)
+
     const diffTime = now.getTime() - anchor.getTime()
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
     const currentPeriodIndex = Math.floor(diffDays / 14)
@@ -47,18 +58,23 @@ function generatePayPeriods(count: number = 12): PayPeriod[] {
 
         const periodEnd = new Date(periodStart)
         periodEnd.setDate(periodEnd.getDate() + 13)
+        // Set to end of day
+        periodEnd.setHours(23, 59, 59, 999)
 
         // Payout is Friday after period ends
         const payoutDate = new Date(periodEnd)
-        const dayOfWeek = payoutDate.getDay()
+        // Reset to start of day for calculation
+        payoutDate.setHours(0, 0, 0, 0)
+
+        const dayOfWeek = payoutDate.getDay() // 0 = Sun, 1 = Mon, ..., 6 = Sat
         const daysUntilFriday = (5 - dayOfWeek + 7) % 7 || 7
         payoutDate.setDate(payoutDate.getDate() + daysUntilFriday)
 
         const isCurrent = i === 0
 
         periods.push({
-            start: periodStart,
-            end: periodEnd,
+            start: periodStart, // Start of day 00:00:00
+            end: periodEnd,     // End of day 23:59:59
             payoutDate,
             label: `${format(periodStart, 'MMM d')} - ${format(periodEnd, 'MMM d, yyyy')}`,
             isCurrent

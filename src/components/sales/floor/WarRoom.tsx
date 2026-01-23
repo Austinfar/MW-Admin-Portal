@@ -36,7 +36,7 @@ export function WarRoom() {
     }
 
     return (
-        <Card className="bg-[#1A1A1A] border-gray-800 h-full">
+        <Card className="bg-zinc-900/40 backdrop-blur-xl border-white/5 h-full shadow-2xl">
             <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-gray-400 flex items-center">
                     <Sword className="w-4 h-4 mr-2" />
@@ -46,7 +46,7 @@ export function WarRoom() {
             <CardContent className="space-y-3 pt-2">
                 <Button
                     variant="outline"
-                    className="w-full justify-start text-left border-gray-700 hover:bg-white/5 hover:text-white"
+                    className="w-full justify-start text-left bg-white/5 border-white/5 hover:bg-white/10 hover:text-white transition-all duration-300"
                     onClick={() => copyLink("https://mwfitnesscoaching.com/book")}
                 >
                     <Copy className="w-3.5 h-3.5 mr-2 text-blue-400" />
@@ -57,13 +57,13 @@ export function WarRoom() {
                     <DialogTrigger asChild>
                         <Button
                             variant="outline"
-                            className="w-full justify-start text-left border-gray-700 hover:bg-white/5 hover:text-white"
+                            className="w-full justify-start text-left bg-white/5 border-white/5 hover:bg-white/10 hover:text-white transition-all duration-300"
                         >
                             <Calculator className="w-3.5 h-3.5 mr-2 text-emerald-400" />
                             Commission Calc
                         </Button>
                     </DialogTrigger>
-                    <DialogContent className="bg-[#1A1A1A] border-gray-800 text-white">
+                    <DialogContent className="bg-zinc-950/90 backdrop-blur-xl border-white/10 text-white">
                         <DialogHeader>
                             <DialogTitle>Quick Commission Calculator</DialogTitle>
                         </DialogHeader>

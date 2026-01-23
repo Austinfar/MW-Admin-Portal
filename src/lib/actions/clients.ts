@@ -168,6 +168,7 @@ export async function updateClient(id: string, data: Partial<Client>) {
             client_type_id: data.client_type_id,
             assigned_coach_id: data.assigned_coach_id,
             stripe_customer_id: data.stripe_customer_id,
+            ghl_contact_id: data.ghl_contact_id,
             sold_by_user_id: data.sold_by_user_id,
             lead_source: data.lead_source,
             check_in_day: data.check_in_day,
@@ -241,10 +242,10 @@ export async function getEnhancedClients(): Promise<EnhancedClient[]> {
         return []
     }
 
-    // Get latest payments for all clients
+    // Get latest payments for all clients (with amount for LTV calculation)
     const { data: payments } = await supabase
         .from('payments')
-        .select('client_id, payment_date, status')
+        .select('client_id, payment_date, status, amount, refund_amount')
         .order('payment_date', { ascending: false })
 
     // Get onboarding task counts
@@ -254,9 +255,16 @@ export async function getEnhancedClients(): Promise<EnhancedClient[]> {
 
     // Build lookup maps
     const latestPaymentMap = new Map<string, { date: string; status: string }>()
+    const lifetimeRevenueMap = new Map<string, number>()
     payments?.forEach(p => {
         if (!latestPaymentMap.has(p.client_id)) {
             latestPaymentMap.set(p.client_id, { date: p.payment_date, status: p.status })
+        }
+        // Calculate lifetime revenue (successful payments minus refunds)
+        if (p.status === 'succeeded' || p.status === 'refunded' || p.status === 'partially_refunded') {
+            const currentRevenue = lifetimeRevenueMap.get(p.client_id) || 0
+            const netAmount = (p.amount || 0) - (p.refund_amount || 0)
+            lifetimeRevenueMap.set(p.client_id, currentRevenue + netAmount)
         }
     })
 
@@ -274,7 +282,8 @@ export async function getEnhancedClients(): Promise<EnhancedClient[]> {
         last_payment_date: latestPaymentMap.get(client.id)?.date || null,
         last_payment_status: latestPaymentMap.get(client.id)?.status || null,
         onboarding_total: taskCountMap.get(client.id)?.total || 0,
-        onboarding_completed: taskCountMap.get(client.id)?.completed || 0
+        onboarding_completed: taskCountMap.get(client.id)?.completed || 0,
+        lifetime_revenue: lifetimeRevenueMap.get(client.id) || 0
     })) as EnhancedClient[]
 }
 
@@ -375,4 +384,21 @@ export async function bulkReassignCoach(clientIds: string[], coachId: string | n
 
     revalidatePath('/clients')
     return { success: true, updated: clientIds.length }
+}
+
+export async function getClientActivityLogs(clientId: string) {
+    const supabase = createAdminClient()
+
+    const { data, error } = await supabase
+        .from('activity_logs')
+        .select('*')
+        .eq('client_id', clientId)
+        .order('created_at', { ascending: false })
+
+    if (error) {
+        console.error('Error fetching activity logs:', error)
+        return []
+    }
+
+    return data
 }

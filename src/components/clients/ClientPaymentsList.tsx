@@ -48,11 +48,11 @@ export function ClientPaymentsList({ payments, clientId, stripeCustomerId }: Cli
 
     if (payments.length === 0) {
         return (
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <Card className="bg-white/5 border-white/10 backdrop-blur-sm">
+                <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 space-y-0 px-3 sm:px-6">
                     <div>
-                        <CardTitle>Payment History</CardTitle>
-                        <CardDescription>No payments found for this client.</CardDescription>
+                        <CardTitle className="text-base sm:text-lg">Payment History</CardTitle>
+                        <CardDescription className="text-xs sm:text-sm">No payments found for this client.</CardDescription>
                     </div>
                     {stripeCustomerId && (
                         <Button
@@ -60,6 +60,7 @@ export function ClientPaymentsList({ payments, clientId, stripeCustomerId }: Cli
                             size="sm"
                             onClick={handleSync}
                             disabled={isSyncing}
+                            className="w-full sm:w-auto bg-card/50 backdrop-blur-sm border-white/10 hover:border-primary/30 hover:bg-primary/10 transition-all duration-200"
                         >
                             <RefreshCw className={`h-3 w-3 mr-1 ${isSyncing ? 'animate-spin' : ''}`} />
                             {isSyncing ? 'Syncing...' : 'Sync Stripe'}
@@ -71,11 +72,11 @@ export function ClientPaymentsList({ payments, clientId, stripeCustomerId }: Cli
     }
 
     return (
-        <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <Card className="bg-white/5 border-white/10 backdrop-blur-sm">
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 space-y-0 px-3 sm:px-6">
                 <div>
-                    <CardTitle>Payment History</CardTitle>
-                    <CardDescription>Recent transactions synced from Stripe.</CardDescription>
+                    <CardTitle className="text-base sm:text-lg">Payment History</CardTitle>
+                    <CardDescription className="text-xs sm:text-sm">Recent transactions synced from Stripe.</CardDescription>
                 </div>
                 {stripeCustomerId && (
                     <Button
@@ -83,58 +84,59 @@ export function ClientPaymentsList({ payments, clientId, stripeCustomerId }: Cli
                         size="sm"
                         onClick={handleSync}
                         disabled={isSyncing}
+                        className="w-full sm:w-auto bg-card/50 backdrop-blur-sm border-white/10 hover:border-primary/30 hover:bg-primary/10 transition-all duration-200"
                     >
                         <RefreshCw className={`h-3 w-3 mr-1 ${isSyncing ? 'animate-spin' : ''}`} />
                         {isSyncing ? 'Syncing...' : 'Sync'}
                     </Button>
                 )}
             </CardHeader>
-            <CardContent>
-                <div className="space-y-4">
+            <CardContent className="px-3 sm:px-6">
+                <div className="space-y-3 sm:space-y-4 max-h-[300px] lg:max-h-[400px] overflow-y-auto scrollbar-thin">
                     {payments.map((payment) => {
                         const isRefunded = payment.status === 'refunded' || payment.status === 'partially_refunded'
                         const hasRefund = (payment.refund_amount || 0) > 0
                         const netAmount = payment.amount - (payment.refund_amount || 0)
 
                         return (
-                            <div key={payment.id} className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
-                                <div>
-                                    <p className="font-medium text-sm">{payment.product_name || 'Payment'}</p>
-                                    <p className="text-xs text-muted-foreground">{format(new Date(payment.payment_date), 'PPP')}</p>
+                            <div key={payment.id} className="flex flex-col xs:flex-row xs:items-center xs:justify-between gap-2 border-b border-white/5 pb-3 sm:pb-4 last:border-0 last:pb-0 hover:bg-white/5 -mx-2 px-2 rounded-lg transition-colors">
+                                <div className="min-w-0 flex-1">
+                                    <p className="font-medium text-sm truncate">{payment.product_name || 'Payment'}</p>
+                                    <p className="text-xs text-muted-foreground">{format(new Date(payment.payment_date), 'PP')}</p>
                                 </div>
-                                <div className="text-right">
-                                    {hasRefund ? (
-                                        <div className="space-y-0.5">
-                                            <p className="font-medium text-sm line-through text-muted-foreground">
+                                <div className="flex items-center justify-between xs:justify-end gap-2 xs:text-right">
+                                    <div>
+                                        {hasRefund ? (
+                                            <div className="space-y-0.5">
+                                                <p className="font-medium text-sm line-through text-muted-foreground">
+                                                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: payment.currency || 'USD' }).format(payment.amount)}
+                                                </p>
+                                                <p className="text-xs text-red-500">
+                                                    -{new Intl.NumberFormat('en-US', { style: 'currency', currency: payment.currency || 'USD' }).format(payment.refund_amount || 0)}
+                                                </p>
+                                                {payment.status === 'partially_refunded' && (
+                                                    <p className="font-medium text-sm text-emerald-600">
+                                                        {new Intl.NumberFormat('en-US', { style: 'currency', currency: payment.currency || 'USD' }).format(netAmount)}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <p className="font-medium text-sm">
                                                 {new Intl.NumberFormat('en-US', { style: 'currency', currency: payment.currency || 'USD' }).format(payment.amount)}
                                             </p>
-                                            <p className="text-xs text-red-500">
-                                                Refund: -{new Intl.NumberFormat('en-US', { style: 'currency', currency: payment.currency || 'USD' }).format(payment.refund_amount || 0)}
-                                            </p>
-                                            {payment.status === 'partially_refunded' && (
-                                                <p className="font-medium text-sm text-emerald-600">
-                                                    Net: {new Intl.NumberFormat('en-US', { style: 'currency', currency: payment.currency || 'USD' }).format(netAmount)}
-                                                </p>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <p className="font-medium text-sm">
-                                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: payment.currency || 'USD' }).format(payment.amount)}
-                                        </p>
-                                    )}
-                                    <div className="mt-1">
-                                        <Badge
-                                            variant={payment.status === 'succeeded' ? 'default' : 'destructive'}
-                                            className={`text-[10px] px-1.5 py-0 uppercase ${
-                                                isRefunded ? 'bg-red-500/15 text-red-500' :
-                                                payment.status === 'disputed' ? 'bg-amber-500/15 text-amber-500' :
-                                                payment.status === 'failed' ? 'bg-red-500/15 text-red-500' :
-                                                ''
-                                            }`}
-                                        >
-                                            {payment.status === 'partially_refunded' ? 'Partial Refund' : payment.status}
-                                        </Badge>
+                                        )}
                                     </div>
+                                    <Badge
+                                        variant={payment.status === 'succeeded' ? 'default' : 'destructive'}
+                                        className={`text-[10px] px-1.5 py-0 uppercase shrink-0 ${
+                                            isRefunded ? 'bg-red-500/15 text-red-500' :
+                                            payment.status === 'disputed' ? 'bg-amber-500/15 text-amber-500' :
+                                            payment.status === 'failed' ? 'bg-red-500/15 text-red-500' :
+                                            ''
+                                        }`}
+                                    >
+                                        {payment.status === 'partially_refunded' ? 'Partial' : payment.status}
+                                    </Badge>
                                 </div>
                             </div>
                         )

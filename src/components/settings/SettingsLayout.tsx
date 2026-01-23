@@ -4,7 +4,7 @@ import Link from 'next/link'
 
 interface SettingsLayoutProps {
     children: React.ReactNode
-    activeTab?: 'general' | 'team' | 'onboarding'
+    activeTab?: 'general' | 'team' | 'onboarding' | 'sms-checkin'
 }
 
 export function SettingsLayout({ children, activeTab = 'general' }: SettingsLayoutProps) {
@@ -12,6 +12,7 @@ export function SettingsLayout({ children, activeTab = 'general' }: SettingsLayo
         { id: 'general', label: 'General', href: '/settings' },
         { id: 'team', label: 'Team', href: '/settings/team' },
         { id: 'onboarding', label: 'Onboarding', href: '/settings/onboarding' },
+        { id: 'sms-checkin', label: 'SMS Check-in', href: '/settings/sms-checkin' },
     ]
 
     return (

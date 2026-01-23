@@ -1,4 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { sendDirectMessage, isSlackConfigured } from '@/lib/slack/client'
+import { buildCommissionDM } from '@/lib/slack/messages'
 
 interface CommissionSplit {
     userId: string
@@ -451,9 +453,10 @@ async function createCommissionNotification(
         const amount = entry.commission_amount.toFixed(2)
         const roleLabel = entry.split_role === 'coach' ? 'coaching' :
             entry.split_role === 'closer' ? 'closing' :
-            entry.split_role === 'setter' ? 'setting' :
-            entry.split_role === 'referrer' ? 'referral' : 'commission'
+                entry.split_role === 'setter' ? 'setting' :
+                    entry.split_role === 'referrer' ? 'referral' : 'commission'
 
+        // 1. Internal Dashboard Notification
         await supabase
             .from('feature_notifications')
             .insert({
@@ -465,6 +468,47 @@ async function createCommissionNotification(
                 amount: entry.commission_amount,
                 is_read: false
             })
+
+        // 2. Slack DM Notification
+        if (isSlackConfigured()) {
+            // Fetch the user's slack_user_id
+            const { data: user } = await supabase
+                .from('users')
+                .select('slack_user_id')
+                .eq('id', entry.user_id)
+                .single()
+
+            if (user?.slack_user_id) {
+                // Map split_role to the union type expected by buildCommissionDM
+                let role: 'closer' | 'setter' | 'referrer' | 'coach' = 'coach'
+                if (entry.split_role === 'closer') role = 'closer'
+                else if (entry.split_role === 'setter') role = 'setter'
+                else if (entry.split_role === 'referrer') role = 'referrer'
+
+                // Fetch program name if available (from payment schedule)
+                let programName = 'Coaching Program'
+                if (entry.source_schedule_id) {
+                    const { data: schedule } = await supabase
+                        .from('payment_schedules')
+                        .select('plan_name, stripe_product_name')
+                        .eq('id', entry.source_schedule_id)
+                        .single()
+
+                    if (schedule) {
+                        programName = schedule.stripe_product_name || schedule.plan_name || programName
+                    }
+                }
+
+                const msg = buildCommissionDM({
+                    clientName,
+                    amount: entry.commission_amount,
+                    role,
+                    programName
+                })
+
+                await sendDirectMessage(user.slack_user_id, msg)
+            }
+        }
     } catch (error) {
         // Don't fail the commission calculation if notification fails
         console.error('Failed to create commission notification:', error)

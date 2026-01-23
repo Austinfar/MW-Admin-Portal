@@ -35,6 +35,7 @@ export function ClientDetailsCard({ client, ghlLocationId, users = [], isAdmin =
         email: client.email,
         phone: client.phone || '',
         stripe_customer_id: client.stripe_customer_id || '',
+        ghl_contact_id: client.ghl_contact_id || '',
         status: client.status,
         sold_by_user_id: client.sold_by_user_id || 'none',
         assigned_coach_id: client.assigned_coach_id || 'none',
@@ -53,7 +54,7 @@ export function ClientDetailsCard({ client, ghlLocationId, users = [], isAdmin =
                 assigned_coach_id: formData.assigned_coach_id === 'none' ? null : formData.assigned_coach_id,
                 appointment_setter_id: formData.appointment_setter_id === 'none' ? null : formData.appointment_setter_id,
                 check_in_day: formData.check_in_day === 'none' ? null : formData.check_in_day,
-                ghl_contact_id: client.ghl_contact_id // Pass this so action knows to sync
+                ghl_contact_id: formData.ghl_contact_id || undefined
             };
             const result = await updateClient(client.id, cleanedData);
 
@@ -72,11 +73,11 @@ export function ClientDetailsCard({ client, ghlLocationId, users = [], isAdmin =
     };
 
     return (
-        <Card className="bg-card/40 border-primary/5 backdrop-blur-sm relative overflow-hidden transition-all duration-300">
+        <Card className="bg-card/50 backdrop-blur-xl border-white/5 hover:border-primary/20 transition-all duration-300 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)] relative overflow-hidden">
             <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="text-lg">Contact Details</CardTitle>
                 {!isEditing && (
-                    <Button variant="ghost" size="icon" onClick={() => setIsEditing(true)} className="h-8 w-8 text-muted-foreground hover:text-primary">
+                    <Button variant="ghost" size="icon" onClick={() => setIsEditing(true)} className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-white/10">
                         <Edit2 className="h-4 w-4" />
                     </Button>
                 )}
@@ -188,6 +189,32 @@ export function ClientDetailsCard({ client, ghlLocationId, users = [], isAdmin =
                             </div>
                         </div>
 
+                        {/* Weekly Check-in */}
+                        <div className="pt-2 border-t border-primary/10">
+                            <Label className="text-xs font-semibold text-primary mb-2 block">Weekly Check-in</Label>
+                            <div className="space-y-1">
+                                <Label htmlFor="check_in_day">Check-in Day</Label>
+                                <Select
+                                    value={formData.check_in_day}
+                                    onValueChange={(value) => setFormData({ ...formData, check_in_day: value })}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select Day" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">-- None --</SelectItem>
+                                        <SelectItem value="Monday">Monday</SelectItem>
+                                        <SelectItem value="Tuesday">Tuesday</SelectItem>
+                                        <SelectItem value="Wednesday">Wednesday</SelectItem>
+                                        <SelectItem value="Thursday">Thursday</SelectItem>
+                                        <SelectItem value="Friday">Friday</SelectItem>
+                                        <SelectItem value="Saturday">Saturday</SelectItem>
+                                        <SelectItem value="Sunday">Sunday</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+
                         <div className="space-y-1">
                             <Label htmlFor="stripe_customer_id">Stripe Customer ID</Label>
                             <Input
@@ -195,6 +222,17 @@ export function ClientDetailsCard({ client, ghlLocationId, users = [], isAdmin =
                                 value={formData.stripe_customer_id}
                                 onChange={(e) => setFormData({ ...formData, stripe_customer_id: e.target.value })}
                                 placeholder="cus_..."
+                                disabled={!isAdmin}
+                                className={!isAdmin ? "opacity-60 cursor-not-allowed" : ""}
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <Label htmlFor="ghl_contact_id">GHL Contact ID</Label>
+                            <Input
+                                id="ghl_contact_id"
+                                value={formData.ghl_contact_id}
+                                onChange={(e) => setFormData({ ...formData, ghl_contact_id: e.target.value })}
+                                placeholder="Contact ID from GoHighLevel"
                                 disabled={!isAdmin}
                                 className={!isAdmin ? "opacity-60 cursor-not-allowed" : ""}
                             />
@@ -229,7 +267,7 @@ export function ClientDetailsCard({ client, ghlLocationId, users = [], isAdmin =
                 ) : (
                     <>
                         {/* Contact Buttons */}
-                        <div className="grid grid-cols-2 gap-2 pb-2 border-b border-primary/5">
+                        <div className="grid grid-cols-2 gap-2 pb-2 border-b border-white/5">
                             <a
                                 href={`mailto:${client.email}`}
                                 className="flex items-center justify-center gap-2 p-2 rounded-md bg-primary/10 hover:bg-primary/20 text-primary transition-colors text-xs font-medium"
@@ -268,7 +306,7 @@ export function ClientDetailsCard({ client, ghlLocationId, users = [], isAdmin =
 
 
                         {client.check_in_day && (
-                            <div className="pt-2 border-t border-primary/5 space-y-1">
+                            <div className="pt-2 border-t border-white/5 space-y-1">
                                 <label className="text-xs font-medium text-muted-foreground">Check-in Day</label>
                                 <div className="text-sm font-medium flex items-center gap-2">
                                     <Activity className="h-3 w-3 text-primary" />
@@ -279,7 +317,7 @@ export function ClientDetailsCard({ client, ghlLocationId, users = [], isAdmin =
 
                         {/* Sales Info Display */}
                         {(client.sold_by_user || client.lead_source || client.appointment_setter) && (
-                            <div className="pt-2 border-t border-primary/5 space-y-2">
+                            <div className="pt-2 border-t border-white/5 space-y-2">
                                 <div className="space-y-1">
                                     <label className="text-xs font-medium text-muted-foreground">Sold By (Closer)</label>
                                     <div className="text-sm font-medium">
@@ -303,35 +341,32 @@ export function ClientDetailsCard({ client, ghlLocationId, users = [], isAdmin =
                             </div>
                         )}
 
-                        <div className="space-y-1">
-
+                        <div className="space-y-2 pt-2 border-t border-white/5">
                             <div className="space-y-1">
                                 <label className="text-xs font-medium text-muted-foreground">Stripe ID</label>
-                                <div className="flex items-center gap-2">
-                                    <div className={`text-xs font-mono p-1.5 rounded overflow-hidden text-ellipsis border transition-colors flex-1 ${client.stripe_customer_id
-                                        ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
-                                        : 'bg-secondary/20 text-muted-foreground border-transparent'
-                                        }`}>
-                                        {client.stripe_customer_id || 'Not Linked'}
-                                    </div>
+                                <div className={`text-xs font-mono p-1.5 rounded border transition-colors truncate ${client.stripe_customer_id
+                                    ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                                    : 'bg-secondary/20 text-muted-foreground border-transparent'
+                                    }`} title={client.stripe_customer_id || undefined}>
+                                    {client.stripe_customer_id || 'Not Linked'}
                                 </div>
                             </div>
                             <div className="space-y-1">
-                                <label className="text-xs font-medium text-muted-foreground flex items-center justify-between">
-                                    <span>GHL Contact ID</span>
+                                <label className="text-xs font-medium text-muted-foreground flex items-center justify-between gap-2">
+                                    <span className="truncate">GHL Contact</span>
                                     {client.ghl_contact_id && ghlLocationId && (
                                         <a
                                             href={`https://app.gohighlevel.com/v2/location/${ghlLocationId}/contacts/detail/${client.ghl_contact_id}`}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="text-[10px] text-primary hover:underline flex items-center gap-1"
+                                            className="text-[10px] text-primary hover:underline flex items-center gap-1 shrink-0"
                                         >
-                                            View in GHL
+                                            View
                                             <ExternalLink className="h-3 w-3" />
                                         </a>
                                     )}
                                 </label>
-                                <div className="text-xs font-mono bg-secondary/20 p-1.5 rounded text-muted-foreground overflow-hidden text-ellipsis border border-transparent hover:border-primary/10 transition-colors">
+                                <div className="text-xs font-mono bg-secondary/20 p-1.5 rounded text-muted-foreground border border-transparent hover:border-primary/10 transition-colors truncate" title={client.ghl_contact_id || undefined}>
                                     {client.ghl_contact_id || 'Not Synced'}
                                 </div>
                             </div>

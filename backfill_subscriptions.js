@@ -61,9 +61,10 @@ async function run() {
                 stripe_subscription_id: sub.id,
                 stripe_customer_id: stripeCustomerId,
                 status: sub.status,
-                amount: sub.items.data[0]?.price?.unit_amount || 0, // Assume primary item price
+                amount: (sub.items.data[0]?.price?.unit_amount || 0) / 100, // Convert cents to dollars
                 currency: sub.currency,
                 interval: sub.items.data[0]?.price?.recurring?.interval || 'month',
+                interval_count: sub.items.data[0]?.price?.recurring?.interval_count || 1,
                 current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
                 cancel_at_period_end: sub.cancel_at_period_end,
                 updated_at: new Date().toISOString()

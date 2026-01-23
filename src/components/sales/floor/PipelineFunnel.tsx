@@ -13,7 +13,7 @@ export function PipelineFunnel({ data }: PipelineFunnelProps) {
     const closeRate = data.showed > 0 ? Math.round((data.closed / data.showed) * 100) : 0
 
     return (
-        <Card className="bg-[#1A1A1A] border-gray-800 h-full">
+        <Card className="bg-zinc-900/40 backdrop-blur-xl border-white/5 h-full shadow-2xl">
             <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-gray-400 flex items-center">
                     <Filter className="w-4 h-4 mr-2" />
@@ -27,8 +27,8 @@ export function PipelineFunnel({ data }: PipelineFunnelProps) {
                         <span className="text-white font-medium">Booked</span>
                         <span className="text-white font-bold">{data.booked}</span>
                     </div>
-                    <div className="w-full bg-gray-800 rounded-full h-2">
-                        <div className="bg-blue-500 h-2 rounded-full w-full opacity-80" />
+                    <div className="w-full bg-black/40 border border-white/5 rounded-full h-2">
+                        <div className="bg-blue-500 h-2 rounded-full w-full opacity-80 shadow-[0_0_10px_rgba(59,130,246,0.4)]" />
                     </div>
                 </div>
 
@@ -38,9 +38,9 @@ export function PipelineFunnel({ data }: PipelineFunnelProps) {
                         <span className="text-white font-medium">Showed</span>
                         <span className="text-white font-bold">{data.showed}</span>
                     </div>
-                    <div className="w-full bg-gray-800 rounded-full h-2">
+                    <div className="w-full bg-black/40 border border-white/5 rounded-full h-2">
                         <div
-                            className="bg-purple-500 h-2 rounded-full opacity-80"
+                            className="bg-purple-500 h-2 rounded-full opacity-80 shadow-[0_0_10px_rgba(168,85,247,0.4)]"
                             style={{ width: `${Math.min(100, Math.max(5, showRate))}%` }}
                         />
                     </div>
@@ -53,9 +53,9 @@ export function PipelineFunnel({ data }: PipelineFunnelProps) {
                         <span className="text-white font-medium">Closed</span>
                         <span className="text-white font-bold">{data.closed}</span>
                     </div>
-                    <div className="w-full bg-gray-800 rounded-full h-2">
+                    <div className="w-full bg-black/40 border border-white/5 rounded-full h-2">
                         <div
-                            className="bg-emerald-500 h-2 rounded-full opacity-80"
+                            className="bg-emerald-500 h-2 rounded-full opacity-80 shadow-[0_0_10px_rgba(16,185,129,0.4)]"
                             style={{ width: `${Math.min(100, Math.max(5, closeRate))}%` }}
                         />
                     </div>

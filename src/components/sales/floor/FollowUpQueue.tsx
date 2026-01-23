@@ -70,11 +70,10 @@ function TaskItem({
     : 'Unknown Lead';
 
   return (
-    <div className={`p-3 rounded-lg border transition-colors ${
-      isOverdue
-        ? 'bg-red-950/20 border-red-800/50'
-        : 'bg-gray-900/30 border-gray-800/50 hover:bg-gray-900/50'
-    }`}>
+    <div className={`p-3 rounded-xl border transition-all duration-300 ${isOverdue
+        ? 'bg-red-950/40 border-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.1)]'
+        : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/10'
+      }`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           {/* Outcome Badge */}
@@ -148,7 +147,7 @@ function TaskItem({
                 <MoreVertical className="w-4 h-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-[#1A1A1A] border-gray-800">
+            <DropdownMenuContent align="end" className="bg-zinc-950/90 backdrop-blur-xl border-white/10">
               <DropdownMenuItem
                 onClick={() => onComplete(task.id)}
                 className="text-emerald-400 focus:text-emerald-400"
@@ -230,7 +229,7 @@ export function FollowUpQueue({ tasks, onTaskUpdated }: FollowUpQueueProps) {
 
   return (
     <>
-      <Card className="bg-[#1A1A1A] border-gray-800">
+      <Card className="bg-zinc-900/40 backdrop-blur-xl border-white/5 shadow-2xl">
         <CardHeader className="pb-3">
           <CardTitle className="text-lg font-medium text-white flex items-center justify-between">
             <div className="flex items-center">
@@ -307,7 +306,7 @@ export function FollowUpQueue({ tasks, onTaskUpdated }: FollowUpQueueProps) {
 
       {/* Reschedule Dialog */}
       <Dialog open={!!rescheduleTask} onOpenChange={(open) => !open && setRescheduleTask(null)}>
-        <DialogContent className="bg-[#1A1A1A] border-gray-800 text-white">
+        <DialogContent className="bg-zinc-950/90 backdrop-blur-xl border-white/10 text-white">
           <DialogHeader>
             <DialogTitle>Reschedule Follow-Up</DialogTitle>
           </DialogHeader>
