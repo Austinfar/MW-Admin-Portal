@@ -6,12 +6,19 @@ import { CalBooking } from '@/lib/cal/client';
 /**
  * Fetch sales bookings from the local database (populated by webhooks)
  * This provides team-wide bookings without needing organization-level API access
+ * @param from - Start date for the query range
+ * @param to - End date for the query range
+ * @param includeCancelled - Whether to include cancelled/rescheduled bookings (default: false)
  */
-export async function getSalesBookings(from: Date, to: Date): Promise<{ bookings: CalBooking[], error?: string }> {
+export async function getSalesBookings(
+    from: Date,
+    to: Date,
+    includeCancelled: boolean = false
+): Promise<{ bookings: CalBooking[], error?: string }> {
     try {
         const supabase = await createClient();
 
-        const { data, error } = await supabase
+        let query = supabase
             .from('cal_bookings')
             .select(`
                 id,
@@ -32,6 +39,7 @@ export async function getSalesBookings(from: Date, to: Date): Promise<{ bookings
                 meeting_url,
                 location,
                 metadata,
+                rescheduled_at,
                 users:user_id (
                     id,
                     name,
@@ -41,6 +49,13 @@ export async function getSalesBookings(from: Date, to: Date): Promise<{ bookings
             .gte('start_time', from.toISOString())
             .lte('end_time', to.toISOString())
             .order('start_time', { ascending: true });
+
+        // Filter out cancelled bookings unless explicitly requested
+        if (!includeCancelled) {
+            query = query.not('status', 'eq', 'CANCELLED');
+        }
+
+        const { data, error } = await query;
 
         if (error) {
             console.error('Failed to fetch bookings from database:', error);

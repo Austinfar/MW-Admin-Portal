@@ -383,10 +383,28 @@ export async function POST(req: NextRequest) {
             }
 
             case 'BOOKING_RESCHEDULED': {
-                // Update booking with new time
-                if (body.payload.bookingId) {
-                    const attendee = body.payload.attendees?.[0]
+                const attendee = body.payload.attendees?.[0]
 
+                // Cal.com creates a NEW booking when rescheduling
+                // The rescheduleUid points to the ORIGINAL booking that was rescheduled
+                if (body.payload.rescheduleUid) {
+                    // Mark the old booking as rescheduled (effectively cancelled)
+                    await supabase
+                        .from('cal_bookings')
+                        .update({
+                            status: 'CANCELLED',
+                            rescheduled_at: new Date().toISOString(),
+                            metadata: {
+                                ...(body.payload.metadata || {}),
+                                rescheduled_to_uid: body.payload.uid,
+                                reschedule_reason: body.payload.rescheduleReason
+                            }
+                        })
+                        .eq('cal_uid', body.payload.rescheduleUid)
+                }
+
+                // Create the new booking record
+                if (body.payload.bookingId) {
                     await supabase.rpc('upsert_cal_booking', {
                         p_cal_booking_id: body.payload.bookingId,
                         p_cal_uid: body.payload.uid || null,
@@ -403,7 +421,10 @@ export async function POST(req: NextRequest) {
                         p_meeting_url: body.payload.meetingUrl || null,
                         p_location: body.payload.location || null,
                         p_user_email: body.payload.organizer?.email || null,
-                        p_metadata: body.payload as unknown as Record<string, unknown>
+                        p_metadata: {
+                            ...(body.payload as unknown as Record<string, unknown>),
+                            rescheduled_from_uid: body.payload.rescheduleUid
+                        }
                     })
                 }
 
