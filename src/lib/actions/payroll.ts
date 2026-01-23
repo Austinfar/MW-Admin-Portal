@@ -1633,33 +1633,43 @@ export async function recalculateCommissionsForPeriod(
     const supabase = createAdminClient();
 
     // Fetch succeeded payments within the transaction date range
-    // We check either payment_date OR created depending on what's populated
-    const startStr = startDate.toISOString();
-    const endStr = endDate.toISOString();
+    // Use payment_date as primary filter (it's the canonical transaction date)
+    const startStr = format(startOfDay(startDate), "yyyy-MM-dd'T'HH:mm:ss");
+    const endStr = format(endOfDay(endDate), "yyyy-MM-dd'T'HH:mm:ss");
+
+    console.log(`[Recalculate] Fetching payments from ${startStr} to ${endStr}`);
 
     const { data: payments, error } = await supabase
         .from('payments')
-        .select('id')
+        .select('id, payment_date')
         .eq('status', 'succeeded')
-        .or(`payment_date.gte.${startStr},created.gte.${startStr}`) // Check start boundary
-        .or(`payment_date.lte.${endStr},created.lte.${endStr}`);    // Check end boundary
-
-    // Note: The OR logic above is a bit loose to catch everything, we'll filter strictly below
+        .not('client_id', 'is', null)  // Only payments linked to a client
+        .gte('payment_date', startStr)
+        .lte('payment_date', endStr);
 
     if (error || !payments) {
         return { processed: 0, failed: 0, skipped: 0, errors: [error?.message || 'Failed to fetch payments'] };
     }
+
+    console.log(`[Recalculate] Found ${payments.length} payments to process`);
 
     let processed = 0;
     let failed = 0;
     let skipped = 0;
     const errors: string[] = [];
 
-    // Process checks
-    for (const payment of payments) {
+    // Process payments
+    const total = payments.length;
+    const startTime = Date.now();
+
+    for (let i = 0; i < payments.length; i++) {
+        const payment = payments[i];
         try {
-            // First void existing
+            // First void existing commission entries
             await supabase.rpc('void_commission_entries', { p_payment_id: payment.id });
+
+            // Unlock the payment so it can be recalculated
+            await supabase.rpc('unlock_payment_for_commission', { p_payment_id: payment.id });
 
             // Then recalculate
             const result = await calculateCommission(payment.id);
@@ -1674,11 +1684,19 @@ export async function recalculateCommissionsForPeriod(
                 failed++;
                 errors.push(`Payment ${payment.id}: ${result.reason}`);
             }
+
+            // Log progress every 10 payments or on last one
+            if ((i + 1) % 10 === 0 || i === total - 1) {
+                const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+                console.log(`[Recalculate] Progress: ${i + 1}/${total} (${elapsed}s elapsed)`);
+            }
         } catch (err) {
             failed++;
             errors.push(`Payment ${payment.id}: ${err instanceof Error ? err.message : 'Unknown error'}`);
         }
     }
+
+    console.log(`[Recalculate] Complete: ${processed} processed, ${skipped} skipped, ${failed} failed`);
 
     // Log activity
     await supabase.from('activity_logs').insert({

@@ -18,6 +18,8 @@ export interface UserPermissions {
     // Payroll permissions
     can_approve_payroll?: boolean;
     can_create_manual_commissions?: boolean;
+    // Subscription/payment permissions
+    can_manage_payment_schedules?: boolean;
     [key: string]: string | boolean | undefined;
 }
 

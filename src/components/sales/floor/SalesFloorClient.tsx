@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 import { ViewModeToggle } from './ViewModeToggle';
 import { NextZoomCard } from './NextZoomCard';
 import { MyStatsPanel } from './MyStatsPanel';
@@ -47,7 +48,10 @@ interface SalesFloorClientProps {
   closerLeaderboard: CloserLeaderboardItem[];
   setterLeaderboard: SetterLeaderboardItem[];
   followUpTasks: FollowUpTask[];
+  recentAnalyzedCalls: any[]; // Using loose type to avoid conflicting with server schema import complexity
 }
+
+import { SalesCallAnalyzerWidget } from './SalesCallAnalyzerWidget';
 
 export function SalesFloorClient({
   userId,
@@ -63,6 +67,7 @@ export function SalesFloorClient({
   closerLeaderboard,
   setterLeaderboard,
   followUpTasks,
+  recentAnalyzedCalls = [],
 }: SalesFloorClientProps) {
   const router = useRouter();
 
@@ -100,6 +105,41 @@ export function SalesFloorClient({
     // Refresh the page data when a follow-up task is completed/rescheduled
     router.refresh();
   }, [router]);
+
+  /* Real-time Widget State */
+  const supabase = createClient();
+  const [analyzedCalls, setAnalyzedCalls] = useState(recentAnalyzedCalls);
+
+  useEffect(() => {
+    // Initial sync
+    setAnalyzedCalls(recentAnalyzedCalls);
+  }, [recentAnalyzedCalls]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('sales_floor_widget')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sales_call_logs' },
+        (payload) => {
+          console.log('Realtime Widget Event:', payload);
+          if (payload.eventType === 'INSERT') {
+            setAnalyzedCalls((prev) => {
+              const updated = [payload.new, ...prev].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 3);
+              return updated;
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            setAnalyzedCalls((prev) => prev.map(item => item.id === payload.new.id ? payload.new : item));
+          } else if (payload.eventType === 'DELETE') {
+            setAnalyzedCalls((prev) => prev.filter(item => item.id !== payload.old.id));
+            router.refresh();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [supabase, router]);
 
   return (
     <div className="flex-1 flex flex-col min-h-screen bg-[#09090b] overflow-x-hidden">
@@ -164,7 +204,9 @@ export function SalesFloorClient({
           </div>
 
           {/* Right Column: Leaderboard (Sticky) */}
-          <div className="lg:col-span-4 lg:sticky lg:top-4">
+          <div className="lg:col-span-4 lg:sticky lg:top-4 space-y-6">
+            <SalesCallAnalyzerWidget recentCalls={analyzedCalls} />
+
             {closerLeaderboard.length > 0 || setterLeaderboard.length > 0 ? (
               <EnhancedLeaderboard
                 mode={viewMode}

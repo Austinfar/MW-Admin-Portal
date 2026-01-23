@@ -9,29 +9,33 @@ interface LiveTickerProps {
 }
 
 export function LiveTicker({ items }: LiveTickerProps) {
-    if (!items.length) return null
+    // If no items, show a placeholder or nothing? User said "contntantly scrolling".
+    // If empty, let's show a motivating placeholder
+    const displayItems = items.length > 0 ? items : [
+        { id: '1', type: 'booking', message: 'Ready to crush it today?', timestamp: new Date().toISOString() },
+        { id: '2', type: 'sale', message: 'Let\'s get some sales!', timestamp: new Date().toISOString() }
+    ] as TickerItem[];
 
     return (
-        <div className="w-full bg-emerald-950/30 border-y border-emerald-900/50 backdrop-blur-sm h-10 flex items-center overflow-hidden relative">
-            <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-[#09090b] to-transparent z-10" />
-            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[#09090b] to-transparent z-10" />
+        <div className="w-full bg-zinc-900/60 border-y border-white/5 backdrop-blur-md h-10 flex items-center overflow-hidden relative shadow-lg">
+            <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-background to-transparent z-10 pointer-events-none" />
+            <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
 
-            <div className="animate-marquee whitespace-nowrap flex items-center gap-8 px-4">
-                {/* Double the items to create seamless loop illusion if few items */}
-                {[...items, ...items].map((item, i) => (
-                    <div key={`${item.id}-${i}`} className="inline-flex items-center space-x-2 text-sm font-medium">
+            <div className="flex animate-marquee hover:[animation-play-state:paused] w-max">
+                {/* Quadruple the items to ensure seamless loop even on wide screens */}
+                {[...displayItems, ...displayItems, ...displayItems, ...displayItems].map((item, i) => (
+                    <div key={`${item.id}-${i}`} className="inline-flex items-center mx-6 text-sm font-medium shrink-0">
                         {item.type === 'sale' ? (
                             <span className="flex items-center text-emerald-400">
-                                <DollarSign className="w-3.5 h-3.5 mr-1" />
+                                <DollarSign className="w-3.5 h-3.5 mr-1.5" />
                                 {item.message}
                             </span>
                         ) : (
                             <span className="flex items-center text-sky-400">
-                                <CalendarCheck className="w-3.5 h-3.5 mr-1" />
+                                <CalendarCheck className="w-3.5 h-3.5 mr-1.5" />
                                 {item.message}
                             </span>
                         )}
-                        <span className="text-gray-600 text-xs mx-2">•</span>
                     </div>
                 ))}
             </div>

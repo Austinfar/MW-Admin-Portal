@@ -60,7 +60,7 @@ export function NextZoomCard({ data }: NextZoomCardProps) {
 
   if (!data) {
     return (
-      <Card className="bg-[#1A1A1A] border-gray-800">
+      <Card className="bg-zinc-900/40 backdrop-blur-xl border-white/5 shadow-2xl">
         <CardHeader className="pb-3">
           <CardTitle className="text-lg font-medium text-white flex items-center">
             <Video className="w-5 h-5 mr-2 text-emerald-400" />
@@ -82,7 +82,7 @@ export function NextZoomCard({ data }: NextZoomCardProps) {
   const isStartingNow = countdown.totalMinutes <= 5;
 
   return (
-    <Card className={`bg-[#1A1A1A] border-gray-800 ${isStartingNow ? 'border-emerald-500/50 shadow-emerald-500/20 shadow-lg' : ''}`}>
+    <Card className={`bg-zinc-900/40 backdrop-blur-xl border-white/5 shadow-2xl transition-all duration-500 ${isStartingNow ? 'border-emerald-500/50 shadow-emerald-500/20 shadow-lg' : ''}`}>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg font-medium text-white flex items-center">
@@ -98,7 +98,7 @@ export function NextZoomCard({ data }: NextZoomCardProps) {
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Countdown Timer */}
-        <div className="flex items-center justify-center gap-2 py-3 bg-gray-900/50 rounded-lg">
+        <div className="flex items-center justify-center gap-2 py-4 bg-black/40 rounded-xl border border-white/5 backdrop-blur-md shadow-inner">
           <Clock className="w-5 h-5 text-emerald-400" />
           <div className="text-3xl font-bold text-white font-mono tracking-wider">
             {countdown.hours > 0 && (
@@ -122,7 +122,7 @@ export function NextZoomCard({ data }: NextZoomCardProps) {
         </div>
 
         {/* Lead/Attendee Info */}
-        <div className="bg-gray-900/30 rounded-lg p-3 space-y-2">
+        <div className="bg-white/5 rounded-xl p-4 border border-white/5 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <User className="w-4 h-4 text-gray-500" />
@@ -165,7 +165,7 @@ export function NextZoomCard({ data }: NextZoomCardProps) {
 
           {/* Lead Source & Notes */}
           {data.lead?.source && (
-            <div className="pt-2 border-t border-gray-800">
+            <div className="pt-2 border-t border-white/5">
               <span className="text-xs text-gray-500">Source: </span>
               <span className="text-xs text-gray-400">{data.lead.source}</span>
             </div>

@@ -5,6 +5,11 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { calculateCommission } from '@/lib/logic/commissions'
 import { handleRefund, handleDisputeCreated, handleDisputeClosed } from '@/lib/logic/chargebacks'
 import { executePostPaymentFlow, type PostPaymentContext } from '@/lib/logic/post-payment'
+import {
+    handleSubscriptionUpdated,
+    handleSubscriptionDeleted,
+    handleInvoicePaymentFailed
+} from '@/lib/logic/subscription-webhooks'
 import Stripe from 'stripe'
 
 export async function POST(req: Request) {
@@ -113,6 +118,8 @@ export async function POST(req: Request) {
             const netAmount = stripeFee !== null ? amount - stripeFee : null
 
             // Upsert Payment
+            // Note: 'created' and 'description' columns don't exist in payments table
+            // Using payment_date for the timestamp, product_name for description if needed
             const { error } = await supabase.from('payments').upsert({
                 stripe_payment_id: stripePaymentId,
                 amount,
@@ -120,19 +127,18 @@ export async function POST(req: Request) {
                 net_amount: netAmount,
                 currency,
                 status,
-                created,
                 payment_date: created,
                 client_email: clientEmail ?? null,
                 stripe_customer_id: stripeCustomerId,
                 client_id: clientId,
-                description,
+                product_name: description || null, // Map description to product_name
             }, {
                 onConflict: 'stripe_payment_id'
             })
 
             if (error) {
-                console.error('Error upserting payment:', error)
-                return new NextResponse('Database Error', { status: 500 })
+                console.error('Error upserting payment:', JSON.stringify(error, null, 2))
+                return new NextResponse(`Database Error: ${error.message || error.code || 'Unknown'}`, { status: 500 })
             }
 
             // Trigger Commission Calculation
@@ -642,6 +648,27 @@ export async function POST(req: Request) {
                     }
                 }
             }
+        }
+
+        // Handle subscription updates (pause, resume, plan changes)
+        if (event.type === 'customer.subscription.updated') {
+            const subscription = event.data.object as Stripe.Subscription
+            console.log('Processing customer.subscription.updated event')
+            await handleSubscriptionUpdated(subscription)
+        }
+
+        // Handle subscription deletions (cancellations)
+        if (event.type === 'customer.subscription.deleted') {
+            const subscription = event.data.object as Stripe.Subscription
+            console.log('Processing customer.subscription.deleted event')
+            await handleSubscriptionDeleted(subscription)
+        }
+
+        // Handle failed invoice payments
+        if (event.type === 'invoice.payment_failed') {
+            const invoice = event.data.object as Stripe.Invoice
+            console.log('Processing invoice.payment_failed event')
+            await handleInvoicePaymentFailed(invoice)
         }
     } catch (err: any) {
         console.error('Webhook handler error:', err)

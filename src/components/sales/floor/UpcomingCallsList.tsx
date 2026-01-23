@@ -38,24 +38,22 @@ function CallItem({ call, onLogOutcome }: { call: UpcomingCall; onLogOutcome?: (
   }
 
   return (
-    <div className={`p-3 rounded-lg border transition-colors ${
-      hasEnded
-        ? 'bg-gray-900/20 border-gray-800/30'
+    <div className={`p-3 rounded-xl border transition-all duration-300 ${hasEnded
+        ? 'bg-zinc-900/40 border-white/5 opacity-60'
         : isInProgress
-        ? 'bg-blue-950/30 border-blue-800/50'
-        : isStartingSoon
-        ? 'bg-emerald-950/30 border-emerald-800/50'
-        : 'bg-gray-900/30 border-gray-800/50 hover:bg-gray-900/50'
-    }`}>
+          ? 'bg-blue-950/40 border-blue-500/20 shadow-[0_0_15px_rgba(37,99,235,0.1)]'
+          : isStartingSoon
+            ? 'bg-emerald-950/40 border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
+            : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/10'
+      }`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           {/* Time & Day */}
           <div className="flex items-center gap-2 mb-1">
-            <span className={`text-sm font-medium ${
-              hasEnded ? 'text-gray-500' :
-              isInProgress ? 'text-blue-400' :
-              isStartingSoon ? 'text-emerald-400' : 'text-white'
-            }`}>
+            <span className={`text-sm font-medium ${hasEnded ? 'text-gray-500' :
+                isInProgress ? 'text-blue-400' :
+                  isStartingSoon ? 'text-emerald-400' : 'text-white'
+              }`}>
               {format(startDate, 'h:mm a')}
             </span>
             <span className="text-xs text-gray-500">{dayLabel}</span>
@@ -174,7 +172,7 @@ export function UpcomingCallsList({ calls, onOpenCalendar, onLogOutcome }: Upcom
     .flatMap(([_, calls]) => calls);
 
   return (
-    <Card className="bg-[#1A1A1A] border-gray-800">
+    <Card className="bg-zinc-900/40 backdrop-blur-xl border-white/5 shadow-2xl">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg font-medium text-white flex items-center">

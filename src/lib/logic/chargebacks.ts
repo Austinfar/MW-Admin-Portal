@@ -19,40 +19,58 @@ function generateRefundIdempotencyKey(chargeId: string, paymentIntentId: string,
 export async function handleRefund(charge: Stripe.Charge): Promise<{ success: boolean; skipped?: boolean; reason?: string }> {
     const supabase = createAdminClient()
 
+    console.log('[Chargeback] Processing refund for charge:', charge.id)
+
     // Find the Payment by stripe_payment_id (PaymentIntent ID)
     const paymentIntentId = typeof charge.payment_intent === 'string'
         ? charge.payment_intent
         : charge.payment_intent?.id
 
     if (!paymentIntentId) {
-        console.log('Chargeback: No payment_intent on charge')
+        console.log('[Chargeback] No payment_intent on charge:', charge.id)
         return { success: false, reason: 'no_payment_intent' }
     }
 
-    const { data: payment } = await supabase
+    console.log('[Chargeback] Looking up payment by stripe_payment_id:', paymentIntentId)
+
+    const { data: payment, error: paymentError } = await supabase
         .from('payments')
         .select('id, amount, client_id')
         .eq('stripe_payment_id', paymentIntentId)
         .single()
 
+    if (paymentError) {
+        console.error('[Chargeback] Error looking up payment:', paymentError)
+    }
+
     if (!payment) {
-        console.log('Chargeback: Payment not found for', paymentIntentId)
+        console.log('[Chargeback] Payment not found for PaymentIntent:', paymentIntentId)
         return { success: false, reason: 'payment_not_found' }
     }
 
+    console.log('[Chargeback] Found payment:', payment.id, 'amount:', payment.amount, 'client_id:', payment.client_id)
+
     const refundAmount = charge.amount_refunded / 100 // Convert cents to dollars
     const isFullRefund = refundAmount >= Number(payment.amount)
+
+    console.log('[Chargeback] Refund amount:', refundAmount, 'isFullRefund:', isFullRefund)
 
     // Generate idempotency key for this refund event
     const idempotencyKey = generateRefundIdempotencyKey(charge.id, paymentIntentId, refundAmount)
 
     // IDEMPOTENCY CHECK: Check if this refund has already been processed
-    const { data: alreadyProcessed } = await supabase.rpc('check_chargeback_processed', {
+    const { data: alreadyProcessed, error: rpcError } = await supabase.rpc('check_chargeback_processed', {
         p_idempotency_key: idempotencyKey
     })
 
+    if (rpcError) {
+        // If the RPC function doesn't exist, log and continue (don't block refund processing)
+        console.error('[Chargeback] RPC check_chargeback_processed error:', rpcError)
+        // Continue processing - better to risk duplicate than miss a refund
+    }
+
     if (alreadyProcessed) {
-        console.log('Chargeback: Already processed refund', idempotencyKey)
+        console.log('[Chargeback] Already processed refund:', idempotencyKey)
         return { success: true, skipped: true, reason: 'already_processed' }
     }
 
@@ -67,19 +85,25 @@ export async function handleRefund(charge: Stripe.Charge): Promise<{ success: bo
         .eq('id', payment.id)
 
     if (updateError) {
-        console.error('Chargeback: Failed to update payment', updateError)
+        console.error('[Chargeback] Failed to update payment', updateError)
     }
 
     // Find Commission Ledger Entries for this Payment
-    const { data: ledgerEntries } = await supabase
+    const { data: ledgerEntries, error: ledgerError } = await supabase
         .from('commission_ledger')
         .select('id, user_id, commission_amount, status, payroll_run_id, split_role, client_id')
         .eq('payment_id', payment.id)
 
+    if (ledgerError) {
+        console.error('[Chargeback] Error looking up commission entries:', ledgerError)
+    }
+
     if (!ledgerEntries || ledgerEntries.length === 0) {
-        console.log('Chargeback: No commission entries found for payment', payment.id)
+        console.log('[Chargeback] No commission entries found for payment:', payment.id, '- this payment may not have had commission calculated')
         return { success: true, reason: 'no_commission_entries' }
     }
+
+    console.log('[Chargeback] Found', ledgerEntries.length, 'commission entries for payment:', payment.id)
 
     // Get client name for the adjustment reason
     let clientName = 'Unknown Client'
@@ -122,10 +146,10 @@ export async function handleRefund(charge: Stripe.Charge): Promise<{ success: bo
         if (adjustmentError) {
             // Check if it's a duplicate key error (already processed)
             if (adjustmentError.code === '23505') {
-                console.log('Chargeback: Adjustment already exists for', entryIdempotencyKey)
+                console.log('[Chargeback] Adjustment already exists for', entryIdempotencyKey)
                 continue
             }
-            console.error('Chargeback: Failed to create adjustment', adjustmentError)
+            console.error('[Chargeback] Failed to create adjustment', adjustmentError)
             continue
         }
 
@@ -146,7 +170,7 @@ export async function handleRefund(charge: Stripe.Charge): Promise<{ success: bo
         await createChargebackNotification(supabase, entry.user_id, clientName, proportionalRefund)
     }
 
-    console.log(`Chargeback: Processed ${isFullRefund ? 'full' : 'partial'} refund for payment ${payment.id} (${adjustmentsCreated} adjustments created)`)
+    console.log(`[Chargeback] Processed ${isFullRefund ? 'full' : 'partial'} refund for payment ${payment.id} (${adjustmentsCreated} adjustments created)`)
     return { success: true }
 }
 
@@ -162,7 +186,7 @@ export async function handleDisputeCreated(dispute: Stripe.Dispute): Promise<voi
         : dispute.payment_intent?.id
 
     if (!paymentIntentId) {
-        console.log('Dispute: No payment_intent on dispute')
+        console.log('[Dispute] No payment_intent on dispute')
         return
     }
 
@@ -200,7 +224,7 @@ export async function handleDisputeClosed(dispute: Stripe.Dispute): Promise<void
         .single()
 
     if (!payment) {
-        console.log('Dispute: Payment not found for dispute', dispute.id)
+        console.log('[Dispute] Payment not found for dispute', dispute.id)
         return
     }
 

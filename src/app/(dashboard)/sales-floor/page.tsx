@@ -8,6 +8,7 @@ import {
     getSetterLeaderboard,
     getFollowUpTasks,
 } from '@/lib/actions/sales-floor'
+import { getRecentSalesCalls } from '@/lib/actions/sales'
 import { SalesFloorClient } from '@/components/sales/floor/SalesFloorClient'
 import { protectRoute } from '@/lib/protect-route'
 import { getCurrentUserProfile } from '@/lib/actions/profile'
@@ -21,7 +22,10 @@ export default async function SalesFloorPage() {
     const userProfile = await getCurrentUserProfile()
     const userId = userProfile?.id || ''
 
-    // Fetch all data in parallel
+    // Fetch all data in parallel with timing
+    const startTime = Date.now();
+    console.log('[SalesFloor] Starting data fetch...');
+
     const [
         dashboardData,
         nextZoom,
@@ -31,16 +35,20 @@ export default async function SalesFloorPage() {
         closerLeaderboard,
         setterLeaderboard,
         followUpTasks,
+        recentAnalyzedCalls,
     ] = await Promise.all([
-        getSalesDashboardData(),
-        getNextZoom(userId),
-        getUpcomingCalls(48),
-        userId ? getCloserStats(userId, 'month') : null,
-        userId ? getSetterStats(userId, 'month') : null,
-        getCloserLeaderboard('month', userId),
-        getSetterLeaderboard('month', userId),
-        userId ? getFollowUpTasks(userId) : [],
+        getSalesDashboardData().then(r => { console.log(`[SalesFloor] dashboardData: ${Date.now() - startTime}ms`); return r; }),
+        getNextZoom(userId).then(r => { console.log(`[SalesFloor] nextZoom: ${Date.now() - startTime}ms`); return r; }),
+        getUpcomingCalls(48).then(r => { console.log(`[SalesFloor] upcomingCalls: ${Date.now() - startTime}ms`); return r; }),
+        (userId ? getCloserStats(userId, 'month') : Promise.resolve(null)).then(r => { console.log(`[SalesFloor] closerStats: ${Date.now() - startTime}ms`); return r; }),
+        (userId ? getSetterStats(userId, 'month') : Promise.resolve(null)).then(r => { console.log(`[SalesFloor] setterStats: ${Date.now() - startTime}ms`); return r; }),
+        getCloserLeaderboard('month', userId).then(r => { console.log(`[SalesFloor] closerLeaderboard: ${Date.now() - startTime}ms`); return r; }),
+        getSetterLeaderboard('month', userId).then(r => { console.log(`[SalesFloor] setterLeaderboard: ${Date.now() - startTime}ms`); return r; }),
+        (userId ? getFollowUpTasks(userId) : Promise.resolve([])).then(r => { console.log(`[SalesFloor] followUpTasks: ${Date.now() - startTime}ms`); return r; }),
+        getRecentSalesCalls(3).then(r => { console.log(`[SalesFloor] recentCalls: ${Date.now() - startTime}ms`); return r; }),
     ])
+
+    console.log(`[SalesFloor] Total fetch time: ${Date.now() - startTime}ms`);
 
     return (
         <SalesFloorClient
@@ -57,6 +65,7 @@ export default async function SalesFloorPage() {
             closerLeaderboard={closerLeaderboard}
             setterLeaderboard={setterLeaderboard}
             followUpTasks={followUpTasks}
+            recentAnalyzedCalls={recentAnalyzedCalls}
         />
     )
 }

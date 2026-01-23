@@ -4,6 +4,12 @@ import { getClientNotes } from '@/lib/actions/notes'
 import { getClientGoals } from '@/lib/actions/goals'
 import { getClientDocuments } from '@/lib/actions/documents'
 import { getActiveAgreement } from '@/lib/actions/agreements'
+import {
+    getClientSubscription,
+    getApprovalRequestsForClient,
+    getActiveFreeze,
+    getClientPaymentSchedule
+} from '@/lib/actions/subscriptions'
 import { GHL_CONFIG } from '@/lib/ghl/config'
 import { differenceInDays } from 'date-fns'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -20,12 +26,14 @@ import { OnboardingTask } from '@/types/onboarding'
 import { Note } from '@/types/client'
 import { calculateHealthScore } from '@/lib/logic/client-health'
 import { getCurrentUserAccess } from '@/lib/auth-utils'
+import { canManageSubscriptions as checkCanManageSubscriptions } from '@/lib/actions/subscriptions'
 
 export default async function ClientPage(props: { params: Promise<{ id: string }> }) {
     const params = await props.params;
     const client = await getClient(params.id)
     const userAccess = await getCurrentUserAccess()
     const isAdmin = userAccess?.role === 'admin' || userAccess?.role === 'super_admin'
+    const isHeadCoach = userAccess?.job_title === 'head_coach'
 
     const tasksData = await getClientTasks(params.id)
     const tasks = (tasksData || []) as OnboardingTask[]
@@ -62,6 +70,18 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
 
     // Fetch active agreement for health calculation
     const activeAgreement = await getActiveAgreement(params.id)
+
+    // Fetch subscription management data
+    const subscription = await getClientSubscription(params.id)
+    const pendingCancellationRequests = await getApprovalRequestsForClient(params.id)
+    const pendingCancellationRequest = pendingCancellationRequests.find(r => r.status === 'pending') || null
+    const activeFreeze = await getActiveFreeze(params.id)
+    const paymentSchedule = await getClientPaymentSchedule(params.id)
+
+    // Check subscription management permissions
+    const canManageSubscriptions = await checkCanManageSubscriptions()
+    const canManagePaymentSchedules = isAdmin || isHeadCoach ||
+        (userAccess?.permissions?.can_manage_payment_schedules === true)
 
     // Calculate health score
     const overdueTasksCount = tasks.filter(t =>
@@ -141,6 +161,12 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
                                 ghlLocationId={GHL_CONFIG.LOCATION_ID}
                                 users={users}
                                 isAdmin={isAdmin}
+                                subscription={subscription}
+                                pendingCancellationRequest={pendingCancellationRequest}
+                                activeFreeze={activeFreeze}
+                                canManageSubscriptions={canManageSubscriptions}
+                                paymentSchedule={paymentSchedule}
+                                canManagePaymentSchedules={canManagePaymentSchedules}
                             />
                         </TabsContent>
 

@@ -4,6 +4,8 @@ import { getDashboardData } from "@/lib/actions/dashboard-data"
 import { WelcomeGreeting } from "@/components/dashboard/WelcomeGreeting"
 import { RoleDashboard } from "@/components/dashboard/RoleDashboard"
 import { createClient } from "@/lib/supabase/server"
+import { getPendingApprovalRequests } from "@/lib/actions/subscriptions"
+import { ApprovalRequestsPanel } from "@/components/admin/ApprovalRequestsPanel"
 
 export const dynamic = 'force-dynamic' // Ensure real-time data
 
@@ -31,6 +33,10 @@ export default async function DashboardPage() {
         userAccess.permissions
     )
 
+    // Fetch pending approval requests for admins
+    const isAdmin = userAccess.role === 'admin' || userAccess.role === 'super_admin'
+    const pendingApprovals = isAdmin ? await getPendingApprovalRequests() : []
+
     return (
         <div className="flex-1 space-y-6">
             {/* Welcome Message */}
@@ -40,6 +46,11 @@ export default async function DashboardPage() {
                     Here&apos;s what&apos;s happening with your business today.
                 </p>
             </div>
+
+            {/* Pending Approvals for Admins */}
+            {isAdmin && pendingApprovals.length > 0 && (
+                <ApprovalRequestsPanel initialRequests={pendingApprovals} />
+            )}
 
             {/* Role-Based Dashboard */}
             <RoleDashboard

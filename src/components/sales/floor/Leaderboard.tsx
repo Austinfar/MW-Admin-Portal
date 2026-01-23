@@ -94,7 +94,7 @@ export function EnhancedLeaderboard({
     const title = isCloserMode ? 'Revenue Leaderboard' : 'Booking Leaderboard'
 
     return (
-        <Card className="bg-[#1A1A1A] border-gray-800">
+        <Card className="bg-zinc-900/40 backdrop-blur-xl border-white/5 shadow-2xl">
             <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                     <CardTitle className="text-lg font-medium text-white flex items-center">
@@ -121,8 +121,8 @@ export function EnhancedLeaderboard({
                             className={cn(
                                 "flex items-center justify-between p-2 rounded-lg transition-colors",
                                 item.isCurrentUser
-                                    ? "bg-emerald-500/10 border border-emerald-500/20"
-                                    : "hover:bg-white/5"
+                                    ? "bg-emerald-500/10 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]"
+                                    : "hover:bg-white/5 border border-transparent hover:border-white/5"
                             )}
                         >
                             <div className="flex items-center space-x-3">
@@ -158,8 +158,8 @@ export function EnhancedLeaderboard({
                             className={cn(
                                 "flex items-center justify-between p-2 rounded-lg transition-colors",
                                 item.isCurrentUser
-                                    ? "bg-blue-500/10 border border-blue-500/20"
-                                    : "hover:bg-white/5"
+                                    ? "bg-blue-500/10 border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.1)]"
+                                    : "hover:bg-white/5 border border-transparent hover:border-white/5"
                             )}
                         >
                             <div className="flex items-center space-x-3">
@@ -196,7 +196,7 @@ export function EnhancedLeaderboard({
 // Legacy Leaderboard for backward compatibility
 export function Leaderboard({ data }: LeaderboardProps) {
     return (
-        <Card className="bg-[#1A1A1A] border-gray-800">
+        <Card className="bg-zinc-900/40 backdrop-blur-xl border-white/5 shadow-2xl">
             <CardHeader className="pb-2">
                 <CardTitle className="text-lg font-medium text-white flex items-center">
                     <Trophy className="w-4 h-4 mr-2 text-yellow-500" />

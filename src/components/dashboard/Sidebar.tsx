@@ -400,9 +400,9 @@ export function Sidebar({ className, isMobile = false, userAccess }: { className
                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
                 className={cn(
                     "relative flex flex-col h-full py-4",
-                    "bg-sidebar/80 backdrop-blur-xl",
+                    "bg-zinc-950/80 backdrop-blur-2xl",
                     "border-r border-white/5",
-                    "shadow-[inset_0_0_30px_rgba(0,0,0,0.3)]",
+                    "shadow-[inset_0_0_30px_rgba(0,0,0,0.5)]",
                     className
                 )}
             >

@@ -32,7 +32,7 @@ export function RevenueChartWidget({ monthlyRevenue, delay = 0 }: RevenueChartWi
                 ease: [0.25, 0.46, 0.45, 0.94]
             }}
         >
-            <Card className="bg-card/40 border-primary/5">
+            <Card className="bg-zinc-900/40 backdrop-blur-xl border-white/5 shadow-2xl">
                 <CardHeader className="flex flex-row items-center justify-between">
                     <div className="flex items-center gap-2">
                         <div className="p-2 bg-emerald-500/10 rounded-full">

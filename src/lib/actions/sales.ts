@@ -57,7 +57,32 @@ export async function linkClientToLog(logId: string, clientId: string) {
         return { error: 'No changes made. Check permissions.' }
     }
 
-    revalidatePath('/sales')
     revalidatePath(`/clients/${clientId}`)
     return { success: true }
+}
+
+export async function getRecentSalesCalls(limit: number = 3) {
+    const supabase = createAdminClient()
+
+    const { data: rawData, error } = await supabase
+        .from('sales_call_logs')
+        .select('id, client_name, created_at, status, metadata') // Removed 'score', added 'metadata'
+        .order('created_at', { ascending: false })
+        .limit(limit)
+
+    if (error) {
+        console.error('Error fetching recent sales calls:', error)
+        return []
+    }
+
+    // Map to expected format, extracting score from metadata if available
+    const data = rawData.map(call => ({
+        id: call.id,
+        client_name: call.client_name,
+        created_at: call.created_at,
+        status: call.status,
+        score: call.metadata ? (call.metadata as any).score || (call.metadata as any).overall_score || null : null
+    }));
+
+    return data
 }
