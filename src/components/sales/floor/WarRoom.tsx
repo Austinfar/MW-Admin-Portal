@@ -2,8 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Sword, Calculator, Copy, ExternalLink, Zap } from 'lucide-react'
-import { toast } from 'sonner'
+import { Sword, Calculator, ExternalLink } from 'lucide-react'
 import {
     Dialog,
     DialogContent,
@@ -14,8 +13,22 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useState } from 'react'
+import { BookingLinksSection } from './BookingLinksSection'
+import { CalUserLink, CalUserLinkWithUser } from '@/lib/actions/cal-links'
 
-export function WarRoom() {
+interface WarRoomProps {
+    globalCalendarUrl?: string | null
+    userLinks?: CalUserLink[]
+    allConsultLinks?: CalUserLinkWithUser[]
+    currentUserJobTitle?: string | null
+}
+
+export function WarRoom({
+    globalCalendarUrl = null,
+    userLinks = [],
+    allConsultLinks = [],
+    currentUserJobTitle = null
+}: WarRoomProps) {
     const [calcAmount, setCalcAmount] = useState('')
     const [commission, setCommission] = useState<{ rep: number, setter: number } | null>(null)
 
@@ -30,11 +43,6 @@ export function WarRoom() {
         })
     }
 
-    const copyLink = (text: string) => {
-        navigator.clipboard.writeText(text)
-        toast.success("Link copied to clipboard!")
-    }
-
     return (
         <Card className="bg-zinc-900/40 backdrop-blur-xl border-white/5 h-full shadow-2xl">
             <CardHeader className="pb-2">
@@ -44,15 +52,15 @@ export function WarRoom() {
                 </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 pt-2">
-                <Button
-                    variant="outline"
-                    className="w-full justify-start text-left bg-white/5 border-white/5 hover:bg-white/10 hover:text-white transition-all duration-300"
-                    onClick={() => copyLink("https://mwfitnesscoaching.com/book")}
-                >
-                    <Copy className="w-3.5 h-3.5 mr-2 text-blue-400" />
-                    Copy Booking Link
-                </Button>
+                {/* Booking Links Section */}
+                <BookingLinksSection
+                    globalCalendarUrl={globalCalendarUrl}
+                    userLinks={userLinks}
+                    allConsultLinks={allConsultLinks}
+                    currentUserJobTitle={currentUserJobTitle}
+                />
 
+                {/* Commission Calculator */}
                 <Dialog>
                     <DialogTrigger asChild>
                         <Button
@@ -96,6 +104,7 @@ export function WarRoom() {
                     </DialogContent>
                 </Dialog>
 
+                {/* Script Library */}
                 <Button
                     variant="ghost"
                     className="w-full justify-start text-left text-xs text-gray-500 hover:text-white h-auto py-2"

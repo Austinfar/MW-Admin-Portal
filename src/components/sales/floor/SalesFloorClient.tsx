@@ -28,6 +28,7 @@ import type {
   CallOutcome,
 } from '@/types/sales-floor';
 import type { TickerItem, FunnelData, StreakItem, LeaderboardItem } from '@/lib/actions/sales-dashboard';
+import type { CalUserLink, CalUserLinkWithUser } from '@/lib/actions/cal-links';
 
 interface SalesFloorClientProps {
   // User info
@@ -49,6 +50,11 @@ interface SalesFloorClientProps {
   setterLeaderboard: SetterLeaderboardItem[];
   followUpTasks: FollowUpTask[];
   recentAnalyzedCalls: any[]; // Using loose type to avoid conflicting with server schema import complexity
+
+  // Booking links data
+  globalCalendarUrl?: string | null;
+  userCalLinks?: CalUserLink[];
+  allConsultLinks?: CalUserLinkWithUser[];
 }
 
 import { SalesCallAnalyzerWidget } from './SalesCallAnalyzerWidget';
@@ -68,6 +74,9 @@ export function SalesFloorClient({
   setterLeaderboard,
   followUpTasks,
   recentAnalyzedCalls = [],
+  globalCalendarUrl,
+  userCalLinks = [],
+  allConsultLinks = [],
 }: SalesFloorClientProps) {
   const router = useRouter();
 
@@ -172,7 +181,12 @@ export function SalesFloorClient({
             <PipelineFunnel data={funnel} />
           </div>
           <div className="md:col-span-1">
-            <WarRoom />
+            <WarRoom
+              globalCalendarUrl={globalCalendarUrl}
+              userLinks={userCalLinks}
+              allConsultLinks={allConsultLinks}
+              currentUserJobTitle={userJobTitle}
+            />
           </div>
         </div>
 

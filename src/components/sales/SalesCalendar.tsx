@@ -98,15 +98,33 @@ export default function SalesCalendar() {
             }));
     }, [bookings, selectedMember]);
 
-    // Custom coloring
+    // Custom coloring based on booking status
     const eventPropGetter = (event: any) => {
         const booking = event.resource as CalBooking;
         let className = 'border-l-4 text-xs ';
 
         switch (booking.status) {
-            case 'ACCEPTED': className += 'bg-emerald-100 border-emerald-500 text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200'; break;
-            case 'CANCELLED': className += 'bg-red-100 border-red-500 text-red-900 opacity-60 line-through dark:bg-red-950/30 dark:text-red-200'; break;
-            default: className += 'bg-blue-100 border-blue-500 text-blue-900 dark:bg-blue-950/30 dark:text-blue-200'; break;
+            case 'ACCEPTED':
+            case 'PENDING':
+                className += 'bg-emerald-100 border-emerald-500 text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200';
+                break;
+            case 'IN_PROGRESS':
+                className += 'bg-blue-100 border-blue-500 text-blue-900 dark:bg-blue-950/30 dark:text-blue-200';
+                break;
+            case 'COMPLETED':
+                className += 'bg-gray-100 border-gray-400 text-gray-700 dark:bg-gray-950/30 dark:text-gray-300';
+                break;
+            case 'CANCELLED':
+            case 'REJECTED':
+                className += 'bg-red-100 border-red-500 text-red-900 opacity-60 line-through dark:bg-red-950/30 dark:text-red-200';
+                break;
+            case 'HOST_NO_SHOW':
+            case 'GUEST_NO_SHOW':
+                className += 'bg-orange-100 border-orange-500 text-orange-900 dark:bg-orange-950/30 dark:text-orange-200';
+                break;
+            default:
+                className += 'bg-blue-100 border-blue-500 text-blue-900 dark:bg-blue-950/30 dark:text-blue-200';
+                break;
         }
 
         return { className };
@@ -167,8 +185,19 @@ export default function SalesCalendar() {
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             {selectedEvent?.title}
-                            <Badge variant={selectedEvent?.status === 'ACCEPTED' ? 'default' : 'secondary'} className={selectedEvent?.status === 'ACCEPTED' ? 'bg-green-600' : ''}>
-                                {selectedEvent?.status}
+                            <Badge
+                                variant={['ACCEPTED', 'PENDING', 'COMPLETED'].includes(selectedEvent?.status || '') ? 'default' : 'secondary'}
+                                className={cn(
+                                    selectedEvent?.status === 'ACCEPTED' && 'bg-green-600',
+                                    selectedEvent?.status === 'PENDING' && 'bg-emerald-600',
+                                    selectedEvent?.status === 'IN_PROGRESS' && 'bg-blue-600',
+                                    selectedEvent?.status === 'COMPLETED' && 'bg-gray-500',
+                                    selectedEvent?.status === 'CANCELLED' && 'bg-red-600',
+                                    selectedEvent?.status === 'HOST_NO_SHOW' && 'bg-orange-600',
+                                    selectedEvent?.status === 'GUEST_NO_SHOW' && 'bg-orange-600'
+                                )}
+                            >
+                                {selectedEvent?.status?.replace(/_/g, ' ')}
                             </Badge>
                         </DialogTitle>
                         <DialogDescription>

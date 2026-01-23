@@ -16,6 +16,7 @@ import { CommissionSummaryWidget } from './widgets/admin/CommissionSummaryWidget
 import { FunnelWidget } from './widgets/sales/FunnelWidget'
 import { RecentActivityWidget } from './widgets/common/RecentActivityWidget'
 import { QuickActionsWidget } from './widgets/common/QuickActionsWidget'
+import { MyCalendarLinksWidget } from './widgets/common/MyCalendarLinksWidget'
 import { formatCurrency } from '@/lib/utils'
 
 interface RoleDashboardProps {
@@ -397,6 +398,11 @@ export function RoleDashboard({ userAccess, data }: RoleDashboardProps) {
                 {/* Sidebar (1/3 width) */}
                 <SidebarArea>
                     {layout.sidebar.map(widgetId => renderSidebarWidget(widgetId))}
+
+                    {/* Calendar Links Widget for coaches/closers */}
+                    {(jobTitle === 'coach' || jobTitle === 'head_coach' || jobTitle === 'closer') && (
+                        <MyCalendarLinksWidget delay={delayCounter++} />
+                    )}
                 </SidebarArea>
             </MainContentGrid>
         </div>
