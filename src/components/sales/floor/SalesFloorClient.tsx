@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { ViewModeToggle } from './ViewModeToggle';
+import { ActiveCallsSection } from './ActiveCallsSection';
 import { NextZoomCard } from './NextZoomCard';
 import { MyStatsPanel } from './MyStatsPanel';
 import { UpcomingCallsList } from './UpcomingCallsList';
@@ -18,6 +19,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import SalesCalendar from '@/components/sales/SalesCalendar';
 import type {
   SalesFloorViewMode,
+  ActiveCall,
   NextZoomData,
   UpcomingCall,
   CloserStats,
@@ -42,6 +44,7 @@ interface SalesFloorClientProps {
   legacyLeaderboard: LeaderboardItem[];
 
   // New data
+  activeCalls: ActiveCall[];
   nextZoom: NextZoomData | null;
   upcomingCalls: UpcomingCall[];
   closerStats: CloserStats | null;
@@ -66,6 +69,7 @@ export function SalesFloorClient({
   funnel,
   streaks,
   legacyLeaderboard,
+  activeCalls,
   nextZoom,
   upcomingCalls,
   closerStats,
@@ -189,6 +193,11 @@ export function SalesFloorClient({
             />
           </div>
         </div>
+
+        {/* Active Calls Section - Shows prominently when calls are in progress */}
+        {activeCalls.length > 0 && (
+          <ActiveCallsSection calls={activeCalls} />
+        )}
 
         {/* Main Content Grid - New Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

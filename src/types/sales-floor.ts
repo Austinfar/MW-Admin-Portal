@@ -74,6 +74,45 @@ export interface QuotaProgress {
 }
 
 // ============================================
+// Active Call Types
+// ============================================
+
+export interface ActiveCall {
+  id: string;
+  title: string;
+  startTime: string;
+  endTime: string;
+  status: string;
+  meetingLink: string | null;
+  attendee: {
+    name: string;
+    email: string;
+  };
+  host?: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+  lead?: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    email: string | null;
+    phone: string | null;
+    status: string;
+  } | null;
+  // Time info
+  startedAgo: {
+    minutes: number;
+    formatted: string; // e.g., "Started 5m ago"
+  };
+  endsIn: {
+    minutes: number;
+    formatted: string; // e.g., "Ends in 25m"
+  };
+}
+
+// ============================================
 // Next Call / Upcoming Calls Types
 // ============================================
 

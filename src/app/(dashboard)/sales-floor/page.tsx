@@ -1,5 +1,6 @@
 import { getSalesDashboardData } from '@/lib/actions/sales-dashboard'
 import {
+    getActiveCalls,
     getNextZoom,
     getUpcomingCalls,
     getCloserStats,
@@ -29,6 +30,7 @@ export default async function SalesFloorPage() {
 
     const [
         dashboardData,
+        activeCalls,
         nextZoom,
         upcomingCalls,
         closerStats,
@@ -40,8 +42,9 @@ export default async function SalesFloorPage() {
         bookingLinksData,
     ] = await Promise.all([
         getSalesDashboardData().then(r => { console.log(`[SalesFloor] dashboardData: ${Date.now() - startTime}ms`); return r; }),
+        getActiveCalls().then(r => { console.log(`[SalesFloor] activeCalls: ${Date.now() - startTime}ms`); return r; }),
         getNextZoom(userId).then(r => { console.log(`[SalesFloor] nextZoom: ${Date.now() - startTime}ms`); return r; }),
-        getUpcomingCalls(48).then(r => { console.log(`[SalesFloor] upcomingCalls: ${Date.now() - startTime}ms`); return r; }),
+        getUpcomingCalls(7).then(r => { console.log(`[SalesFloor] upcomingCalls: ${Date.now() - startTime}ms`); return r; }),
         (userId ? getCloserStats(userId, 'month') : Promise.resolve(null)).then(r => { console.log(`[SalesFloor] closerStats: ${Date.now() - startTime}ms`); return r; }),
         (userId ? getSetterStats(userId, 'month') : Promise.resolve(null)).then(r => { console.log(`[SalesFloor] setterStats: ${Date.now() - startTime}ms`); return r; }),
         getCloserLeaderboard('month', userId).then(r => { console.log(`[SalesFloor] closerLeaderboard: ${Date.now() - startTime}ms`); return r; }),
@@ -61,6 +64,7 @@ export default async function SalesFloorPage() {
             funnel={dashboardData.funnel}
             streaks={dashboardData.streaks}
             legacyLeaderboard={dashboardData.leaderboard}
+            activeCalls={activeCalls}
             nextZoom={nextZoom}
             upcomingCalls={upcomingCalls}
             closerStats={closerStats}

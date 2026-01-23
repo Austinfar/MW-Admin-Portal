@@ -49,7 +49,96 @@ interface CalWebhookPayload {
         cancellationReason?: string
         noShowHost?: boolean
         noShowGuests?: boolean
+        // Additional fields that might contain meeting URL
+        videoCallData?: {
+            type?: string
+            id?: string
+            password?: string
+            url?: string
+        }
+        destinationCalendar?: {
+            integration?: string
+            externalId?: string
+        }
     }
+}
+
+/**
+ * Extract meeting URL from various possible locations in the payload
+ * Cal.com stores meeting URLs in different places depending on the integration:
+ * - Google Meet: payload.metadata.videoCallUrl
+ * - Zoom: payload.videoCallData.url
+ * - Direct URL: payload.meetingUrl or payload.location
+ */
+function extractMeetingUrl(payload: CalWebhookPayload['payload']): string | null {
+    // Check direct meetingUrl field
+    if (payload.meetingUrl) {
+        return payload.meetingUrl
+    }
+
+    // Check videoCallData (Zoom integration)
+    if (payload.videoCallData?.url) {
+        return payload.videoCallData.url
+    }
+
+    // Check metadata.videoCallUrl (Google Meet stores URL here)
+    const metadata = payload.metadata as Record<string, unknown> | undefined
+    if (metadata) {
+        // Google Meet URL is typically here
+        if (metadata.videoCallUrl && typeof metadata.videoCallUrl === 'string') {
+            return metadata.videoCallUrl
+        }
+        if (metadata.meetingUrl && typeof metadata.meetingUrl === 'string') {
+            return metadata.meetingUrl
+        }
+
+        // Nested videoCallData in metadata
+        const videoCallData = metadata.videoCallData as Record<string, unknown> | undefined
+        if (videoCallData?.url && typeof videoCallData.url === 'string') {
+            return videoCallData.url
+        }
+    }
+
+    // Check if location is a URL (direct URL booking)
+    if (payload.location && (
+        payload.location.startsWith('http://') ||
+        payload.location.startsWith('https://') ||
+        payload.location.includes('zoom.us') ||
+        payload.location.includes('meet.google.com')
+    )) {
+        return payload.location
+    }
+
+    return null
+}
+
+/**
+ * Extract meeting URL from stored metadata JSON (for backfill/runtime extraction)
+ */
+export function extractMeetingUrlFromMetadata(metadata: Record<string, unknown> | null): string | null {
+    if (!metadata) return null
+
+    // Check direct fields
+    if (metadata.meetingUrl && typeof metadata.meetingUrl === 'string') {
+        return metadata.meetingUrl
+    }
+
+    // Check videoCallData
+    const videoCallData = metadata.videoCallData as Record<string, unknown> | undefined
+    if (videoCallData?.url && typeof videoCallData.url === 'string') {
+        return videoCallData.url
+    }
+
+    // Check location if it's a URL
+    if (metadata.location && typeof metadata.location === 'string') {
+        const loc = metadata.location
+        if (loc.startsWith('http://') || loc.startsWith('https://') ||
+            loc.includes('zoom.us') || loc.includes('meet.google.com')) {
+            return loc
+        }
+    }
+
+    return null
 }
 
 const CAL_WEBHOOK_SECRET = process.env.CAL_WEBHOOK_SECRET
@@ -293,10 +382,15 @@ export async function POST(req: NextRequest) {
 
         const body: CalWebhookPayload = JSON.parse(rawBody)
 
+        const meetingUrl = extractMeetingUrl(body.payload)
+
         console.log(`[Cal Webhook] Received event: ${body.triggerEvent}`, {
             bookingId: body.payload.bookingId,
             uid: body.payload.uid,
-            title: body.payload.title
+            title: body.payload.title,
+            meetingUrl: meetingUrl,
+            location: body.payload.location,
+            videoCallData: body.payload.videoCallData
         })
 
         const supabase = createAdminClient()
@@ -326,7 +420,7 @@ export async function POST(req: NextRequest) {
                         p_attendee_email: attendee?.email || null,
                         p_attendee_name: attendee?.name || null,
                         p_attendee_timezone: attendee?.timeZone || null,
-                        p_meeting_url: body.payload.meetingUrl || null,
+                        p_meeting_url: meetingUrl,
                         p_location: body.payload.location || null,
                         p_user_email: body.payload.organizer?.email || null,
                         p_metadata: body.payload as unknown as Record<string, unknown>
@@ -418,7 +512,7 @@ export async function POST(req: NextRequest) {
                         p_attendee_email: attendee?.email || null,
                         p_attendee_name: attendee?.name || null,
                         p_attendee_timezone: attendee?.timeZone || null,
-                        p_meeting_url: body.payload.meetingUrl || null,
+                        p_meeting_url: meetingUrl,
                         p_location: body.payload.location || null,
                         p_user_email: body.payload.organizer?.email || null,
                         p_metadata: {
