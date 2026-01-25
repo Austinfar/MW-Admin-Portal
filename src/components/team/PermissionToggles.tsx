@@ -25,7 +25,7 @@ const VIEW_PERMISSION_CONFIG: Record<string, { label: string, options: ViewScope
     can_view_sales: { label: 'View Sales Analyzer', options: ['none', 'all'] },
     can_view_sales_floor: { label: 'View Sales Floor', options: ['none', 'all'] },
     can_view_onboarding: { label: 'View Onboarding', options: ['none', 'own', 'all'] },
-    can_view_business: { label: 'View Business (P&L)', options: ['none', 'all'] },
+    can_view_business: { label: 'View Admin Section', options: ['none', 'all'] },
     can_view_commissions: { label: 'View Commissions', options: ['none', 'own', 'all'] },
     can_manage_payment_links: { label: 'Manage Payment Links', options: ['none', 'all'] },
     can_view_team_settings: { label: 'View Team Settings', options: ['none', 'all'] }
