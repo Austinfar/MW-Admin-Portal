@@ -20,15 +20,17 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { User, updateUserRole, updateUserCommissionConfig, updateUserJobTitle, updateUserDetails, deleteUser, uploadAvatarForUser } from '@/lib/actions/profile';
+import { User, updateUserRole, updateUserCommissionConfig, updateUserJobTitle, updateUserDetails, deleteUser, uploadAvatarForUser, updateCoachProfile } from '@/lib/actions/profile';
 import { getCalLinksForUser, upsertCalLink, type CalUserLink, type CalLinkType } from '@/lib/actions/cal-links';
 import { toast } from 'sonner';
-import { Loader2, Settings, Trash2, Calendar } from 'lucide-react';
+import { Loader2, Settings, Trash2, Calendar, User as UserIcon, Eye } from 'lucide-react';
 import { useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ImageCropper } from '@/components/ui/ImageCropper';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Camera } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 
 
 interface UserEditModalProps {
@@ -58,6 +60,15 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
     const [role, setRole] = useState(user.role);
     const [jobTitle, setJobTitle] = useState<string>(user.job_title || 'coach');
     const [slackUserId, setSlackUserId] = useState<string>(user.slack_user_id || '');
+
+    // Coach Profile Tab
+    const [publicRole, setPublicRole] = useState(user.public_role || '');
+    const [bio, setBio] = useState(user.bio || '');
+    const [specialties, setSpecialties] = useState(user.specialties?.join(', ') || '');
+    const [showOnFemale, setShowOnFemale] = useState(user.display_on_female_landing || false);
+    const [showOnMale, setShowOnMale] = useState(user.display_on_male_landing || false);
+    const [displayOrder, setDisplayOrder] = useState<number | string>(user.display_order || 999);
+
 
     // Account Tab (Super Admin only)
     const [name, setName] = useState(user.name || '');
@@ -226,44 +237,44 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
                 return;
             }
 
-            // Update Avatar if changed
-            if (avatarUrl !== user.avatar_url) {
-                if (isSuperAdmin) {
-                    // Use the updated updateUserDetails that now accepts avatar_url
-                    await updateUserDetails(user.id, { avatar_url: avatarUrl! });
-                } else if (user.id) {
-                    // For self update (if user is editing themselves), use standard updateAvatar
-                    // But wait, updateAvatar is for CURRENT user.
-                    // UserEditModal is usually for editing OTHERS in Team Settings.
-                    // But if a user edits themselves via profile settings, they might use this?
-                    // Actually TeamSettings is for editing OTHERS.
-                    // If I am editing MYSELF in Team Settings, updateAvatar works.
-                    // If I am Admin editing another User, I can't update their avatar?
-                    // Currently only Super Admin has Account tab.
-                    // So Standard Admin can't update avatar of others anyway (no UI for it in General tab? Wait, Avatar is in General tab).
-                    // Avatar is in General tab!
-                    // So Admin editing User: can they update avatar?
-                    // updateAvatar uses getCurrentUserId(). So it would update Admin's avatar.
-                    // We need a way for Admin to update User's avatar.
-                    // Or restrict Avatar update to Super Admin / Self.
-                    // Let's use updateUserDetails if available?
-                    // updateUserDetails checks for Super Admin.
-                    // So Admin cannot update User's avatar with updateUserDetails.
-                    // I should probably restrict Avatar upload to Super Admin OR Self.
-                    // If !isSuperAdmin and user.id !== currentUserId, hide avatar upload?
-                    // Or allow it and creating a new action `adminUpdateAvatar`.
-                    // For now, let's use updateUserDetails for Super Admin, and maybe fail/warn for others unless self.
+            // Update Coach Profile & Avatar
+            // Parse specialties string into array
+            const specialtiesArray = specialties
+                .split(',')
+                .map(s => s.trim())
+                .filter(s => s.length > 0);
 
-                    // Assuming we only allow Super Admin to update others' avatars for now.
-                    // Because updateUserDetails requires Super Admin.
-                }
+            const profileResult = await updateCoachProfile(user.id, {
+                bio,
+                public_role: publicRole,
+                specialties: specialtiesArray,
+                display_on_female_landing: showOnFemale,
+                display_on_male_landing: showOnMale,
+                avatar_url: avatarUrl || undefined, // Pass updated avatar URL
+                display_order: typeof displayOrder === 'string' ? (parseInt(displayOrder) || 999) : displayOrder
+            });
+
+            if (profileResult.error) {
+                toast.error(profileResult.error);
+                setIsLoading(false);
+                return;
             }
+
+            // Fallback for avatar update if using Super Admin flow for account details
+            // (Handled above in updateUserDetails for super admin, but updateCoachProfile covers it for everyone else)
+            // If super admin flow ran, it might have updated avatar_url via updateUserDetails if passed
+            // Check if we need to reconcile. updateUserDetails handles avatar_url too.
+            // Actually, updateUserDetails in previous code didn't accept avatar_url in the 'data' object type properly?
+            // Let's check updateUserDetails in profile.ts - Yes it accepts avatar_url.
+            // My code block for Super Admin above DOES NOT pass avatar_url to updateUserDetails.
+            // So updateCoachProfile handles avatar_url for everyone. Good.
 
             toast.success('User updated successfully');
             setOpen(false);
             setNewPassword('');
             if (onUpdate) onUpdate();
         } catch (error) {
+            console.error(error);
             toast.error('An unexpected error occurred');
         } finally {
             setIsLoading(false);
@@ -300,26 +311,24 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
                     <Settings className="h-4 w-4" />
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px] bg-[#1a1a1a] border-white/10 text-white">
+            <DialogContent className="sm:max-w-[600px] bg-[#1a1a1a] border-white/10 text-white max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Edit User: {user.name || user.email}</DialogTitle>
                     <DialogDescription>
-                        {isSuperAdmin
-                            ? 'Full user management including account details, role, and commission settings.'
-                            : 'Modify role, job title, and commission settings.'
-                        }
+                        Manage profile, permissions, and visibility settings.
                     </DialogDescription>
                 </DialogHeader>
 
-                <Tabs defaultValue={isSuperAdmin ? "account" : "general"} className="w-full">
-                    <TabsList className={`grid w-full bg-white/5 ${
-                        isSuperAdmin && hasCalendarLinks ? 'grid-cols-4' :
-                        isSuperAdmin || hasCalendarLinks ? 'grid-cols-3' : 'grid-cols-2'
-                    }`}>
-                        {isSuperAdmin && <TabsTrigger value="account">Account</TabsTrigger>}
+                <Tabs defaultValue="general" className="w-full">
+                    <TabsList className={`grid w-full bg-white/5 ${isSuperAdmin
+                        ? (hasCalendarLinks ? 'grid-cols-5' : 'grid-cols-4')
+                        : (hasCalendarLinks ? 'grid-cols-4' : 'grid-cols-3')
+                        }`}>
                         <TabsTrigger value="general">General</TabsTrigger>
-                        <TabsTrigger value="commission">Commissions</TabsTrigger>
+                        <TabsTrigger value="profile">Profile</TabsTrigger>
+                        <TabsTrigger value="commission">Comms</TabsTrigger>
                         {hasCalendarLinks && <TabsTrigger value="calendar">Calendar</TabsTrigger>}
+                        {isSuperAdmin && <TabsTrigger value="account">Account</TabsTrigger>}
                     </TabsList>
 
                     {/* Account Tab - Super Admin Only */}
@@ -427,7 +436,7 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
                                     ))}
                                 </SelectContent>
                             </Select>
-                            <p className="text-xs text-muted-foreground">Controls which lists this user appears in (Coach lists, Closer lists, etc.)</p>
+                            <p className="text-xs text-muted-foreground">Controls which lists this user appears in</p>
                         </div>
 
                         {/* Permission Role - Controls access level */}
@@ -459,6 +468,82 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
                             <p className="text-xs text-muted-foreground">
                                 For Slack notifications. Find it in Slack: Profile → ⋯ → Copy member ID
                             </p>
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent value="profile" className="py-4 space-y-6">
+                        <div className="flex items-center gap-2 text-sm text-blue-500/80 bg-blue-500/10 p-3 rounded-md border border-blue-500/20 mb-4">
+                            <UserIcon className="w-4 h-4" />
+                            <span>These details appear on the landing page for Coaches.</span>
+                        </div>
+
+                        {/* Visibility Toggles */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="flex flex-col space-y-2 p-3 border border-white/5 rounded-lg bg-white/5">
+                                <Label className="text-xs text-muted-foreground">Show on Female Page</Label>
+                                <div className="flex items-center justify-between">
+                                    <span className={`text-sm ${showOnFemale ? 'text-green-400' : 'text-gray-400'}`}>
+                                        {showOnFemale ? 'Visible' : 'Hidden'}
+                                    </span>
+                                    <Switch checked={showOnFemale} onCheckedChange={setShowOnFemale} />
+                                </div>
+                            </div>
+                            <div className="flex flex-col space-y-2 p-3 border border-white/5 rounded-lg bg-white/5">
+                                <Label className="text-xs text-muted-foreground">Show on Male Page</Label>
+                                <div className="flex items-center justify-between">
+                                    <span className={`text-sm ${showOnMale ? 'text-green-400' : 'text-gray-400'}`}>
+                                        {showOnMale ? 'Visible' : 'Hidden'}
+                                    </span>
+                                    <Switch checked={showOnMale} onCheckedChange={setShowOnMale} />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="displayOrder">Display Order</Label>
+                            <Input
+                                id="displayOrder"
+                                type="number"
+                                value={displayOrder}
+                                onChange={(e) => setDisplayOrder(e.target.value)}
+                                className="bg-white/5 border-white/10"
+                                placeholder="999"
+                            />
+                            <p className="text-xs text-muted-foreground">Lower numbers appear first. Default is 999.</p>
+                        </div>
+
+
+                        <div className="space-y-2">
+                            <Label htmlFor="publicRole">Public Role Title</Label>
+                            <Input
+                                id="publicRole"
+                                value={publicRole}
+                                onChange={(e) => setPublicRole(e.target.value)}
+                                className="bg-white/5 border-white/10"
+                                placeholder="e.g. Women's Lifestyle Coach"
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="specialties">Specialties (comma separated)</Label>
+                            <Input
+                                id="specialties"
+                                value={specialties}
+                                onChange={(e) => setSpecialties(e.target.value)}
+                                className="bg-white/5 border-white/10"
+                                placeholder="e.g. Fat Loss, contest prep, hormones"
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="bio">Biography</Label>
+                            <Textarea
+                                id="bio"
+                                value={bio}
+                                onChange={(e) => setBio(e.target.value)}
+                                className="bg-white/5 border-white/10 min-h-[120px]"
+                                placeholder="Coach's bio..."
+                            />
                         </div>
                     </TabsContent>
 

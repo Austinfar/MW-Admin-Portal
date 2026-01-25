@@ -251,9 +251,14 @@ export async function updateClientTaskStatus(taskId: string, status: 'pending' |
             .select('status')
             .eq('client_id', currentTask.client_id)
 
-        const allCompleted = allTasks?.every(t => t.status === 'completed')
+        // Check if all tasks are completed or cancelled (cancelled tasks don't block graduation)
+        const allCompletedOrCancelled = allTasks?.every(
+            t => t.status === 'completed' || t.status === 'cancelled'
+        )
+        // Ensure at least one task was actually completed (not all cancelled)
+        const hasAtLeastOneCompleted = allTasks?.some(t => t.status === 'completed')
 
-        if (allCompleted) {
+        if (allCompletedOrCancelled && hasAtLeastOneCompleted) {
             // Check current client status to ensure we only graduate 'onboarding' clients
             const { data: client } = await supabase
                 .from('clients')
@@ -370,4 +375,60 @@ export async function getOnboardingClients() {
             }
         }
     })
+}
+
+/**
+ * Get overdue onboarding tasks across all clients
+ */
+export async function getOverdueOnboardingTasks() {
+    const supabase = createAdminClient()
+    const now = new Date().toISOString()
+
+    const { data, error } = await supabase
+        .from('onboarding_tasks')
+        .select(`
+            id,
+            title,
+            description,
+            due_date,
+            status,
+            client_id,
+            assigned_user_id,
+            clients!inner (
+                id,
+                name,
+                email,
+                assigned_coach_id
+            )
+        `)
+        .eq('status', 'pending')
+        .lt('due_date', now)
+        .order('due_date', { ascending: true })
+        .limit(50)
+
+    if (error) {
+        console.error('Error fetching overdue tasks:', error)
+        return []
+    }
+
+    // Fetch assigned user names for tasks that have them
+    const tasksWithUsers = await Promise.all(
+        (data || []).map(async (task: any) => {
+            let assignedUser = null
+            if (task.assigned_user_id) {
+                const { data: user } = await supabase
+                    .from('users')
+                    .select('name')
+                    .eq('id', task.assigned_user_id)
+                    .single()
+                assignedUser = user
+            }
+            return {
+                ...task,
+                assigned_user: assignedUser
+            }
+        })
+    )
+
+    return tasksWithUsers
 }

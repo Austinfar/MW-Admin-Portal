@@ -33,6 +33,12 @@ export interface User {
     created_at: string
     avatar_url: string | null
     slack_user_id: string | null
+    bio?: string
+    specialties?: string[]
+    public_role?: string
+    display_on_female_landing?: boolean
+    display_on_male_landing?: boolean
+    display_order?: number
 }
 
 /**
@@ -722,4 +728,50 @@ export async function reactivateUser(userId: string) {
         console.error('User reactivation error:', error)
         return { error: error?.message || 'Failed to reactivate user' }
     }
+}
+
+/**
+ * Update coach profile details (Admin/Super Admin only)
+ */
+export async function updateCoachProfile(userId: string, data: {
+    bio?: string
+    specialties?: string[]
+    public_role?: string
+    display_on_female_landing?: boolean
+    display_on_male_landing?: boolean
+    avatar_url?: string
+    display_order?: number
+}) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) return { error: 'Not authenticated' }
+
+    const admin = createAdminClient()
+
+    // Verify requesting user is admin
+    const { data: requesterProfile } = await admin
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+    if (requesterProfile?.role !== 'admin' && requesterProfile?.role !== 'super_admin') {
+        return { error: 'Unauthorized: Admin access required' }
+    }
+
+    const { error } = await admin
+        .from('users')
+        .update({
+            ...data,
+            updated_at: new Date().toISOString()
+        })
+        .eq('id', userId)
+
+    if (error) {
+        return { error: error.message }
+    }
+
+    revalidatePath('/settings/team')
+    return { success: true }
 }

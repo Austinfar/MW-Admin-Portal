@@ -239,3 +239,56 @@ export async function processWeeklyCheckins() {
         errors: errorCount
     }
 }
+
+/**
+ * Cleanup abandoned payment schedules that never completed checkout
+ * Marks schedules older than 7 days with 'pending_initial' status as 'expired'
+ */
+export async function cleanupAbandonedSchedules() {
+    const supabase = createAdminClient()
+
+    // Find schedules that are 'pending_initial' and older than 7 days
+    const sevenDaysAgo = new Date()
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+
+    const { data: abandonedSchedules, error: fetchError } = await supabase
+        .from('payment_schedules')
+        .select('id, lead_id, client_email, plan_name, created_at')
+        .eq('status', 'pending_initial')
+        .lt('created_at', sevenDaysAgo.toISOString())
+
+    if (fetchError) {
+        console.error('[Cleanup] Error fetching abandoned schedules:', fetchError)
+        return { error: 'Database error', updated: 0 }
+    }
+
+    if (!abandonedSchedules || abandonedSchedules.length === 0) {
+        console.log('[Cleanup] No abandoned schedules found')
+        return { message: 'No abandoned schedules found', updated: 0 }
+    }
+
+    console.log(`[Cleanup] Found ${abandonedSchedules.length} abandoned schedules`)
+
+    // Update status to 'expired'
+    const { error: updateError } = await supabase
+        .from('payment_schedules')
+        .update({
+            status: 'expired',
+            updated_at: new Date().toISOString()
+        })
+        .in('id', abandonedSchedules.map(s => s.id))
+
+    if (updateError) {
+        console.error('[Cleanup] Error updating schedules:', updateError)
+        return { error: 'Update error', updated: 0 }
+    }
+
+    console.log(`[Cleanup] Marked ${abandonedSchedules.length} schedules as expired`)
+
+    return {
+        success: true,
+        message: `Marked ${abandonedSchedules.length} abandoned schedules as expired`,
+        updated: abandonedSchedules.length,
+        scheduleIds: abandonedSchedules.map(s => s.id)
+    }
+}

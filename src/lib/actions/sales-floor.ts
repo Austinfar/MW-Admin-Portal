@@ -662,11 +662,78 @@ export async function createFollowUpTask(data: {
       return { success: false, error: error.message };
     }
 
+    // Sync lead status based on outcome type
+    let newLeadStatus: string | null = null;
+    switch (data.outcomeType) {
+      case 'lost':
+        newLeadStatus = 'Closed Lost';
+        break;
+      case 'no_show':
+        newLeadStatus = 'No Show';
+        break;
+      // Other outcomes (follow_up_zoom, send_proposal, needs_nurture)
+      // keep the lead engaged - no status change needed
+    }
+
+    if (newLeadStatus) {
+      await admin
+        .from('leads')
+        .update({
+          status: newLeadStatus,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', data.leadId);
+    }
+
     revalidatePath('/sales-floor');
+    revalidatePath('/leads');
     return { success: true, taskId: task.id };
   } catch (error: any) {
     console.error('[SalesFloor] Error creating follow-up task:', error);
     return { success: false, error: error?.message || 'Failed to create task' };
+  }
+}
+
+/**
+ * Log a successful close outcome (updates lead status to Closed Won)
+ * This is called when the 'closed' outcome is selected - conversion happens on payment
+ */
+export async function logCallOutcomeAsConversion(data: {
+  leadId: string;
+  closerId: string;
+  notes?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const admin = createAdminClient();
+
+    // Update lead status to 'Closed Won'
+    const { error } = await admin
+      .from('leads')
+      .update({
+        status: 'Closed Won',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', data.leadId);
+
+    if (error) {
+      console.error('[SalesFloor] Error updating lead status:', error);
+      return { success: false, error: error.message };
+    }
+
+    // Log activity
+    await admin.from('activity_logs').insert({
+      lead_id: data.leadId,
+      action: 'Call Closed',
+      details: data.notes || 'Lead closed on call - awaiting payment',
+      created_at: new Date().toISOString(),
+    });
+
+    revalidatePath('/leads');
+    revalidatePath('/sales-floor');
+    return { success: true };
+  } catch (error: any) {
+    console.error('[SalesFloor] Error logging conversion:', error);
+    return { success: false, error: error?.message || 'Failed to log conversion' };
   }
 }
 

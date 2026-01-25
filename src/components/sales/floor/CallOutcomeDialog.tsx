@@ -24,7 +24,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { createFollowUpTask } from '@/lib/actions/sales-floor';
+import { createFollowUpTask, logCallOutcomeAsConversion } from '@/lib/actions/sales-floor';
 import type { CallOutcome, FollowUpOutcomeType } from '@/types/sales-floor';
 
 interface CallOutcomeDialogProps {
@@ -108,12 +108,23 @@ export function CallOutcomeDialog({
   const handleSubmit = async () => {
     if (!selectedOutcome) return;
 
-    // If closed, we'd trigger the lead-to-client conversion flow
-    // For now, we'll just create a follow-up task for non-closed outcomes
+    // If closed, update lead status to 'Closed Won' and await payment
     if (selectedOutcome === 'closed') {
-      toast.success('Congratulations on the close! 🎉');
-      onOutcomeLogged?.(selectedOutcome);
-      resetAndClose();
+      setIsSubmitting(true);
+      const result = await logCallOutcomeAsConversion({
+        leadId,
+        closerId,
+        notes: notes || undefined,
+      });
+      setIsSubmitting(false);
+
+      if (result.success) {
+        toast.success('Congratulations on the close! Lead marked as Closed Won - send payment link to complete conversion.');
+        onOutcomeLogged?.(selectedOutcome);
+        resetAndClose();
+      } else {
+        toast.error(result.error || 'Failed to log close');
+      }
       return;
     }
 
