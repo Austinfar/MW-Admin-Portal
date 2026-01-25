@@ -6,7 +6,8 @@ import { revalidatePath } from 'next/cache'
 import { assignTemplateToClient } from '@/lib/actions/onboarding'
 
 // Helper function to log lead activity
-async function logLeadActivity(
+// Helper function to log lead activity
+export async function logLeadActivity(
     supabase: any,
     leadId: string,
     action: string,
@@ -14,10 +15,97 @@ async function logLeadActivity(
 ) {
     await supabase.from('activity_logs').insert({
         lead_id: leadId,
-        action,
-        details,
+        type: action,
+        description: details,
         created_at: new Date().toISOString()
     })
+}
+
+// Internal reusable function for lead submission/upsert
+export async function upsertLead(supabase: any, data: {
+    firstName: string
+    lastName: string
+    email: string
+    phone: string
+    metadata?: Record<string, any>
+    coachId?: string
+}) {
+    const { firstName, lastName, email, phone, metadata, coachId } = data
+
+    // Check if lead exists
+    const { data: existingLead } = await supabase
+        .from('leads')
+        .select('id, metadata')
+        .eq('email', email)
+        .single()
+
+    let leadId = existingLead?.id
+
+    if (existingLead) {
+        // Update existing lead
+        const newMetadata = {
+            ...(existingLead.metadata as object || {}),
+            ...(metadata || {}),
+            last_submission: new Date().toISOString()
+        }
+
+        const { error } = await supabase
+            .from('leads')
+            .update({
+                first_name: firstName,
+                last_name: lastName,
+                phone: phone,
+                metadata: newMetadata,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', existingLead.id)
+
+        if (error) return { error: error.message }
+    } else {
+        // Create new lead
+        const { data: newLead, error } = await supabase
+            .from('leads')
+            .insert({
+                first_name: firstName,
+                last_name: lastName,
+                email: email,
+                phone: phone,
+                status: 'New',
+                source: 'Web Form',
+                assigned_user_id: coachId || null,
+                metadata: {
+                    ...(metadata || {}),
+                    source_detail: 'Landing Page Submission'
+                }
+            })
+            .select('id')
+            .single()
+
+        if (error) return { error: error.message }
+        leadId = newLead.id
+    }
+
+    if (leadId) {
+        // Log activity
+        await logLeadActivity(
+            supabase,
+            leadId,
+            existingLead ? 'Form Resubmitted' : 'Lead Form Submitted',
+            existingLead ? 'Lead updated via landing page form.' : 'New lead created via landing page form.'
+        )
+
+        // If questionnaire answers present, log that specifically
+        if (metadata?.questionnaire) {
+            await logLeadActivity(
+                supabase,
+                leadId,
+                'Questionnaire Submitted',
+                'Client submitted questionnaire answers.'
+            )
+        }
+    }
+
+    return { success: true, leadId }
 }
 
 export async function getLeads() {
@@ -91,6 +179,24 @@ export async function createLead(formData: FormData) {
 
     revalidatePath('/leads')
     return { success: true }
+}
+
+export async function submitLead(data: {
+    firstName: string
+    lastName: string
+    email: string
+    phone: string
+    metadata?: Record<string, any>
+    coachId?: string
+}) {
+    const supabase = await createClient()
+    const result = await upsertLead(supabase, data)
+
+    if (result.success) {
+        revalidatePath('/leads')
+    }
+
+    return result
 }
 
 export async function updateLeadStatus(id: string, status: string) {
@@ -372,5 +478,22 @@ export async function convertLeadToClient(
             error: error instanceof Error ? error.message : 'Conversion failed, changes rolled back'
         }
     }
+}
+
+export async function getLeadActivity(leadId: string) {
+    const supabase = await createClient()
+
+    const { data, error } = await supabase
+        .from('activity_logs')
+        .select('*')
+        .eq('lead_id', leadId)
+        .order('created_at', { ascending: false })
+
+    if (error) {
+        console.error('Error fetching lead activity:', error)
+        return []
+    }
+
+    return data
 }
 
