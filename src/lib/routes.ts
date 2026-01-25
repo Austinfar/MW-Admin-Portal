@@ -91,7 +91,7 @@ export const APP_ROUTES: AppRoute[] = [
         permission: 'can_view_business',
         children: [
             {
-                label: 'Business',
+                label: 'Admin Board',
                 icon: DollarSign,
                 href: '/business',
                 color: 'text-emerald-500',
