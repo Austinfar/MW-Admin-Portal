@@ -140,6 +140,9 @@ export function TeamSettingsClient() {
                                                 {user.job_title.replace('_', ' ')}
                                             </Badge>
                                         )}
+                                        <Badge variant="outline" className="text-xs text-muted-foreground border-white/10">
+                                            Order: {user.display_order ?? 999}
+                                        </Badge>
                                         <Button
                                             variant="ghost"
                                             size="sm"

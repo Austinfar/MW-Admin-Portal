@@ -266,18 +266,24 @@
 
 /* Glassmorphism Sidebar Animations */
 @keyframes glow-pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     filter: drop-shadow(0 0 6px var(--glow-primary));
   }
+
   50% {
     filter: drop-shadow(0 0 12px var(--glow-primary-strong));
   }
 }
 
 @keyframes subtle-glow {
-  0%, 100% {
+
+  0%,
+  100% {
     box-shadow: 0 0 15px var(--glow-primary), inset 0 1px 0 var(--glass-border);
   }
+
   50% {
     box-shadow: 0 0 25px var(--glow-primary-strong), inset 0 1px 0 var(--glass-border);
   }
@@ -360,10 +366,89 @@
 
 /* Marquee Animation - Force Injected */
 @keyframes marquee {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(-50%);
+  }
 }
 
 .animate-marquee {
   animation: marquee 40s linear infinite;
+}
+
+/* Calendar Glass Overrides */
+.rbc-calendar {
+  font-family: var(--font-sans);
+  color: #a1a1aa;
+}
+
+.rbc-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+  padding: 12px 0 !important;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #fff;
+}
+
+.rbc-month-view,
+.rbc-time-view,
+.rbc-agenda-view {
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  border-radius: 12px;
+  background: transparent;
+}
+
+.rbc-day-bg+.rbc-day-bg {
+  border-left: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+.rbc-month-row+.rbc-month-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+.rbc-off-range-bg {
+  background: rgba(0, 0, 0, 0.2) !important;
+}
+
+.rbc-today {
+  background: rgba(16, 185, 129, 0.05) !important;
+}
+
+.rbc-event {
+  border-radius: 6px !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+}
+
+.rbc-current-time-indicator {
+  background-color: #10b981 !important;
+}
+
+.rbc-toolbar button {
+  color: #a1a1aa;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.rbc-toolbar button:hover {
+  color: #fff;
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.rbc-toolbar button.rbc-active {
+  background-color: rgba(39, 39, 42, 0.6) !important;
+  color: #fff !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: none !important;
+}
+
+.rbc-show-more {
+  background-color: transparent !important;
+  color: #10b981 !important;
+  font-weight: 600;
 }

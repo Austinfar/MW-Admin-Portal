@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import crypto from 'crypto'
+import { parseName } from '@/lib/utils/name-parser'
 
 // Cal.com webhook event types
 type CalWebhookEvent =
@@ -35,6 +36,7 @@ interface CalWebhookPayload {
             email: string
             name: string
             timeZone: string
+            phone?: string
         }>
         organizer?: {
             id: number
@@ -286,6 +288,37 @@ async function sendSlackNotification(
 }
 
 /**
+ * Extract phone number from various possible locations in the Cal.com payload
+ */
+function extractPhoneNumber(payload: CalWebhookPayload['payload']): string | null {
+    const responses = payload.responses as Record<string, unknown> | undefined
+    const metadata = payload.metadata as Record<string, unknown> | undefined
+    const attendee = payload.attendees?.[0]
+
+    // Try responses first (form fields) - common field names
+    if (responses) {
+        const phoneFields = ['phone', 'Phone', 'Phone Number', 'phone_number', 'phoneNumber', 'mobile', 'Mobile']
+        for (const field of phoneFields) {
+            if (responses[field] && typeof responses[field] === 'string') {
+                return responses[field] as string
+            }
+        }
+    }
+
+    // Try metadata
+    if (metadata?.phone && typeof metadata.phone === 'string') {
+        return metadata.phone
+    }
+
+    // Try attendee object (some Cal.com setups include this)
+    if (attendee?.phone) {
+        return attendee.phone
+    }
+
+    return null
+}
+
+/**
  * Create or update lead from booking
  */
 async function syncLeadFromBooking(
@@ -296,41 +329,73 @@ async function syncLeadFromBooking(
     const attendee = payload.attendees?.[0]
     if (!attendee?.email) return null
 
+    // Extract phone number from various sources
+    const phone = extractPhoneNumber(payload)
+
+    // Look up organizer user ID for lead assignment
+    let assignedUserId: string | null = null
+    if (payload.organizer?.email) {
+        const { data: organizer } = await supabase
+            .from('users')
+            .select('id')
+            .eq('email', payload.organizer.email.toLowerCase())
+            .single()
+
+        assignedUserId = organizer?.id || null
+    }
+
     // Check if lead already exists
     const { data: existingLead } = await supabase
         .from('leads')
-        .select('id, status')
+        .select('id, status, phone, assigned_user_id')
         .eq('email', attendee.email.toLowerCase())
         .single()
 
     if (existingLead) {
-        // Update existing lead status to "Appt Set" if it's a new booking
-        if (existingLead.status === 'New' || existingLead.status === 'Contacted') {
-            await supabase
-                .from('leads')
-                .update({
-                    status: 'Appt Set',
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', existingLead.id)
+        // Build update object for existing lead
+        const updates: Record<string, unknown> = {
+            updated_at: new Date().toISOString()
         }
+
+        // Update phone if we found one and lead doesn't have one
+        if (phone && !existingLead.phone) {
+            updates.phone = phone
+        }
+
+        // Update assigned_user_id if not already set
+        if (assignedUserId && !existingLead.assigned_user_id) {
+            updates.assigned_user_id = assignedUserId
+        }
+
+        // Update status to "Appt Set" if it's a new booking
+        if (existingLead.status === 'New' || existingLead.status === 'Contacted') {
+            updates.status = 'Appt Set'
+        }
+
+        await supabase
+            .from('leads')
+            .update(updates)
+            .eq('id', existingLead.id)
+
         return existingLead.id
     }
 
-    // Create new lead
-    const nameParts = (attendee.name || '').split(' ')
-    const firstName = nameParts[0] || ''
-    const lastName = nameParts.slice(1).join(' ') || ''
+    // Parse name using utility function (handles edge cases)
+    const { firstName, lastName } = parseName(attendee.name)
 
+    // Create new lead with all extracted data
     const { data: newLead, error } = await supabase
         .from('leads')
         .insert({
             first_name: firstName,
             last_name: lastName,
             email: attendee.email.toLowerCase(),
+            phone: phone,
             status: 'Appt Set',
             source: source === 'company-driven' ? 'Company' : 'Coach Referral',
-            description: `Created from Cal.com booking: ${payload.title}`
+            description: `Created from Cal.com booking: ${payload.title}`,
+            assigned_user_id: assignedUserId,
+            booked_by_user_id: assignedUserId
         })
         .select('id')
         .single()

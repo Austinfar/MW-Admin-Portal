@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, CheckSquare, DollarSign, CreditCard, BrainCircuit, Calendar, Lightbulb } from 'lucide-react'
+import { LayoutDashboard, Users, CheckSquare, DollarSign, CreditCard, BrainCircuit, Calendar, Lightbulb, Camera } from 'lucide-react'
 import { UserPermissions } from '@/lib/auth-utils'
 
 export interface AppRoute {
@@ -95,6 +95,13 @@ export const APP_ROUTES: AppRoute[] = [
                 icon: DollarSign,
                 href: '/business',
                 color: 'text-emerald-500',
+                permission: 'can_view_business'
+            },
+            {
+                label: 'Transformations',
+                icon: Camera,
+                href: '/transformations',
+                color: 'text-purple-500',
                 permission: 'can_view_business'
             },
         ]

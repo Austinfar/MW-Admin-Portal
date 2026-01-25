@@ -28,23 +28,30 @@ const localizer = dateFnsLocalizer({
     locales,
 });
 
-// Custom Event Component
 const EventComponent = ({ event }: { event: any }) => {
     const booking = event.resource as CalBooking;
 
-    // Status colors
-    const statusColors = {
-        ACCEPTED: 'bg-green-500/10 text-green-700 border-green-200 dark:text-green-300 dark:border-green-800',
-        PENDING: 'bg-yellow-500/10 text-yellow-700 border-yellow-200 dark:text-yellow-300 dark:border-yellow-800',
-        CANCELLED: 'bg-red-500/10 text-red-700 border-red-200 dark:text-red-300 dark:border-red-800',
-        REJECTED: 'bg-destructive/10 text-destructive border-destructive/20',
-    };
+    const getStatusColor = (status: string) => {
+        switch (status) {
+            case 'ACCEPTED':
+            case 'PENDING':
+                return 'bg-emerald-500/10 border-l-2 border-emerald-500 text-emerald-100';
+            case 'CANCELLED':
+            case 'REJECTED':
+                return 'bg-red-500/10 border-l-2 border-red-500 text-red-300 opacity-60';
+            default:
+                return 'bg-blue-500/10 border-l-2 border-blue-500 text-blue-100';
+        }
+    }
 
     return (
-        <div className="h-full w-full flex flex-col justify-start px-1 py-0.5 text-xs overflow-hidden">
+        <div className={cn(
+            "h-full w-full flex flex-col justify-center px-2 py-0.5 text-xs overflow-hidden rounded-md transition-all hover:bg-white/5",
+            getStatusColor(booking.status)
+        )}>
             <div className="font-semibold truncate">{event.title}</div>
-            <div className="flex items-center gap-1 opacity-80 truncate">
-                <User className="w-3 h-3" />
+            <div className="flex items-center gap-1.5 opacity-70 truncate mt-0.5 text-[10px] uppercase tracking-wide">
+                <User className="w-2.5 h-2.5" />
                 {booking.attendees[0]?.name || 'Unknown'}
             </div>
         </div>
@@ -100,50 +107,29 @@ export default function SalesCalendar() {
 
     // Custom coloring based on booking status
     const eventPropGetter = (event: any) => {
-        const booking = event.resource as CalBooking;
-        let className = 'border-l-4 text-xs ';
-
-        switch (booking.status) {
-            case 'ACCEPTED':
-            case 'PENDING':
-                className += 'bg-emerald-100 border-emerald-500 text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200';
-                break;
-            case 'IN_PROGRESS':
-                className += 'bg-blue-100 border-blue-500 text-blue-900 dark:bg-blue-950/30 dark:text-blue-200';
-                break;
-            case 'COMPLETED':
-                className += 'bg-gray-100 border-gray-400 text-gray-700 dark:bg-gray-950/30 dark:text-gray-300';
-                break;
-            case 'CANCELLED':
-            case 'REJECTED':
-                className += 'bg-red-100 border-red-500 text-red-900 opacity-60 line-through dark:bg-red-950/30 dark:text-red-200';
-                break;
-            case 'HOST_NO_SHOW':
-            case 'GUEST_NO_SHOW':
-                className += 'bg-orange-100 border-orange-500 text-orange-900 dark:bg-orange-950/30 dark:text-orange-200';
-                break;
-            default:
-                className += 'bg-blue-100 border-blue-500 text-blue-900 dark:bg-blue-950/30 dark:text-blue-200';
-                break;
-        }
-
-        return { className };
+        return { style: { backgroundColor: 'transparent' } }; // Fully handle styling in component
     };
 
     return (
         <div className="h-full space-y-4">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div className="flex items-center gap-2">
-                    <h2 className="text-2xl font-bold tracking-tight">Sales Calendar</h2>
-                    {loading && <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />}
+                    <div className="p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
+                        <CalendarIcon className="w-5 h-5 text-emerald-400" />
+                    </div>
+                    <div>
+                        <h2 className="text-xl font-bold tracking-tight text-white">Sales Calendar</h2>
+                        <p className="text-xs text-muted-foreground">Manage consultations & demos</p>
+                    </div>
+                    {loading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground ml-2" />}
                 </div>
 
                 <div className="flex items-center gap-2 w-full sm:w-auto">
                     <Select value={selectedMember} onValueChange={setSelectedMember}>
-                        <SelectTrigger className="w-[200px]">
+                        <SelectTrigger className="w-[200px] bg-zinc-900/40 border-white/5 backdrop-blur-xl text-sm h-9">
                             <SelectValue placeholder="Filter by Team Member" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="bg-zinc-950 border-white/10 text-white">
                             <SelectItem value="all">All Team Members</SelectItem>
                             {teamMembers.map(m => (
                                 <SelectItem key={m} value={m}>{m}</SelectItem>
@@ -151,14 +137,19 @@ export default function SalesCalendar() {
                         </SelectContent>
                     </Select>
 
-                    <Button variant="outline" size="icon" onClick={fetchBookings}>
+                    <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={fetchBookings}
+                        className="bg-zinc-900/40 border-white/5 hover:bg-white/10 hover:text-white h-9 w-9"
+                    >
                         <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
                     </Button>
                 </div>
             </div>
 
-            <Card className="flex-1 min-h-[600px] border-border/50 bg-card/50 backdrop-blur-xl">
-                <CardContent className="p-4 h-[700px]">
+            <Card className="flex-1 min-h-[600px] border-white/5 bg-zinc-900/40 backdrop-blur-xl shadow-2xl overflow-hidden">
+                <CardContent className="p-6 h-[750px] calendar-container">
                     <Calendar
                         localizer={localizer}
                         events={events}
@@ -174,57 +165,58 @@ export default function SalesCalendar() {
                         }}
                         eventPropGetter={eventPropGetter}
                         onSelectEvent={(event) => setSelectedEvent(event.resource)}
-                        className="rounded-md"
+                        className="rounded-xl text-sm"
                     />
                 </CardContent>
             </Card>
 
             {/* Event Details Modal */}
             <Dialog open={!!selectedEvent} onOpenChange={(open) => !open && setSelectedEvent(null)}>
-                <DialogContent className="sm:max-w-[425px]">
+                <DialogContent className="sm:max-w-[425px] bg-zinc-950/90 backdrop-blur-2xl border-white/10 text-white">
                     <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
+                        <DialogTitle className="flex items-center gap-3 text-lg">
                             {selectedEvent?.title}
                             <Badge
-                                variant={['ACCEPTED', 'PENDING', 'COMPLETED'].includes(selectedEvent?.status || '') ? 'default' : 'secondary'}
+                                variant="outline"
                                 className={cn(
-                                    selectedEvent?.status === 'ACCEPTED' && 'bg-green-600',
-                                    selectedEvent?.status === 'PENDING' && 'bg-emerald-600',
-                                    selectedEvent?.status === 'IN_PROGRESS' && 'bg-blue-600',
-                                    selectedEvent?.status === 'COMPLETED' && 'bg-gray-500',
-                                    selectedEvent?.status === 'CANCELLED' && 'bg-red-600',
-                                    selectedEvent?.status === 'HOST_NO_SHOW' && 'bg-orange-600',
-                                    selectedEvent?.status === 'GUEST_NO_SHOW' && 'bg-orange-600'
+                                    "text-xs px-2 py-0.5 border-none",
+                                    selectedEvent?.status === 'ACCEPTED' && 'bg-green-500/20 text-green-400',
+                                    selectedEvent?.status === 'PENDING' && 'bg-yellow-500/20 text-yellow-400',
+                                    selectedEvent?.status === 'IN_PROGRESS' && 'bg-blue-500/20 text-blue-400',
+                                    selectedEvent?.status === 'COMPLETED' && 'bg-zinc-500/20 text-zinc-400',
+                                    selectedEvent?.status === 'CANCELLED' && 'bg-red-500/20 text-red-400',
+                                    selectedEvent?.status === 'HOST_NO_SHOW' && 'bg-orange-500/20 text-orange-400',
+                                    selectedEvent?.status === 'GUEST_NO_SHOW' && 'bg-pink-500/20 text-pink-400'
                                 )}
                             >
                                 {selectedEvent?.status?.replace(/_/g, ' ')}
                             </Badge>
                         </DialogTitle>
-                        <DialogDescription>
+                        <DialogDescription className="text-zinc-400">
                             {selectedEvent && format(new Date(selectedEvent.startTime), 'EEEE, MMMM d, yyyy')}
                         </DialogDescription>
                     </DialogHeader>
 
                     {selectedEvent && (
-                        <div className="grid gap-4 py-4">
-                            <div className="flex items-center gap-3">
-                                <Clock className="w-4 h-4 text-muted-foreground" />
-                                <span className="text-sm">
+                        <div className="grid gap-5 py-4">
+                            <div className="flex items-center gap-3 bg-white/5 p-3 rounded-lg border border-white/5">
+                                <Clock className="w-5 h-5 text-emerald-400" />
+                                <span className="text-sm font-medium">
                                     {format(new Date(selectedEvent.startTime), 'h:mm a')} - {format(new Date(selectedEvent.endTime), 'h:mm a')}
                                 </span>
                             </div>
 
-                            <div className="space-y-2">
-                                <div className="text-sm font-medium">Attendees</div>
-                                <div className="space-y-1">
+                            <div className="space-y-3">
+                                <div className="text-xs font-semibold uppercase text-zinc-500 tracking-wider">Attendees</div>
+                                <div className="space-y-2">
                                     {selectedEvent.attendees.map((att, i) => (
-                                        <div key={i} className="flex items-center gap-2 text-sm bg-muted/50 p-2 rounded-md">
-                                            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
+                                        <div key={i} className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors">
+                                            <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-xs font-bold text-emerald-400 border border-emerald-500/20">
                                                 {att.name.charAt(0)}
                                             </div>
                                             <div>
-                                                <div className="font-medium">{att.name}</div>
-                                                <div className="text-xs text-muted-foreground">{att.email}</div>
+                                                <div className="font-medium text-sm">{att.name}</div>
+                                                <div className="text-xs text-zinc-500">{att.email}</div>
                                             </div>
                                         </div>
                                     ))}
@@ -232,9 +224,9 @@ export default function SalesCalendar() {
                             </div>
 
                             {selectedEvent.description && (
-                                <div className="space-y-1">
-                                    <div className="text-sm font-medium">Description</div>
-                                    <p className="text-sm text-muted-foreground whitespace-pre-wrap bg-muted/30 p-2 rounded-md">
+                                <div className="space-y-2 pt-2 border-t border-white/5">
+                                    <div className="text-xs font-semibold uppercase text-zinc-500 tracking-wider">Notes</div>
+                                    <p className="text-sm text-zinc-300 whitespace-pre-wrap leading-relaxed">
                                         {selectedEvent.description}
                                     </p>
                                 </div>
