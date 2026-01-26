@@ -68,6 +68,7 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
     const [showOnFemale, setShowOnFemale] = useState(user.display_on_female_landing || false);
     const [showOnMale, setShowOnMale] = useState(user.display_on_male_landing || false);
     const [displayOrder, setDisplayOrder] = useState<number | string>(user.display_order || 999);
+    const [slug, setSlug] = useState(user.slug || '');
 
 
     // Account Tab (Super Admin only)
@@ -91,6 +92,7 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
     const [calLinks, setCalLinks] = useState<CalUserLink[]>([]);
     const [calLinksLoading, setCalLinksLoading] = useState(false);
     const [consultUrl, setConsultUrl] = useState('');
+    const [consultEventTypeId, setConsultEventTypeId] = useState('');
     const [monthlyCoachingUrl, setMonthlyCoachingUrl] = useState('');
 
     // Check if user should have calendar links
@@ -113,6 +115,7 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
             const consult = links.find(l => l.link_type === 'consult');
             const monthly = links.find(l => l.link_type === 'monthly_coaching');
             setConsultUrl(consult?.url || '');
+            setConsultEventTypeId(consult?.event_type_id?.toString() || '');
             setMonthlyCoachingUrl(monthly?.url || '');
         } catch (error) {
             console.error('Failed to load calendar links:', error);
@@ -125,7 +128,8 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
         if (!url.trim()) return;
 
         const displayName = linkType === 'consult' ? 'Coaching Consult' : 'Monthly Coaching Call';
-        const result = await upsertCalLink(user.id, linkType, url, displayName);
+        const eventTypeId = linkType === 'consult' && consultEventTypeId ? parseInt(consultEventTypeId) : null;
+        const result = await upsertCalLink(user.id, linkType, url, displayName, eventTypeId);
 
         if (result.success) {
             toast.success(`${displayName} link saved`);
@@ -251,7 +255,8 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
                 display_on_female_landing: showOnFemale,
                 display_on_male_landing: showOnMale,
                 avatar_url: avatarUrl || undefined, // Pass updated avatar URL
-                display_order: typeof displayOrder === 'string' ? (parseInt(displayOrder) || 999) : displayOrder
+                display_order: typeof displayOrder === 'string' ? (parseInt(displayOrder) || 999) : displayOrder,
+                slug: slug || undefined
             });
 
             if (profileResult.error) {
@@ -525,6 +530,18 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
                         </div>
 
                         <div className="space-y-2">
+                            <Label htmlFor="slug">Custom URL Slug</Label>
+                            <Input
+                                id="slug"
+                                value={slug}
+                                onChange={(e) => setSlug(e.target.value)}
+                                className="bg-white/5 border-white/10"
+                                placeholder="e.g. matt, sarah (must be unique)"
+                            />
+                            <p className="text-xs text-muted-foreground">Used for direct booking links (e.g. /booking?coach=matt)</p>
+                        </div>
+
+                        <div className="space-y-2">
                             <Label htmlFor="specialties">Specialties (comma separated)</Label>
                             <Input
                                 id="specialties"
@@ -603,25 +620,37 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
                                     {/* Consult Calendar (for sales calls) */}
                                     <div className="space-y-2">
                                         <Label htmlFor="consultUrl">Coaching Consult Calendar</Label>
-                                        <div className="flex gap-2">
+                                        <div className="grid gap-2">
                                             <Input
                                                 id="consultUrl"
                                                 value={consultUrl}
                                                 onChange={(e) => setConsultUrl(e.target.value)}
-                                                className="bg-white/5 border-white/10 flex-1"
+                                                className="bg-white/5 border-white/10"
                                                 placeholder="https://cal.com/username/consult"
                                             />
-                                            <Button
-                                                size="sm"
-                                                onClick={() => saveCalLink('consult', consultUrl)}
-                                                disabled={!consultUrl.trim()}
-                                                className="bg-emerald-600 hover:bg-emerald-700"
-                                            >
-                                                Save
-                                            </Button>
+                                            <div className="flex gap-2">
+                                                <div className="flex-1">
+                                                    <Input
+                                                        id="consultEventTypeId"
+                                                        value={consultEventTypeId}
+                                                        onChange={(e) => setConsultEventTypeId(e.target.value)}
+                                                        className="bg-white/5 border-white/10"
+                                                        placeholder="Event Type ID (e.g. 1234567)"
+                                                        type="number"
+                                                    />
+                                                </div>
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() => saveCalLink('consult', consultUrl)}
+                                                    disabled={!consultUrl.trim()}
+                                                    className="bg-emerald-600 hover:bg-emerald-700 whitespace-nowrap"
+                                                >
+                                                    Save & Update
+                                                </Button>
+                                            </div>
                                         </div>
                                         <p className="text-xs text-muted-foreground">
-                                            Used for sales calls. Source parameter will be added automatically (company-driven or coach-driven).
+                                            Used for sales calls. Event Type ID is required for the booking funnel. Source parameter will be added automatically.
                                         </p>
                                     </div>
 

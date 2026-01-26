@@ -11,7 +11,9 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
-import { convertLeadToClient, deleteLead, updateLeadAppointmentSetter } from '@/lib/actions/lead-actions'
+import { convertLeadToClient, deleteLead, updateLeadAppointmentSetter, getLeadActivity } from '@/lib/actions/lead-actions'
+import { LeadMetadataCard } from '@/components/leads/LeadMetadataCard'
+import { LeadJourneyStepper } from '@/components/leads/LeadJourneyStepper'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 
@@ -28,6 +30,15 @@ interface Lead {
     created_at: string
     updated_at: string
     booked_by_user_id: string | null
+    metadata?: Record<string, any>
+}
+
+interface ActivityLog {
+    id: string
+    type: string
+    description: string | null
+    created_at: string
+    metadata?: Record<string, any>
 }
 
 interface SimpleUser {
@@ -38,15 +49,32 @@ interface SimpleUser {
 interface LeadDetailClientProps {
     lead: Lead
     ghlLocationId?: string
+    resolvedCoachName?: string | null
 }
 
-export function LeadDetailClient({ lead, ghlLocationId }: LeadDetailClientProps) {
+export function LeadDetailClient({ lead, ghlLocationId, resolvedCoachName }: LeadDetailClientProps) {
     const router = useRouter()
     const [users, setUsers] = useState<SimpleUser[]>([])
     const [loadingUsers, setLoadingUsers] = useState(true)
     const [selectedSetter, setSelectedSetter] = useState<string>(lead.booked_by_user_id || '')
     const [updatingSetter, setUpdatingSetter] = useState(false)
     const [isAdmin, setIsAdmin] = useState(false)
+    const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([])
+    const [loadingActivity, setLoadingActivity] = useState(true)
+
+    useEffect(() => {
+        async function fetchActivity() {
+            try {
+                const logs = await getLeadActivity(lead.id)
+                setActivityLogs(logs || [])
+            } catch (e) {
+                console.error('Failed to fetch activity', e)
+            } finally {
+                setLoadingActivity(false)
+            }
+        }
+        fetchActivity()
+    }, [lead.id])
 
     // Fetch users for appointment setter dropdown and check if current user is admin
     useEffect(() => {
@@ -179,9 +207,17 @@ export function LeadDetailClient({ lead, ghlLocationId }: LeadDetailClientProps)
                 </div>
             </div>
 
-            <Separator className="bg-primary/10" />
+            <div className="mb-6">
+                <LeadJourneyStepper
+                    metadata={lead.metadata || null}
+                    status={lead.status}
+                    coachName={resolvedCoachName}
+                />
+            </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-200px)]">
+            <Separator className="bg-primary/10 mb-6" />
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-250px)]">
                 {/* Left Column: Identity & Contact (3 cols) */}
                 <div className="lg:col-span-3 space-y-6">
                     {/* Lead Details Card */}
@@ -263,10 +299,16 @@ export function LeadDetailClient({ lead, ghlLocationId }: LeadDetailClientProps)
 
                 {/* Main Column: Notes & Activity (6 cols) */}
                 <div className="lg:col-span-6 space-y-6 h-full flex flex-col">
-                    <Tabs defaultValue="notes" className="w-full flex-1 flex flex-col">
+                    {/* Metadata Card */}
+                    <LeadMetadataCard
+                        metadata={lead.metadata || null}
+                        resolvedCoachName={resolvedCoachName}
+                    />
+
+                    <Tabs defaultValue="activity" className="w-full flex-1 flex flex-col">
                         <TabsList className="grid w-full grid-cols-2">
-                            <TabsTrigger value="notes">Notes</TabsTrigger>
                             <TabsTrigger value="activity">Activity</TabsTrigger>
+                            <TabsTrigger value="notes">Notes</TabsTrigger>
                         </TabsList>
                         <TabsContent value="notes" className="mt-4 flex-1">
                             <Card className="bg-card/40 border-primary/5 backdrop-blur-sm h-full">
@@ -288,16 +330,41 @@ export function LeadDetailClient({ lead, ghlLocationId }: LeadDetailClientProps)
                             </Card>
                         </TabsContent>
                         <TabsContent value="activity" className="mt-4 flex-1">
-                            <Card className="bg-card/40 border-primary/5 backdrop-blur-sm h-full">
+                            <Card className="bg-card/40 border-primary/5 backdrop-blur-sm h-full max-h-[600px] overflow-y-auto">
                                 <CardHeader>
                                     <CardTitle>Activity Timeline</CardTitle>
                                     <CardDescription>Recent activity for this lead</CardDescription>
                                 </CardHeader>
                                 <CardContent>
-                                    <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
-                                        <Activity className="h-8 w-8 mb-2 opacity-50" />
-                                        <p>Activity tracking coming soon...</p>
-                                    </div>
+                                    {loadingActivity ? (
+                                        <div className="flex justify-center p-8">
+                                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                                        </div>
+                                    ) : activityLogs.length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
+                                            <Activity className="h-8 w-8 mb-2 opacity-50" />
+                                            <p>No activity recorded yet.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="relative space-y-6 pl-4 border-l border-primary/10 ml-2">
+                                            {activityLogs.map((log) => (
+                                                <div key={log.id} className="relative">
+                                                    <div className="absolute -left-[21px] mt-1.5 h-3 w-3 rounded-full border border-primary/30 bg-background" />
+                                                    <div className="flex flex-col gap-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-sm font-medium text-foreground">{log.type}</span>
+                                                            <span className="text-xs text-muted-foreground">
+                                                                {format(new Date(log.created_at), 'MMM d, h:mm a')}
+                                                            </span>
+                                                        </div>
+                                                        {log.description && (
+                                                            <p className="text-sm text-muted-foreground">{log.description}</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </CardContent>
                             </Card>
                         </TabsContent>
@@ -316,8 +383,8 @@ export function LeadDetailClient({ lead, ghlLocationId }: LeadDetailClientProps)
                                     <div
                                         key={status}
                                         className={`px-3 py-2 rounded-lg border transition-colors ${lead.status === status
-                                                ? 'border-neon-green bg-neon-green/10 text-neon-green'
-                                                : 'border-zinc-800 text-zinc-500'
+                                            ? 'border-neon-green bg-neon-green/10 text-neon-green'
+                                            : 'border-zinc-800 text-zinc-500'
                                             }`}
                                     >
                                         {status}

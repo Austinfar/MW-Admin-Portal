@@ -39,6 +39,7 @@ export interface User {
     display_on_female_landing?: boolean
     display_on_male_landing?: boolean
     display_order?: number
+    slug?: string
 }
 
 /**
@@ -741,6 +742,7 @@ export async function updateCoachProfile(userId: string, data: {
     display_on_male_landing?: boolean
     avatar_url?: string
     display_order?: number
+    slug?: string
 }) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()

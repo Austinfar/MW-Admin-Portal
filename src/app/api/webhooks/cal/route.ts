@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import crypto from 'crypto'
 import { parseName } from '@/lib/utils/name-parser'
+import { logLeadActivity } from '@/lib/actions/lead-actions'
 
 // Cal.com webhook event types
 type CalWebhookEvent =
@@ -347,7 +348,7 @@ async function syncLeadFromBooking(
     // Check if lead already exists
     const { data: existingLead } = await supabase
         .from('leads')
-        .select('id, status, phone, assigned_user_id')
+        .select('id, status, phone, assigned_user_id, metadata')
         .eq('email', attendee.email.toLowerCase())
         .single()
 
@@ -355,6 +356,15 @@ async function syncLeadFromBooking(
         // Build update object for existing lead
         const updates: Record<string, unknown> = {
             updated_at: new Date().toISOString()
+        }
+
+        // Merge new metadata (responses) with existing
+        if (payload.responses) {
+            updates.metadata = {
+                ...(existingLead.metadata as object || {}),
+                ...payload.responses,
+                last_booking_responses: payload.responses
+            }
         }
 
         // Update phone if we found one and lead doesn't have one
@@ -395,7 +405,11 @@ async function syncLeadFromBooking(
             source: source === 'company-driven' ? 'Company' : 'Coach Referral',
             description: `Created from Cal.com booking: ${payload.title}`,
             assigned_user_id: assignedUserId,
-            booked_by_user_id: assignedUserId
+            booked_by_user_id: assignedUserId,
+            metadata: {
+                ...(payload.responses || {}),
+                source_detail: 'Cal.com Booking'
+            }
         })
         .select('id')
         .single()
@@ -467,6 +481,15 @@ export async function POST(req: NextRequest) {
             case 'BOOKING_REQUESTED': {
                 // Sync lead from booking
                 const leadId = await syncLeadFromBooking(supabase, body.payload, source)
+
+                if (leadId) {
+                    await logLeadActivity(
+                        supabase,
+                        leadId,
+                        'Call Scheduled',
+                        `Booking created: ${body.payload.title}`
+                    )
+                }
 
                 // Upsert booking to database
                 if (body.payload.bookingId) {

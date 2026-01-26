@@ -13,6 +13,7 @@ export interface CalUserLink {
     url: string
     display_name: string | null
     is_active: boolean
+    event_type_id: number | null
     created_at: string
     updated_at: string
 }
@@ -134,7 +135,8 @@ export async function upsertCalLink(
     userId: string,
     linkType: CalLinkType,
     url: string,
-    displayName?: string
+    displayName?: string,
+    eventTypeId?: number | null
 ): Promise<{ success: boolean; error?: string; link?: CalUserLink }> {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -171,6 +173,7 @@ export async function upsertCalLink(
             link_type: linkType,
             url: url.trim(),
             display_name: finalDisplayName,
+            event_type_id: eventTypeId || null,
             is_active: true,
             updated_at: new Date().toISOString()
         }, {

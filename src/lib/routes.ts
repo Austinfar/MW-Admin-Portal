@@ -114,6 +114,21 @@ export const APP_ROUTES: AppRoute[] = [
         ]
     },
     {
+        label: 'Tools',
+        icon: BrainCircuit, // Using BrainCircuit as generic tools icon
+        color: 'text-indigo-500',
+        permission: 'can_view_business',
+        children: [
+            {
+                label: 'Link Generator',
+                icon: Lightbulb,
+                href: '/tools/links',
+                color: 'text-indigo-400',
+                permission: 'can_view_business'
+            }
+        ]
+    },
+    {
         label: 'Roadmap',
         icon: Lightbulb,
         href: '/roadmap',
