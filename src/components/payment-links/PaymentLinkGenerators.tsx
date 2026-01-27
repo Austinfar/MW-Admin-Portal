@@ -608,7 +608,11 @@ export function PaymentLinkGenerators({ prices, isTestMode, coaches, closers, cl
                     config={config}
                 />
 
-                <CreateSplitPaymentDialog prices={oneTimePrices} coaches={coaches} globalConfig={config}>
+                <CreateSplitPaymentDialog
+                    prices={oneTimePrices.filter(p => !p.product_name.includes('Strategy Call') && p.product_id !== 'prod_TlOkG2y9BVBXgg')}
+                    coaches={coaches}
+                    globalConfig={config}
+                >
                     <Card className="flex flex-col h-full border-2 border-border/50 hover:border-primary/20 transition-all duration-300 cursor-pointer group">
                         <CardHeader>
                             <div className="mb-2"><Split className="w-10 h-10 text-purple-500 mb-2" /></div>

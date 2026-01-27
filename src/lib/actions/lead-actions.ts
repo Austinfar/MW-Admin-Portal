@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, unstable_cache } from 'next/cache'
 import { assignTemplateToClient } from '@/lib/actions/onboarding'
 
 // Helper function to log lead activity
@@ -231,14 +231,45 @@ export async function updateLeadStatus(id: string, status: string) {
 }
 
 export async function deleteLead(id: string) {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
+    // First check if lead exists
+    const { data: lead, error: fetchError } = await supabase
+        .from('leads')
+        .select('id, first_name, last_name')
+        .eq('id', id)
+        .single()
+
+    if (fetchError || !lead) {
+        return { error: 'Lead not found' }
+    }
+
+    // Check for related records that would block deletion
+    const { data: paymentSchedules } = await supabase
+        .from('payment_schedules')
+        .select('id')
+        .eq('lead_id', id)
+        .limit(1)
+
+    if (paymentSchedules && paymentSchedules.length > 0) {
+        return { error: 'Cannot delete: Lead has payment schedules. Remove them first.' }
+    }
+
+    // Attempt delete
     const { error } = await supabase
         .from('leads')
         .delete()
         .eq('id', id)
 
-    if (error) return { error: error.message }
+    if (error) {
+        console.error('Delete lead error:', error)
+        // Handle specific error codes
+        if (error.code === '23503') {
+            return { error: 'Cannot delete: Lead has related records in other tables.' }
+        }
+        return { error: error.message }
+    }
+
     revalidatePath('/leads')
     return { success: true }
 }
@@ -496,4 +527,466 @@ export async function getLeadActivity(leadId: string) {
 
     return data
 }
+
+// ============================================
+// Enhanced Lead Functions for Killer Leads Page
+// ============================================
+
+import type { EnhancedLead, LeadStats, LeadFunnelData, LeadSourceData } from '@/types/lead'
+
+async function _getEnhancedLeads(): Promise<EnhancedLead[]> {
+    const supabase = createAdminClient()
+
+    const { data, error } = await supabase
+        .from('leads')
+        .select(`
+            *,
+            assigned_user:users!leads_assigned_user_id_fkey(id, name),
+            booked_by_user:users!leads_booked_by_user_id_fkey(id, name)
+        `)
+        .neq('status', 'converted')
+        .order('is_priority', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
+
+    if (error) {
+        console.error('Error fetching enhanced leads:', error)
+        return []
+    }
+
+    return data as EnhancedLead[]
+}
+
+export const getEnhancedLeads = unstable_cache(
+    _getEnhancedLeads,
+    ['enhanced-leads'],
+    { revalidate: 60, tags: ['leads'] }
+)
+
+async function _getSettersAndClosers(): Promise<{ id: string; name: string; role: string }[]> {
+    const supabase = createAdminClient()
+
+    const { data, error } = await supabase
+        .from('users')
+        .select('id, name, role')
+        .in('role', ['closer', 'setter', 'admin', 'owner'])
+        .order('name')
+
+    if (error) {
+        console.error('Error fetching setters and closers:', error)
+        return []
+    }
+
+    return data || []
+}
+
+export const getSettersAndClosers = unstable_cache(
+    _getSettersAndClosers,
+    ['setters-closers'],
+    { revalidate: 300, tags: ['users'] }
+)
+
+export async function bulkUpdateLeadStatus(leadIds: string[], status: string) {
+    const supabase = await createClient()
+
+    const { error } = await supabase
+        .from('leads')
+        .update({ status, updated_at: new Date().toISOString() })
+        .in('id', leadIds)
+
+    if (error) {
+        console.error('Error bulk updating lead status:', error)
+        return { error: error.message }
+    }
+
+    revalidatePath('/leads')
+    return { success: true, updated: leadIds.length }
+}
+
+export async function bulkAssignUser(
+    leadIds: string[],
+    userId: string | null,
+    type: 'setter' | 'closer'
+) {
+    const supabase = await createClient()
+
+    const updateField = type === 'setter' ? 'booked_by_user_id' : 'assigned_user_id'
+
+    const { error } = await supabase
+        .from('leads')
+        .update({ [updateField]: userId, updated_at: new Date().toISOString() })
+        .in('id', leadIds)
+
+    if (error) {
+        console.error(`Error bulk assigning ${type}:`, error)
+        return { error: error.message }
+    }
+
+    revalidatePath('/leads')
+    return { success: true, updated: leadIds.length }
+}
+
+export async function bulkDeleteLeads(leadIds: string[]) {
+    const supabase = createAdminClient()
+
+    // Check for leads with payment schedules
+    const { data: blockedLeads } = await supabase
+        .from('payment_schedules')
+        .select('lead_id')
+        .in('lead_id', leadIds)
+
+    if (blockedLeads && blockedLeads.length > 0) {
+        const blockedCount = new Set(blockedLeads.map(b => b.lead_id)).size
+        return { error: `Cannot delete: ${blockedCount} lead(s) have payment schedules. Remove them first.` }
+    }
+
+    const { error } = await supabase
+        .from('leads')
+        .delete()
+        .in('id', leadIds)
+
+    if (error) {
+        console.error('Error bulk deleting leads:', error)
+        if (error.code === '23503') {
+            return { error: 'Cannot delete: Some leads have related records in other tables.' }
+        }
+        return { error: error.message }
+    }
+
+    revalidatePath('/leads')
+    return { success: true, deleted: leadIds.length }
+}
+
+export async function bulkTogglePriority(leadIds: string[], isPriority: boolean) {
+    const supabase = await createClient()
+
+    const { error } = await supabase
+        .from('leads')
+        .update({ is_priority: isPriority, updated_at: new Date().toISOString() })
+        .in('id', leadIds)
+
+    if (error) {
+        console.error('Error bulk toggling priority:', error)
+        return { error: error.message }
+    }
+
+    revalidatePath('/leads')
+    return { success: true, updated: leadIds.length }
+}
+
+export async function toggleLeadPriority(leadId: string) {
+    const supabase = await createClient()
+
+    // Get current priority
+    const { data: lead } = await supabase
+        .from('leads')
+        .select('is_priority')
+        .eq('id', leadId)
+        .single()
+
+    const newPriority = !(lead?.is_priority ?? false)
+
+    const { error } = await supabase
+        .from('leads')
+        .update({ is_priority: newPriority, updated_at: new Date().toISOString() })
+        .eq('id', leadId)
+
+    if (error) {
+        console.error('Error toggling lead priority:', error)
+        return { error: error.message }
+    }
+
+    revalidatePath('/leads')
+    revalidatePath(`/leads/${leadId}`)
+    return { success: true, is_priority: newPriority }
+}
+
+async function _getLeadStats(): Promise<LeadStats> {
+    const supabase = createAdminClient()
+
+    const { data: leads, error } = await supabase
+        .from('leads')
+        .select('id, status, is_priority, metadata')
+        .neq('status', 'converted')
+
+    if (error || !leads) {
+        console.error('Error fetching lead stats:', error)
+        return { total: 0, priority: 0, booked: 0, bookingRate: 0, awaitingFollowUp: 0 }
+    }
+
+    const total = leads.length
+    const priority = leads.filter(l => l.is_priority).length
+    const booked = leads.filter(l => {
+        const meta = l.metadata as Record<string, unknown> | null
+        return meta?.consultation_scheduled_for || l.status === 'Appt Set'
+    }).length
+    const bookingRate = total > 0 ? Math.round((booked / total) * 100) : 0
+
+    // Awaiting follow-up: New or Contacted leads older than 2 days without appointment
+    const twoDaysAgo = new Date()
+    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2)
+    const awaitingFollowUp = leads.filter(l => {
+        if (!['New', 'Contacted'].includes(l.status)) return false
+        const meta = l.metadata as Record<string, unknown> | null
+        if (meta?.consultation_scheduled_for) return false
+        return true
+    }).length
+
+    return { total, priority, booked, bookingRate, awaitingFollowUp }
+}
+
+export const getLeadStats = unstable_cache(
+    _getLeadStats,
+    ['lead-stats'],
+    { revalidate: 60, tags: ['leads', 'lead_stats'] }
+)
+
+async function _getLeadFunnelData(period: '7d' | '30d' | 'all' = '30d'): Promise<LeadFunnelData> {
+    const supabase = createAdminClient()
+
+    let query = supabase
+        .from('leads')
+        .select('id, status, metadata, created_at')
+        .neq('status', 'converted')
+
+    // Apply time filter
+    if (period !== 'all') {
+        const daysAgo = period === '7d' ? 7 : 30
+        const startDate = new Date()
+        startDate.setDate(startDate.getDate() - daysAgo)
+        query = query.gte('created_at', startDate.toISOString())
+    }
+
+    const { data: leads, error } = await query
+
+    if (error || !leads) {
+        console.error('Error fetching funnel data:', error)
+        return {
+            contactsSubmitted: 0,
+            coachSelected: 0,
+            callBooked: 0,
+            questionnaireDone: 0,
+            closedWon: 0,
+            conversionRate: 0,
+            period
+        }
+    }
+
+    const contactsSubmitted = leads.length
+    const coachSelected = leads.filter(l => {
+        const meta = l.metadata as Record<string, unknown> | null
+        return meta?.coach_selected || meta?.coach_selected_id
+    }).length
+    const callBooked = leads.filter(l => {
+        const meta = l.metadata as Record<string, unknown> | null
+        return meta?.consultation_scheduled_for || l.status === 'Appt Set'
+    }).length
+    const questionnaireDone = leads.filter(l => {
+        const meta = l.metadata as Record<string, unknown> | null
+        return meta?.questionnaire_completed_at || meta?.questionnaire
+    }).length
+    const closedWon = leads.filter(l => l.status === 'Closed Won').length
+
+    const conversionRate = contactsSubmitted > 0
+        ? Math.round((closedWon / contactsSubmitted) * 1000) / 10
+        : 0
+
+    return {
+        contactsSubmitted,
+        coachSelected,
+        callBooked,
+        questionnaireDone,
+        closedWon,
+        conversionRate,
+        period
+    }
+}
+
+// Cached versions for each period
+export const getLeadFunnelData = async (period: '7d' | '30d' | 'all' = '30d'): Promise<LeadFunnelData> => {
+    const cachedFn = unstable_cache(
+        () => _getLeadFunnelData(period),
+        [`lead-funnel-${period}`],
+        { revalidate: 120, tags: ['leads', 'lead_funnel'] }
+    )
+    return cachedFn()
+}
+
+async function _getLeadSourceBreakdown(): Promise<LeadSourceData[]> {
+    const supabase = createAdminClient()
+
+    const { data: leads, error } = await supabase
+        .from('leads')
+        .select('source')
+        .neq('status', 'converted')
+
+    if (error || !leads) {
+        console.error('Error fetching source breakdown:', error)
+        return []
+    }
+
+    // Count by source
+    const sourceCounts: Record<string, number> = {}
+    leads.forEach(lead => {
+        const source = lead.source || 'Unknown'
+        sourceCounts[source] = (sourceCounts[source] || 0) + 1
+    })
+
+    const total = leads.length
+    const sourceData: LeadSourceData[] = Object.entries(sourceCounts)
+        .map(([source, count]) => ({
+            source,
+            count,
+            percentage: total > 0 ? Math.round((count / total) * 100) : 0
+        }))
+        .sort((a, b) => b.count - a.count)
+
+    return sourceData
+}
+
+export const getLeadSourceBreakdown = unstable_cache(
+    _getLeadSourceBreakdown,
+    ['lead-source-breakdown'],
+    { revalidate: 120, tags: ['leads', 'lead_sources'] }
+)
+
+export async function createFollowUpTask(
+    leadId: string,
+    taskData: {
+        taskType: 'call' | 'email' | 'sms' | 'other'
+        scheduledFor: string
+        notes?: string
+    }
+) {
+    const supabase = await createClient()
+
+    // Get current user
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Not authenticated' }
+
+    // Log as activity for now (could integrate with a dedicated tasks table)
+    await logLeadActivity(
+        supabase,
+        leadId,
+        'Follow-up Scheduled',
+        `${taskData.taskType.charAt(0).toUpperCase() + taskData.taskType.slice(1)} follow-up scheduled for ${new Date(taskData.scheduledFor).toLocaleDateString()}${taskData.notes ? `: ${taskData.notes}` : ''}`
+    )
+
+    revalidatePath('/leads')
+    revalidatePath(`/leads/${leadId}`)
+    return { success: true }
+}
+
+export async function addToCallQueue(leadId: string) {
+    const supabase = await createClient()
+
+    // Get current user
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Not authenticated' }
+
+    // Log as activity
+    await logLeadActivity(
+        supabase,
+        leadId,
+        'Added to Call Queue',
+        'Lead added to today\'s call queue for immediate follow-up.'
+    )
+
+    revalidatePath('/leads')
+    revalidatePath(`/leads/${leadId}`)
+    return { success: true }
+}
+
+export async function updateLeadNotes(leadId: string, notes: string) {
+    const supabase = createAdminClient()
+
+    const { error } = await supabase
+        .from('leads')
+        .update({
+            description: notes,
+            updated_at: new Date().toISOString()
+        })
+        .eq('id', leadId)
+
+    if (error) {
+        console.error('Error updating lead notes:', error)
+        return { error: error.message }
+    }
+
+    // Log activity
+    await logLeadActivity(supabase, leadId, 'Notes Updated', 'Lead notes were updated')
+
+    revalidatePath('/leads')
+    revalidatePath(`/leads/${leadId}`)
+    return { success: true }
+}
+
+export async function updateLeadCloser(leadId: string, closerId: string | null) {
+    const supabase = createAdminClient()
+
+    // Get closer name for activity log
+    let closerName = 'None'
+    if (closerId) {
+        const { data: closer } = await supabase
+            .from('users')
+            .select('name')
+            .eq('id', closerId)
+            .single()
+        closerName = closer?.name || 'Unknown'
+    }
+
+    const { error } = await supabase
+        .from('leads')
+        .update({
+            assigned_user_id: closerId,
+            updated_at: new Date().toISOString()
+        })
+        .eq('id', leadId)
+
+    if (error) {
+        console.error('Error updating lead closer:', error)
+        return { error: error.message }
+    }
+
+    // Log activity
+    await logLeadActivity(
+        supabase,
+        leadId,
+        'Closer Assigned',
+        `Closer changed to ${closerName}`
+    )
+
+    revalidatePath('/leads')
+    revalidatePath(`/leads/${leadId}`)
+    return { success: true }
+}
+
+export async function markLeadNoShow(leadId: string) {
+    const supabase = createAdminClient()
+
+    const { error } = await supabase
+        .from('leads')
+        .update({
+            status: 'No Show',
+            updated_at: new Date().toISOString()
+        })
+        .eq('id', leadId)
+
+    if (error) {
+        console.error('Error marking lead as no show:', error)
+        return { error: error.message }
+    }
+
+    // Log activity
+    await logLeadActivity(
+        supabase,
+        leadId,
+        'Status Changed',
+        'Lead marked as No Show - did not attend scheduled consultation'
+    )
+
+    revalidatePath('/leads')
+    revalidatePath(`/leads/${leadId}`)
+    return { success: true }
+}
+
 

@@ -57,13 +57,13 @@ export default function LinkGeneratorPage() {
         // 1. Attribution
         if (leadType === 'coach' && coach !== 'none') {
             params.set('lead_type', 'coach')
-            params.set('coach_selected', coach)
+            params.set('coach', coach)
         } else {
             params.set('lead_type', 'company')
             if (coach !== 'none') {
                 // Even if company lead, we might want to pre-select a coach? 
                 // Usually for company leads we don't. But let's support it if selected.
-                params.set('coach_selected', coach)
+                params.set('coach', coach)
             }
         }
 

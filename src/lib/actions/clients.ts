@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { Client, ClientStats, EnhancedClient } from '@/types/client'
-import { revalidatePath, unstable_cache, revalidateTag } from 'next/cache'
+import { revalidatePath, unstable_cache } from 'next/cache'
 import { subDays } from 'date-fns'
 
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -54,8 +54,8 @@ export async function getClient(id: string) {
     return data as Client
 }
 
-export async function getClientTypes() {
-    const supabase = await createClient()
+async function _getClientTypes() {
+    const supabase = createAdminClient()
 
     const { data, error } = await supabase
         .from('client_types')
@@ -68,9 +68,14 @@ export async function getClientTypes() {
         return []
     }
 
-
     return data
 }
+
+export const getClientTypes = unstable_cache(
+    _getClientTypes,
+    ['client-types'],
+    { revalidate: 3600, tags: ['client_types'] }
+)
 
 export interface Coach {
     id: string
@@ -80,7 +85,7 @@ export interface Coach {
     job_title: string
 }
 
-export async function getCoaches(): Promise<Coach[]> {
+async function _getCoaches(): Promise<Coach[]> {
     const supabase = createAdminClient()
 
     const { data, error } = await supabase
@@ -97,6 +102,12 @@ export async function getCoaches(): Promise<Coach[]> {
 
     return data as Coach[]
 }
+
+export const getCoaches = unstable_cache(
+    _getCoaches,
+    ['coaches'],
+    { revalidate: 300, tags: ['users', 'coaches'] }
+)
 
 import { assignTemplateToClient } from './onboarding'
 
@@ -222,7 +233,7 @@ export async function updateClient(id: string, data: Partial<Client>) {
 }
 
 // Get enhanced client data with payment and onboarding info
-export async function getEnhancedClients(): Promise<EnhancedClient[]> {
+async function _getEnhancedClients(): Promise<EnhancedClient[]> {
     const supabase = createAdminClient()
 
     // Get clients with basic data
@@ -287,8 +298,14 @@ export async function getEnhancedClients(): Promise<EnhancedClient[]> {
     })) as EnhancedClient[]
 }
 
+export const getEnhancedClients = unstable_cache(
+    _getEnhancedClients,
+    ['enhanced-clients'],
+    { revalidate: 60, tags: ['clients'] }
+)
+
 // Get client statistics for dashboard cards
-export async function getClientStats(userId?: string, ownOnly?: boolean): Promise<ClientStats> {
+async function _getClientStats(userId?: string, ownOnly?: boolean): Promise<ClientStats> {
     const supabase = createAdminClient()
 
     // Get all clients
@@ -348,6 +365,16 @@ export async function getClientStats(userId?: string, ownOnly?: boolean): Promis
         atRisk: atRiskClients.length,
         endingSoon: endingSoonClients.length
     }
+}
+
+export const getClientStats = async (userId?: string, ownOnly?: boolean): Promise<ClientStats> => {
+    const cacheKey = ownOnly && userId ? `client-stats-${userId}` : 'client-stats-all'
+    const cachedFn = unstable_cache(
+        () => _getClientStats(userId, ownOnly),
+        [cacheKey],
+        { revalidate: 120, tags: ['clients', 'client_stats'] }
+    )
+    return cachedFn()
 }
 
 // Bulk update client status

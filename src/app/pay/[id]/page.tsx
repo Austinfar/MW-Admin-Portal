@@ -303,6 +303,9 @@ function getPlanDescription(planName: string = '') {
     if (lower.includes('nutrition')) {
         return "You are one step away from dialing in your nutrition, and living a better & healthier life for it."
     }
+    if (lower.includes('strategy') || lower.includes('programming')) {
+        return "1:1 Strategy Call + Custom Programming - is a one-time, private coaching call designed to eliminate guesswork and give you a clear, personalized roadmap based on where you are right now. We start with a 60-minute 1:1 call where we break down your current training, nutrition, lifestyle, and goals. From there, I design a fully customized training, nutrition, and supplement protocol tailored to your body, schedule, and objectives."
+    }
     return "You're one step away from transforming your lifestyle. Complete your enrollment below."
 }
 

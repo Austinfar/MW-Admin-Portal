@@ -31,7 +31,8 @@ export async function getStripeProducts() {
         const ALLOWED_PRODUCTS = [
             "1:1 Competition Prep Coaching",
             "1:1 Lifestyle Fitness Coaching",
-            "1:1 Nutrition Coaching"
+            "1:1 Nutrition Coaching",
+            "1:1 Strategy Call + Custom Programming"
         ]
 
         const filteredProducts = ALLOWED_PRODUCTS.length > 0

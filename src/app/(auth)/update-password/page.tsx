@@ -1,49 +1,26 @@
 'use client'
 
 import Image from 'next/image'
-import Link from 'next/link'
-import { login, signup } from './actions'
-// ... existing imports ...
-
-// ... inside component ...
-<CardHeader className="space-y-2 pb-6">
-    {/* Logo */}
-    <div className="flex justify-center mb-2">
-        <Image
-            src="/logo-glow.svg"
-            alt="MW Fitness Coaching"
-            width={240}
-            height={80}
-            className="object-contain"
-            priority
-        />
-    </div>
-    <CardDescription className="text-center text-gray-400">
-        Enter your credentials to access the dashboard
-    </CardDescription>
-</CardHeader>
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { useState } from 'react'
 import { MWBackground } from '@/components/auth/MWBackground'
 import { Loader2 } from 'lucide-react'
+import { updatePassword } from './actions'
 
-export default function LoginPage() {
+export default function UpdatePasswordPage() {
     const [isLoading, setIsLoading] = useState(false)
 
     async function handleSubmit(formData: FormData) {
         setIsLoading(true)
-        const result = await login(formData)
+        const result = await updatePassword(formData)
         setIsLoading(false)
 
         if (result && 'error' in result) {
             toast.error(result.error)
-        } else if (!result) {
-            // Login successful (redirect handled by action)
-            toast.success('Logged in successfully')
         }
     }
 
@@ -67,36 +44,27 @@ export default function LoginPage() {
                             />
                         </div>
                         <CardDescription className="text-center text-gray-400">
-                            Enter your credentials to access the dashboard
+                            Enter your new password below
                         </CardDescription>
                     </CardHeader>
                     <form action={handleSubmit}>
                         <CardContent className="space-y-4">
                             <div className="space-y-2">
-                                <Label htmlFor="email" className="text-gray-300">Email</Label>
-                                <Input
-                                    id="email"
-                                    name="email"
-                                    type="email"
-                                    placeholder="coach@example.com"
-                                    required
-                                    disabled={isLoading}
-                                    className="bg-[#1A1A1A] border-gray-800 text-white placeholder:text-gray-600 focus:border-green-500 focus:ring-green-500/20"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <Label htmlFor="password" className="text-gray-300">Password</Label>
-                                    <Link
-                                        href="/forgot-password"
-                                        className="text-xs text-green-500 hover:text-green-400 font-medium tab-index-[-1]"
-                                    >
-                                        Forgot password?
-                                    </Link>
-                                </div>
+                                <Label htmlFor="password" className="text-gray-300">New Password</Label>
                                 <Input
                                     id="password"
                                     name="password"
+                                    type="password"
+                                    required
+                                    disabled={isLoading}
+                                    className="bg-[#1A1A1A] border-gray-800 text-white focus:border-green-500 focus:ring-green-500/20"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="confirmPassword" className="text-gray-300">Confirm Password</Label>
+                                <Input
+                                    id="confirmPassword"
+                                    name="confirmPassword"
                                     type="password"
                                     required
                                     disabled={isLoading}
@@ -113,10 +81,10 @@ export default function LoginPage() {
                                 {isLoading ? (
                                     <>
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin text-black" />
-                                        Signing in...
+                                        Updating Password...
                                     </>
                                 ) : (
-                                    'Sign In'
+                                    'Update Password'
                                 )}
                             </Button>
                         </CardFooter>

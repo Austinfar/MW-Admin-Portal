@@ -1,8 +1,13 @@
 import { Suspense } from 'react'
-import { getLeads } from '@/lib/actions/lead-actions'
-import { LeadsTable } from '@/components/leads/LeadsTable'
-import { Plus } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import {
+    getEnhancedLeads,
+    getSettersAndClosers,
+    getLeadStats,
+    getLeadFunnelData,
+    getLeadSourceBreakdown
+} from '@/lib/actions/lead-actions'
+import { getCurrentUserProfile } from '@/lib/actions/profile'
+import { LeadsPageContent } from '@/components/leads/LeadsPageContent'
 import { SyncGHLButton } from '@/components/leads/SyncGHLButton'
 import { AddLeadDialog } from '@/components/leads/AddLeadDialog'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -11,7 +16,15 @@ import { protectRoute } from '@/lib/protect-route'
 export default async function LeadsPage() {
     await protectRoute('can_view_leads')
 
-    const leads = await getLeads()
+    // Fetch all data in parallel
+    const [leads, users, currentUser, stats, funnelData, sourceData] = await Promise.all([
+        getEnhancedLeads(),
+        getSettersAndClosers(),
+        getCurrentUserProfile(),
+        getLeadStats(),
+        getLeadFunnelData('30d'),
+        getLeadSourceBreakdown()
+    ])
 
     return (
         <div className="flex-1 space-y-4 p-8 pt-6">
@@ -24,7 +37,14 @@ export default async function LeadsPage() {
             </div>
 
             <Suspense fallback={<LeadsSkeleton />}>
-                <LeadsTable initialLeads={leads || []} />
+                <LeadsPageContent
+                    leads={leads || []}
+                    users={users || []}
+                    currentUserId={currentUser?.id}
+                    stats={stats}
+                    funnelData={funnelData}
+                    sourceData={sourceData}
+                />
             </Suspense>
         </div>
     )
@@ -32,15 +52,32 @@ export default async function LeadsPage() {
 
 function LeadsSkeleton() {
     return (
-        <div className="space-y-4">
-            <div className="flex items-center justify-between">
-                <Skeleton className="h-8 w-[250px]" />
-                <Skeleton className="h-8 w-[100px]" />
+        <div className="space-y-6">
+            {/* Stats skeleton */}
+            <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+                {[...Array(4)].map((_, i) => (
+                    <Skeleton key={i} className="h-[120px] rounded-xl" />
+                ))}
             </div>
-            <div className="rounded-md border">
-                <div className="h-24 bg-muted/50" />
-                <div className="h-24" />
-                <div className="h-24 bg-muted/50" />
+
+            {/* Funnel & Source skeleton */}
+            <div className="grid gap-6 md:grid-cols-3">
+                <Skeleton className="h-[300px] rounded-xl md:col-span-2" />
+                <Skeleton className="h-[300px] rounded-xl" />
+            </div>
+
+            {/* Table skeleton */}
+            <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                    <Skeleton className="h-8 w-[250px]" />
+                    <Skeleton className="h-8 w-[100px]" />
+                </div>
+                <div className="rounded-md border border-zinc-800">
+                    <div className="h-16 bg-muted/20" />
+                    {[...Array(5)].map((_, i) => (
+                        <div key={i} className={i % 2 === 0 ? "h-16 bg-muted/10" : "h-16"} />
+                    ))}
+                </div>
             </div>
         </div>
     )
