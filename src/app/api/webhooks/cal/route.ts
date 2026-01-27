@@ -523,9 +523,18 @@ export async function POST(req: NextRequest) {
                 // Check if this is a consult call and invite Fireflies if configured
                 const firefliesEmail = process.env.FIREFLIES_EMAIL
                 if (firefliesEmail && body.payload.bookingId) {
+                    const title = body.payload.title?.toLowerCase() || ''
+                    const slug = body.payload.eventTypeSlug?.toLowerCase() || ''
+
                     const isConsult =
-                        (body.payload.title?.toLowerCase().includes('consult')) ||
-                        (body.payload.eventTypeSlug?.toLowerCase().includes('consult'))
+                        title.includes('consult') ||
+                        title.includes('strategy') ||
+                        title.includes('discovery') ||
+                        title.includes('intro') ||
+                        slug.includes('consult') ||
+                        slug.includes('strategy') ||
+                        slug.includes('discovery') ||
+                        slug.includes('intro')
 
                     if (isConsult) {
                         try {
