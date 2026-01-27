@@ -79,6 +79,7 @@ export const ContractVariablesSchema = z.object({
     // Program Info
     program_name: z.string(),
     program_term_months: z.number(),
+    program_term_letters: z.string(),
     monthly_rate: z.number().optional(),
     total_program_value: z.number().optional(),
 
@@ -178,6 +179,7 @@ export interface RenewContractInput {
 export const GHL_CONTRACT_FIELD_KEYS = {
     program_name: 'mw_contract_program_name',
     term_months: 'mw_contract_term_months',
+    term_letters: 'mw_contract_term_letters',
     monthly_rate: 'mw_contract_monthly_rate',
     total_value: 'mw_contract_total_value',
     start_date: 'mw_contract_start_date',

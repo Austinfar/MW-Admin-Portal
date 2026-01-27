@@ -95,6 +95,8 @@ export async function upsertLead(supabase: any, data: {
         leadId = newLead.id
     }
 
+
+
     if (leadId) {
         // Log activity
         await logLeadActivity(
@@ -112,6 +114,34 @@ export async function upsertLead(supabase: any, data: {
                 'Questionnaire Submitted',
                 'Client submitted questionnaire answers.'
             )
+        }
+
+        // Sync to GHL immediately
+        try {
+            const tags = ['landing_page_submission']
+            if (metadata?.questionnaire) tags.push('questionnaire_submitted')
+
+            // Prepare GHL payload
+            const ghlData: any = {
+                email,
+                firstName,
+                lastName,
+                phone,
+                tags
+            }
+
+            // Only set status for new leads to avoid resetting pipeline stage for existing leads
+            if (!existingLead) {
+                ghlData.status = 'New'
+            }
+
+            const ghlResult = await pushToGHL(ghlData)
+
+            if (ghlResult.ghlContactId) {
+                await supabase.from('leads').update({ ghl_contact_id: ghlResult.ghlContactId }).eq('id', leadId)
+            }
+        } catch (error) {
+            console.error('GHL Direct Sync Failed:', error)
         }
     }
 

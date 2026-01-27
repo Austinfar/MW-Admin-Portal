@@ -39,6 +39,20 @@ interface ContractData {
     down_payment?: number | null
     installment_count?: number | null
     installment_amount?: number | null
+    schedule_json?: any[]
+}
+
+/**
+ * Convert number to words (basic implementation for contract terms)
+ */
+function numberToWords(num: number): string {
+    const words: Record<number, string> = {
+        1: 'One', 2: 'Two', 3: 'Three', 4: 'Four', 5: 'Five',
+        6: 'Six', 7: 'Seven', 8: 'Eight', 9: 'Nine', 10: 'Ten',
+        11: 'Eleven', 12: 'Twelve', 18: 'Eighteen', 24: 'Twenty-Four',
+        36: 'Thirty-Six'
+    }
+    return words[num] || num.toString()
 }
 
 /**
@@ -53,7 +67,26 @@ export function buildContractVariables(
     if (contract.payment_type === 'paid_in_full') {
         paymentScheduleDescription = `Paid in Full: $${contract.total_value?.toFixed(2) || '0.00'}`
     } else if (contract.payment_type === 'split_pay') {
-        paymentScheduleDescription = `Split Payment: $${contract.down_payment?.toFixed(2) || '0.00'} down, then ${contract.installment_count || 0} payments of $${contract.installment_amount?.toFixed(2) || '0.00'}`
+        if (contract.schedule_json && Array.isArray(contract.schedule_json) && contract.schedule_json.length > 0) {
+            // Custom split payment schedule from schedule_json
+            const parts: string[] = []
+
+            contract.schedule_json.forEach((item, index) => {
+                const amount = item.amount ? `$${Number(item.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '$0.00'
+                const date = item.date ? format(new Date(item.date), 'MMM d, yyyy') : 'Date TBD'
+
+                if (index === 0) {
+                    parts.push(`• Initial Deposit: ${amount} (Paid Immediately)`)
+                } else {
+                    parts.push(`• Installment ${index}: ${amount} due on ${date}`)
+                }
+            })
+
+            paymentScheduleDescription = parts.join('\n')
+        } else {
+            // Standard uniform split payment fallback
+            paymentScheduleDescription = `Split Payment: $${contract.down_payment?.toFixed(2) || '0.00'} down, then ${contract.installment_count || 0} payments of $${contract.installment_amount?.toFixed(2) || '0.00'}`
+        }
     } else if (contract.payment_type === 'monthly') {
         paymentScheduleDescription = `Monthly Subscription: $${contract.monthly_rate?.toFixed(2) || '0.00'}/month for ${contract.program_term_months} months`
     }
@@ -67,6 +100,7 @@ export function buildContractVariables(
         // Program Info
         program_name: contract.program_name,
         program_term_months: contract.program_term_months,
+        program_term_letters: numberToWords(contract.program_term_months),
         monthly_rate: contract.monthly_rate || undefined,
         total_program_value: contract.total_value || undefined,
 
@@ -102,6 +136,9 @@ function variablesToGHLCustomFields(variables: ContractVariables): Record<string
     }
     if (variables.program_term_months) {
         customFields[GHL_CONTRACT_FIELD_KEYS.term_months] = variables.program_term_months.toString()
+    }
+    if (variables.program_term_letters) {
+        customFields[GHL_CONTRACT_FIELD_KEYS.term_letters] = variables.program_term_letters
     }
     if (variables.monthly_rate !== undefined) {
         customFields[GHL_CONTRACT_FIELD_KEYS.monthly_rate] = variables.monthly_rate.toString()
@@ -254,6 +291,20 @@ export async function getContractVariablesForClient(
         ? (coach as { name: string; email: string })
         : null
 
+    // Fetch payment schedule if present to get schedule_json
+    let scheduleJson: any[] | undefined
+    if (contract.payment_schedule_id) {
+        const { data: schedule } = await supabase
+            .from('payment_schedules')
+            .select('schedule_json')
+            .eq('id', contract.payment_schedule_id)
+            .single()
+
+        if (schedule?.schedule_json) {
+            scheduleJson = schedule.schedule_json as any[]
+        }
+    }
+
     const variables = buildContractVariables(
         {
             id: client.id,
@@ -274,6 +325,7 @@ export async function getContractVariablesForClient(
             down_payment: contract.down_payment,
             installment_count: contract.installment_count,
             installment_amount: contract.installment_amount,
+            schedule_json: scheduleJson,
         }
     )
 
