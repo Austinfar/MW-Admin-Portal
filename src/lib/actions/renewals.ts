@@ -57,19 +57,30 @@ export async function getExpiringClients(
     const results: RenewalCalendarEvent[] = []
 
     for (const contract of contracts) {
-        const client = contract.client as {
+        // Handle Supabase returning array for single relation
+        const clientData = contract.client
+        const client = Array.isArray(clientData) ? clientData[0] : clientData
+
+        if (!client) continue
+
+        // Extract coach from potentially nested array
+        const coachData = (client as Record<string, unknown>).assigned_coach
+        const coach = Array.isArray(coachData) ? coachData[0] : coachData
+        const coachName = coach && typeof coach === 'object' && 'name' in coach
+            ? (coach as { name: string }).name
+            : null
+
+        // Cast to expected shape
+        const typedClient = client as {
             id: string
             name: string
             email: string
             renewal_status: RenewalStatus | null
             assigned_coach_id: string | null
-            assigned_coach: { id: string; name: string } | null
         }
 
-        if (!client) continue
-
         // Filter by coach if specified
-        if (coachId && client.assigned_coach_id !== coachId) continue
+        if (coachId && typedClient.assigned_coach_id !== coachId) continue
 
         const endDate = parseISO(contract.end_date)
         const daysUntil = differenceInDays(endDate, today)
@@ -79,16 +90,16 @@ export async function getExpiringClients(
         if (!includeExpired && daysUntil < 0) continue
 
         results.push({
-            clientId: client.id,
-            clientName: client.name,
-            clientEmail: client.email,
-            coachId: client.assigned_coach_id,
-            coachName: client.assigned_coach?.name || null,
+            clientId: typedClient.id,
+            clientName: typedClient.name,
+            clientEmail: typedClient.email,
+            coachId: typedClient.assigned_coach_id,
+            coachName: coachName,
             contractId: contract.id,
             contractNumber: contract.contract_number,
             contractEndDate: contract.end_date,
             programName: contract.program_name,
-            renewalStatus: client.renewal_status || 'pending',
+            renewalStatus: typedClient.renewal_status || 'pending',
             daysUntilExpiration: daysUntil,
         })
     }
@@ -173,38 +184,52 @@ export async function getClientsNeedingReminders(): Promise<{
     const sevenDay: RenewalCalendarEvent[] = []
 
     for (const contract of contracts) {
-        const client = contract.client as {
+        // Handle Supabase returning array for single relation
+        const clientData = contract.client
+        const client = Array.isArray(clientData) ? clientData[0] : clientData
+
+        if (!client) continue
+
+        // Extract coach from potentially nested array
+        const coachData = (client as Record<string, unknown>).assigned_coach
+        const coach = Array.isArray(coachData) ? coachData[0] : coachData
+        const coachName = coach && typeof coach === 'object' && 'name' in coach
+            ? (coach as { name: string }).name
+            : null
+        const coachSlackId = coach && typeof coach === 'object' && 'slack_user_id' in coach
+            ? (coach as { slack_user_id: string | null }).slack_user_id
+            : null
+
+        // Cast to expected shape
+        const typedClient = client as {
             id: string
             name: string
             email: string
             renewal_status: RenewalStatus | null
             renewal_reminders_sent: { '30_day': string | null; '14_day': string | null; '7_day': string | null } | null
             assigned_coach_id: string | null
-            assigned_coach: { id: string; name: string; slack_user_id: string | null } | null
         }
-
-        if (!client) continue
 
         const endDate = parseISO(contract.end_date)
         const daysUntil = differenceInDays(endDate, today)
-        const remindersSent = client.renewal_reminders_sent || { '30_day': null, '14_day': null, '7_day': null }
+        const remindersSent = typedClient.renewal_reminders_sent || { '30_day': null, '14_day': null, '7_day': null }
 
         const event: RenewalCalendarEvent & {
             coachSlackId?: string | null
             totalValue?: number | null
             monthlyRate?: number | null
         } = {
-            clientId: client.id,
-            clientName: client.name,
-            clientEmail: client.email,
-            coachId: client.assigned_coach_id,
-            coachName: client.assigned_coach?.name || null,
-            coachSlackId: client.assigned_coach?.slack_user_id || null,
+            clientId: typedClient.id,
+            clientName: typedClient.name,
+            clientEmail: typedClient.email,
+            coachId: typedClient.assigned_coach_id,
+            coachName: coachName,
+            coachSlackId: coachSlackId,
             contractId: contract.id,
             contractNumber: contract.contract_number,
             contractEndDate: contract.end_date,
             programName: contract.program_name,
-            renewalStatus: client.renewal_status || 'pending',
+            renewalStatus: typedClient.renewal_status || 'pending',
             daysUntilExpiration: daysUntil,
             totalValue: contract.total_value,
             monthlyRate: contract.monthly_rate,
