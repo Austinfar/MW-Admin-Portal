@@ -62,6 +62,7 @@ export async function upsertLead(supabase: any, data: {
                 // However, update might overwrite existing setter if we pass null. 
                 // Let's safe-guard: if setterId is passed, update it.
                 ...(setterId ? { booked_by_user_id: setterId } : {}),
+                ...(metadata?.source || metadata?.utm_source ? { source: metadata?.utm_source || metadata?.source } : {}),
                 metadata: newMetadata,
                 updated_at: new Date().toISOString()
             })
