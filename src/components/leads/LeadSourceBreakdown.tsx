@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PieChart } from 'lucide-react'
 import { motion } from 'framer-motion'
@@ -31,7 +32,7 @@ export function LeadSourceBreakdown({
     selectedSource,
     delay = 0
 }: LeadSourceBreakdownProps) {
-    const maxCount = Math.max(...data.map(d => d.count), 1)
+    const maxCount = useMemo(() => Math.max(...data.map(d => d.count), 1), [data])
 
     return (
         <motion.div

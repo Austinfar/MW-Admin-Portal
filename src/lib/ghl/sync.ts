@@ -180,7 +180,7 @@ export async function syncGHLLead(contactId: string, client?: GHLClient) {
         email: contact.email,
         phone: contact.phone,
         ghl_contact_id: contact.id,
-        source: 'GHL Pipeline', // Or parse from tags/source
+        source: contact.source || 'GHL Pipeline',
         status: 'New', // Default status
         updated_at: new Date().toISOString()
     }

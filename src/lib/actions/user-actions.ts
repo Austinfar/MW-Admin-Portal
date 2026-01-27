@@ -50,3 +50,27 @@ export const getCoaches = unstable_cache(
     ['coaches-list'],
     { revalidate: 60, tags: ['users'] }
 );
+
+async function _getSetters(): Promise<CoachUser[]> {
+    const supabase = createAdminClient();
+
+    const { data: setters, error } = await supabase
+        .from('users')
+        .select('id, name, slug, avatar_url')
+        .ilike('job_title', '%setter%')
+        .eq('is_active', true)
+        .order('name');
+
+    if (error) {
+        console.error('Error fetching setters:', error);
+        return [];
+    }
+
+    return setters || [];
+}
+
+export const getSetters = unstable_cache(
+    _getSetters,
+    ['setters-list'],
+    { revalidate: 60, tags: ['users'] }
+);

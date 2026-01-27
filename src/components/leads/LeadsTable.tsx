@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, memo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import {
     Table,
@@ -71,6 +71,51 @@ const LEAD_STATUSES = [
     { value: 'Closed Lost', label: 'Lost', color: 'bg-red-500' },
     { value: 'No Show', label: 'No Show', color: 'bg-orange-500' },
 ]
+
+// Helper functions moved outside component to prevent recreation on each render
+const STATUS_COLORS: Record<string, string> = {
+    'New': 'bg-blue-500/10 text-blue-500 border-blue-500/20',
+    'Contacted': 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
+    'Appt Set': 'bg-purple-500/10 text-purple-500 border-purple-500/20',
+    'Closed Won': 'bg-neon-green/10 text-neon-green border-neon-green/20',
+    'Closed Lost': 'bg-red-500/10 text-red-500 border-red-500/20',
+    'No Show': 'bg-orange-500/10 text-orange-500 border-orange-500/20',
+}
+
+function getStatusColor(status: string): string {
+    return STATUS_COLORS[status] || STATUS_COLORS['New']
+}
+
+function getJourneySteps(lead: EnhancedLead) {
+    const meta = lead.metadata as LeadMetadata | null
+    return [
+        { label: 'Contact', done: true },
+        { label: 'Coach', done: !!(meta?.coach_selected || meta?.coach_selected_id) },
+        { label: 'Booked', done: !!(meta?.consultation_scheduled_for || lead.status === 'Appt Set') },
+        { label: 'Quest.', done: !!(meta?.questionnaire_completed_at || meta?.questionnaire) },
+    ]
+}
+
+function getAgeDisplay(createdAt: string) {
+    const days = differenceInDays(new Date(), new Date(createdAt))
+    if (days <= 7) return { text: `${days}d`, color: 'text-blue-500' }
+    if (days <= 14) return { text: `${days}d`, color: 'text-foreground' }
+    if (days <= 30) return { text: `${days}d`, color: 'text-amber-500' }
+    return { text: `${days}d`, color: 'text-red-500' }
+}
+
+function getAppointmentDisplay(lead: EnhancedLead) {
+    const meta = lead.metadata as LeadMetadata | null
+    if (!meta?.consultation_scheduled_for) {
+        return { text: 'Not Booked', color: 'text-muted-foreground italic' }
+    }
+    const apptDate = new Date(meta.consultation_scheduled_for)
+    const isPast = apptDate < new Date()
+    return {
+        text: format(apptDate, 'MMM d, h:mm a'),
+        color: isPast ? 'text-muted-foreground' : 'text-green-500'
+    }
+}
 
 export function LeadsTable({
     initialLeads,
@@ -379,50 +424,6 @@ export function LeadsTable({
         link.download = `leads-export-${format(new Date(), 'yyyy-MM-dd')}.csv`
         link.click()
         URL.revokeObjectURL(url)
-    }
-
-    // Helper functions
-    const getStatusColor = (status: string) => {
-        const styles: Record<string, string> = {
-            'New': 'bg-blue-500/10 text-blue-500 border-blue-500/20',
-            'Contacted': 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
-            'Appt Set': 'bg-purple-500/10 text-purple-500 border-purple-500/20',
-            'Closed Won': 'bg-neon-green/10 text-neon-green border-neon-green/20',
-            'Closed Lost': 'bg-red-500/10 text-red-500 border-red-500/20',
-            'No Show': 'bg-orange-500/10 text-orange-500 border-orange-500/20',
-        }
-        return styles[status] || styles['New']
-    }
-
-    const getJourneySteps = (lead: EnhancedLead) => {
-        const meta = lead.metadata as LeadMetadata | null
-        return [
-            { label: 'Contact', done: true },
-            { label: 'Coach', done: !!(meta?.coach_selected || meta?.coach_selected_id) },
-            { label: 'Booked', done: !!(meta?.consultation_scheduled_for || lead.status === 'Appt Set') },
-            { label: 'Quest.', done: !!(meta?.questionnaire_completed_at || meta?.questionnaire) },
-        ]
-    }
-
-    const getAgeDisplay = (createdAt: string) => {
-        const days = differenceInDays(new Date(), new Date(createdAt))
-        if (days <= 7) return { text: `${days}d`, color: 'text-blue-500' }
-        if (days <= 14) return { text: `${days}d`, color: 'text-foreground' }
-        if (days <= 30) return { text: `${days}d`, color: 'text-amber-500' }
-        return { text: `${days}d`, color: 'text-red-500' }
-    }
-
-    const getAppointmentDisplay = (lead: EnhancedLead) => {
-        const meta = lead.metadata as LeadMetadata | null
-        if (!meta?.consultation_scheduled_for) {
-            return { text: 'Not Booked', color: 'text-muted-foreground italic' }
-        }
-        const apptDate = new Date(meta.consultation_scheduled_for)
-        const isPast = apptDate < new Date()
-        return {
-            text: format(apptDate, 'MMM d, h:mm a'),
-            color: isPast ? 'text-muted-foreground' : 'text-green-500'
-        }
     }
 
     return (

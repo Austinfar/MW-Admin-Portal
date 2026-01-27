@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Target, UserCheck, Calendar, FileText, Trophy } from 'lucide-react'
@@ -36,7 +36,7 @@ export function LeadPipelineFunnel({
         onPeriodChange?.(period)
     }
 
-    const stages = [
+    const stages = useMemo(() => [
         {
             key: 'contacts',
             label: 'Contacts',
@@ -87,7 +87,7 @@ export function LeadPipelineFunnel({
             barColor: 'bg-neon-green',
             percentage: data.contactsSubmitted > 0 ? (data.closedWon / data.contactsSubmitted) * 100 : 0
         }
-    ]
+    ], [data])
 
     return (
         <motion.div

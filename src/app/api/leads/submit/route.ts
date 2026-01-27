@@ -21,7 +21,8 @@ export async function POST(req: NextRequest) {
             email: body.email,
             phone: body.phone || '',
             metadata: body.metadata || {},
-            coachId: body.coachId
+            coachId: body.coachId,
+            setterId: body.setterId
         })
 
         if (result.error) {

@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath, unstable_cache } from 'next/cache'
 import { assignTemplateToClient } from '@/lib/actions/onboarding'
+import { pushToGHL } from '@/lib/services/ghl'
 
 // Helper function to log lead activity
 // Helper function to log lead activity
@@ -29,8 +30,10 @@ export async function upsertLead(supabase: any, data: {
     phone: string
     metadata?: Record<string, any>
     coachId?: string
+    setterId?: string
 }) {
-    const { firstName, lastName, email, phone, metadata, coachId } = data
+    const { firstName, lastName, email: rawEmail, phone, metadata, coachId, setterId } = data
+    const email = rawEmail.toLowerCase()
 
     // Check if lead exists
     const { data: existingLead } = await supabase
@@ -55,6 +58,10 @@ export async function upsertLead(supabase: any, data: {
                 first_name: firstName,
                 last_name: lastName,
                 phone: phone,
+                booked_by_user_id: setterId || undefined, // Only update if provided? Or should we always? Let's use undefined to skip if not passed, but here it is passed.
+                // However, update might overwrite existing setter if we pass null. 
+                // Let's safe-guard: if setterId is passed, update it.
+                ...(setterId ? { booked_by_user_id: setterId } : {}),
                 metadata: newMetadata,
                 updated_at: new Date().toISOString()
             })
@@ -63,6 +70,8 @@ export async function upsertLead(supabase: any, data: {
         if (error) return { error: error.message }
     } else {
         // Create new lead
+        const leadSource = metadata?.utm_source || metadata?.source || 'Web Form'
+
         const { data: newLead, error } = await supabase
             .from('leads')
             .insert({
@@ -71,8 +80,9 @@ export async function upsertLead(supabase: any, data: {
                 email: email,
                 phone: phone,
                 status: 'New',
-                source: 'Web Form',
+                source: leadSource,
                 assigned_user_id: coachId || null,
+                booked_by_user_id: setterId || null,
                 metadata: {
                     ...(metadata || {}),
                     source_detail: 'Landing Page Submission'
@@ -147,7 +157,7 @@ export async function createLead(formData: FormData) {
 
     const firstName = formData.get('firstName') as string
     const lastName = formData.get('lastName') as string
-    const email = formData.get('email') as string
+    const email = (formData.get('email') as string).toLowerCase()
     const phone = formData.get('phone') as string
 
     const rawData = {
@@ -176,6 +186,24 @@ export async function createLead(formData: FormData) {
         'Lead Created',
         `${firstName} ${lastName || ''} was added as a new lead.`
     )
+
+    // Sync to GHL immediately
+    try {
+        const ghlResult = await pushToGHL({
+            email,
+            firstName,
+            lastName,
+            phone,
+            status: 'New',
+            tags: ['manual_entry']
+        });
+
+        if (ghlResult.ghlContactId) {
+            await supabase.from('leads').update({ ghl_contact_id: ghlResult.ghlContactId }).eq('id', lead.id);
+        }
+    } catch (err) {
+        console.error('Manual GHL Sync Failed:', err);
+    }
 
     revalidatePath('/leads')
     return { success: true }

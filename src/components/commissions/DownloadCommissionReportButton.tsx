@@ -3,8 +3,6 @@
 import { Button } from '@/components/ui/button'
 import { Download, Loader2 } from 'lucide-react'
 import { CommissionReportItem } from '@/lib/actions/reports'
-import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
 import { format } from 'date-fns'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -17,9 +15,15 @@ interface DownloadCommissionReportButtonProps {
 export function DownloadCommissionReportButton({ data, currentDate }: DownloadCommissionReportButtonProps) {
     const [isGenerating, setIsGenerating] = useState(false)
 
-    const generatePDF = () => {
+    const generatePDF = async () => {
         setIsGenerating(true)
         try {
+            // Dynamic import to reduce initial bundle size (~80KB)
+            const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+                import('jspdf'),
+                import('jspdf-autotable')
+            ])
+
             const doc = new jsPDF()
 
             // Header
