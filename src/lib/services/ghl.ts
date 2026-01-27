@@ -53,8 +53,8 @@ export async function pushToGHL(contact: GHLContact, options: { isUpdate?: boole
 
         console.log('[GHL Service] Syncing contact:', contact.email)
 
-        // Use upsert endpoint if possible or standard create
-        const contactRes = await fetch('https://services.leadconnectorhq.com/contacts/', {
+        // Use upsert endpoint to handle both create and update
+        const contactRes = await fetch('https://services.leadconnectorhq.com/contacts/upsert', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${accessToken}`,
