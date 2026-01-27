@@ -1,3 +1,5 @@
+import { RenewalStatus, RenewalRemindersSent } from './contract'
+
 export type ClientStatus = 'active' | 'inactive' | 'lost' | 'onboarding'
 
 export interface Client {
@@ -8,6 +10,10 @@ export interface Client {
     status: ClientStatus
     start_date: string
     contract_end_date: string | null
+    program_term_months: number | null // Contract term (6 or 12 months)
+    renewal_status: RenewalStatus | null // Renewal tracking
+    renewal_reminders_sent: RenewalRemindersSent | null // Track which reminders sent
+    current_contract_id: string | null // Reference to active client_contracts record
     assigned_coach_id: string | null
     client_type_id: string | null
     ghl_contact_id: string

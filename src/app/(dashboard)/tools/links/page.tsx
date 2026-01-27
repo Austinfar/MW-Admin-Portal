@@ -9,18 +9,20 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Button } from '@/components/ui/button'
 import { Check, Clipboard, RefreshCw, Link as LinkIcon } from 'lucide-react'
 import { toast } from 'sonner'
-import { getCoaches, type CoachUser } from '@/lib/actions/user-actions'
+import { getCoaches, getSetters, type CoachUser } from '@/lib/actions/user-actions'
 
 export default function LinkGeneratorPage() {
     // --- State ---
     const [funnel, setFunnel] = useState<string>('she')
     const [leadType, setLeadType] = useState<string>('company')
     const [coach, setCoach] = useState<string>('none')
+    const [setter, setSetter] = useState<string>('none')
     const [trafficType, setTrafficType] = useState<string>('paid')
     const [source, setSource] = useState<string>('instagram')
 
     // Dynamic Data
     const [availableCoaches, setAvailableCoaches] = useState<CoachUser[]>([])
+    const [availableSetters, setAvailableSetters] = useState<CoachUser[]>([])
 
     // Manual overrides
     const [campaign, setCampaign] = useState<string>('')
@@ -49,16 +51,20 @@ export default function LinkGeneratorPage() {
 
     // --- Load Data ---
     useEffect(() => {
-        const loadCoaches = async () => {
+        const loadData = async () => {
             try {
-                const data = await getCoaches()
-                setAvailableCoaches(data)
+                const [coaches, setters] = await Promise.all([
+                    getCoaches(),
+                    getSetters()
+                ])
+                setAvailableCoaches(coaches)
+                setAvailableSetters(setters)
             } catch (error) {
-                console.error('Failed to load coaches', error)
-                toast.error('Failed to load coach list')
+                console.error('Failed to load data', error)
+                toast.error('Failed to load staff lists')
             }
         }
-        loadCoaches()
+        loadData()
     }, [])
 
     // --- Logic ---
@@ -77,6 +83,11 @@ export default function LinkGeneratorPage() {
                 // Usually for company leads we don't. But let's support it if selected.
                 params.set('coach', coach)
             }
+        }
+
+        // Setter Attribution
+        if (setter !== 'none') {
+            params.set('setter', setter)
         }
 
         // 2. UTMs
@@ -105,7 +116,7 @@ export default function LinkGeneratorPage() {
         url.search = params.toString()
         setGeneratedUrl(url.toString())
 
-    }, [funnel, leadType, coach, trafficType, source, campaign, term, content, BASE_URLS])
+    }, [funnel, leadType, coach, setter, trafficType, source, campaign, term, content, BASE_URLS])
 
     // --- Handlers ---
     const copyToClipboard = () => {
@@ -181,6 +192,24 @@ export default function LinkGeneratorPage() {
                                     </SelectContent>
                                 </Select>
                             </div>
+                        </div>
+
+                        {/* Setter Assignment (Optional) */}
+                        <div className="space-y-3">
+                            <Label>Assign Setter (Optional)</Label>
+                            <Select value={setter} onValueChange={setSetter}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select Setter" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">No Specific Setter</SelectItem>
+                                    {availableSetters.map(s => (
+                                        <SelectItem key={s.id} value={s.id}>
+                                            {s.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
 
                         <div className="h-px bg-white/10" />

@@ -10,6 +10,7 @@ import {
     handleSubscriptionDeleted,
     handleInvoicePaymentFailed
 } from '@/lib/logic/subscription-webhooks'
+import { createContractFromPaymentSchedule } from '@/lib/actions/contracts'
 import Stripe from 'stripe'
 
 export async function POST(req: Request) {
@@ -358,6 +359,21 @@ export async function POST(req: Request) {
                             if (payRec && !payRec.commission_calculated) {
                                 await calculateCommission(payRec.id);
                             }
+                        }
+
+                        // CREATE CONTRACT RECORD
+                        // This creates a client_contracts record to track the contract period
+                        try {
+                            console.log(`Creating contract for client ${finalClientId} from schedule ${scheduleId}`)
+                            const contractResult = await createContractFromPaymentSchedule(finalClientId, scheduleId)
+                            if (contractResult.success) {
+                                console.log(`Contract created: ${contractResult.contractId}`)
+                            } else {
+                                console.error(`Failed to create contract: ${contractResult.error}`)
+                            }
+                        } catch (contractError) {
+                            console.error('Error creating contract:', contractError)
+                            // Don't fail the webhook, just log the error
                         }
                     }
 

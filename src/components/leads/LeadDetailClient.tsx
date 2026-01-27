@@ -71,11 +71,37 @@ interface LeadDetailClientProps {
 const LEAD_STATUSES = [
     { value: 'New', label: 'New' },
     { value: 'Contacted', label: 'Contacted' },
+    { value: 'Call Confirmed', label: 'Call Confirmed' },
     { value: 'Appt Set', label: 'Appt Set' },
     { value: 'Closed Won', label: 'Won' },
     { value: 'Closed Lost', label: 'Lost' },
     { value: 'No Show', label: 'No Show' },
 ]
+
+// Helper functions moved outside component to prevent recreation on each render
+const STATUS_COLORS: Record<string, string> = {
+    'New': 'bg-blue-500/15 text-blue-700 dark:text-blue-400',
+    'Contacted': 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-400',
+    'Call Confirmed': 'bg-green-500/15 text-green-700 dark:text-green-400',
+    'Appt Set': 'bg-purple-500/15 text-purple-700 dark:text-purple-400',
+    'Qualified': 'bg-purple-500/15 text-purple-700 dark:text-purple-400',
+    'Closed Won': 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
+    'Won': 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
+    'Closed Lost': 'bg-red-500/15 text-red-700 dark:text-red-400',
+    'Lost': 'bg-red-500/15 text-red-700 dark:text-red-400',
+    'No Show': 'bg-orange-500/15 text-orange-700 dark:text-orange-400',
+}
+
+function getStatusColor(status: string): string {
+    return STATUS_COLORS[status] || 'bg-gray-500/15 text-gray-700'
+}
+
+function getDaysColor(days: number): string {
+    if (days <= 7) return 'bg-blue-500/20 text-blue-400'
+    if (days <= 14) return 'bg-zinc-500/20 text-zinc-400'
+    if (days <= 30) return 'bg-amber-500/20 text-amber-400'
+    return 'bg-red-500/20 text-red-400'
+}
 
 export function LeadDetailClient({ lead, ghlLocationId, resolvedCoachName }: LeadDetailClientProps) {
     const router = useRouter()
@@ -100,7 +126,7 @@ export function LeadDetailClient({ lead, ghlLocationId, resolvedCoachName }: Lea
     // Get consultation date from metadata
     const consultationDate = (lead.metadata?.consultation_scheduled_for as string) || null
     const meetingLink = (lead.metadata?.meeting_link as string) ||
-                        (lead.metadata?.video_call_url as string) || null
+        (lead.metadata?.video_call_url as string) || null
 
     useEffect(() => {
         async function fetchActivity() {
@@ -208,28 +234,6 @@ export function LeadDetailClient({ lead, ghlLocationId, resolvedCoachName }: Lea
         } else {
             toast.success('Added to call queue')
         }
-    }
-
-    const getStatusColor = (status: string) => {
-        const styles: Record<string, string> = {
-            'New': 'bg-blue-500/15 text-blue-700 dark:text-blue-400',
-            'Contacted': 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-400',
-            'Appt Set': 'bg-purple-500/15 text-purple-700 dark:text-purple-400',
-            'Qualified': 'bg-purple-500/15 text-purple-700 dark:text-purple-400',
-            'Closed Won': 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
-            'Won': 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
-            'Closed Lost': 'bg-red-500/15 text-red-700 dark:text-red-400',
-            'Lost': 'bg-red-500/15 text-red-700 dark:text-red-400',
-            'No Show': 'bg-orange-500/15 text-orange-700 dark:text-orange-400',
-        }
-        return styles[status] || 'bg-gray-500/15 text-gray-700'
-    }
-
-    const getDaysColor = (days: number) => {
-        if (days <= 7) return 'bg-blue-500/20 text-blue-400'
-        if (days <= 14) return 'bg-zinc-500/20 text-zinc-400'
-        if (days <= 30) return 'bg-amber-500/20 text-amber-400'
-        return 'bg-red-500/20 text-red-400'
     }
 
     const handleConvert = async () => {

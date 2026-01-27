@@ -109,7 +109,16 @@ export async function syncGHLContact(contactOrId: any, client?: GHLClient, custo
         ghl_raw: ghlRawStored,
         // Preserve existing start date, or default to today for new clients
         start_date: existingClient?.start_date || new Date().toISOString(),
-        stripe_customer_id: stripeCustomerId
+        stripe_customer_id: stripeCustomerId,
+        // Default lead source if not present (Important for commission calc)
+        // Check tags for 'coach-generated' or similar, otherwise default to company_driven
+        lead_source: (contactData.tags?.some((t: string) => t.toLowerCase().includes('coach') || t.toLowerCase().includes('self-gen'))
+            ? 'coach_driven'
+            : 'company_driven')
+        // We can also allow existing client value to persist if we want, but user said "going forward".
+        // However, upsert will overwrite. Let's make sure we don't overwrite if it's already set correctly?
+        // Actually, if GHL is the source of truth, GHL tags should dictate it.
+        // But if GHL has no opinion, we default to Company.
     }
 
     // Upsert client
@@ -180,7 +189,7 @@ export async function syncGHLLead(contactId: string, client?: GHLClient) {
         email: contact.email,
         phone: contact.phone,
         ghl_contact_id: contact.id,
-        source: 'GHL Pipeline', // Or parse from tags/source
+        source: contact.source || 'GHL Pipeline',
         status: 'New', // Default status
         updated_at: new Date().toISOString()
     }

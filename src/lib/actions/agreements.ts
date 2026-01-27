@@ -4,6 +4,11 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { GHLClient } from '@/lib/ghl/client'
 import { revalidatePath } from 'next/cache'
+import {
+    getContractVariablesForClient,
+    pushContractVariablesToGHL,
+} from '@/lib/ghl/contract'
+import { linkAgreementToContract } from './contracts'
 
 export interface Agreement {
     id: string
@@ -27,7 +32,21 @@ export interface Agreement {
     }
 }
 
-const GHL_COACHING_AGREEMENT_TEMPLATE_ID = process.env.GHL_COACHING_AGREEMENT_TEMPLATE_ID || ''
+// Template IDs for different payment types
+const GHL_AGREEMENT_TEMPLATES = {
+    paid_in_full: process.env.GHL_AGREEMENT_TEMPLATE_PAID_IN_FULL || '',
+    split_pay: process.env.GHL_AGREEMENT_TEMPLATE_SPLIT_PAY || '',
+    monthly: process.env.GHL_AGREEMENT_TEMPLATE_MONTHLY || '',
+    // Fallback for when no specific template is configured
+    default: process.env.GHL_COACHING_AGREEMENT_TEMPLATE_ID || '',
+}
+
+// Template display names
+const TEMPLATE_NAMES: Record<string, string> = {
+    paid_in_full: 'Paid in Full Agreement',
+    split_pay: 'Split Pay Agreement',
+    monthly: 'Monthly Subscription Agreement',
+}
 
 /**
  * Get all agreements for a client
@@ -108,9 +127,54 @@ export async function sendAgreement(
         return { success: false, error: 'Client does not have a GHL contact ID' }
     }
 
-    const agreementTemplateId = templateId || GHL_COACHING_AGREEMENT_TEMPLATE_ID
+    // Get the active contract to determine template and build variables
+    const { data: activeContract } = await adminSupabase
+        .from('client_contracts')
+        .select('id, payment_type, program_name')
+        .eq('client_id', clientId)
+        .eq('status', 'active')
+        .order('contract_number', { ascending: false })
+        .limit(1)
+        .single()
+
+    // Determine which template to use based on payment type
+    let agreementTemplateId = templateId
+    let templateName = 'Coaching Agreement'
+
+    if (!agreementTemplateId && activeContract?.payment_type) {
+        const paymentType = activeContract.payment_type as keyof typeof GHL_AGREEMENT_TEMPLATES
+        agreementTemplateId = GHL_AGREEMENT_TEMPLATES[paymentType] || GHL_AGREEMENT_TEMPLATES.default
+        templateName = TEMPLATE_NAMES[paymentType] || 'Coaching Agreement'
+        console.log(`[Agreements] Using ${paymentType} template for payment type`)
+    } else if (!agreementTemplateId) {
+        agreementTemplateId = GHL_AGREEMENT_TEMPLATES.default
+    }
+
     if (!agreementTemplateId) {
-        return { success: false, error: 'No agreement template configured' }
+        return { success: false, error: 'No agreement template configured. Please set template IDs in environment variables.' }
+    }
+
+    // Get the active contract and build variables
+    const variablesResult = await getContractVariablesForClient(clientId)
+    let contractVariables = null
+    let activeContractId: string | null = activeContract?.id || null
+
+    if (variablesResult.success && variablesResult.variables) {
+        contractVariables = variablesResult.variables
+
+        // Push contract variables to GHL before sending document
+        console.log('[Agreements] Pushing contract variables to GHL...')
+        const pushResult = await pushContractVariablesToGHL(
+            client.ghl_contact_id,
+            contractVariables
+        )
+
+        if (!pushResult.success) {
+            console.warn('[Agreements] Failed to push contract variables:', pushResult.error)
+            // Continue anyway - the document can still be sent
+        }
+    } else {
+        console.warn('[Agreements] No active contract found, sending without variables')
     }
 
     // Create agreement record in draft status first
@@ -119,9 +183,11 @@ export async function sendAgreement(
         .insert({
             client_id: clientId,
             template_id: agreementTemplateId,
-            template_name: 'Coaching Agreement', // Could be fetched from a templates table
+            template_name: templateName,
             status: 'draft',
             sent_by: user.id,
+            contract_variables: contractVariables || {},
+            client_contract_id: activeContractId,
         })
         .select('id')
         .single()
@@ -129,6 +195,11 @@ export async function sendAgreement(
     if (createError || !agreement) {
         console.error('[Agreements] Error creating agreement:', createError)
         return { success: false, error: 'Failed to create agreement record' }
+    }
+
+    // Link agreement to contract if we have one
+    if (activeContractId) {
+        await linkAgreementToContract(agreement.id, activeContractId)
     }
 
     // Send document via GHL

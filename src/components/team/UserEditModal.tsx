@@ -77,9 +77,10 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
     const [newPassword, setNewPassword] = useState('');
 
     // Commission Tab
+    // Initialize with percentages (multiply by 100) for better UX
     const [commissionConfig, setCommissionConfig] = useState<Record<string, number>>({
-        company_driven_rate: user.commission_config?.company_driven_rate || 0.30,
-        self_gen_rate: user.commission_config?.self_gen_rate || 0.50
+        company_driven_rate: (user.commission_config?.company_driven_rate !== undefined ? user.commission_config.company_driven_rate : 0.30) * 100,
+        self_gen_rate: (user.commission_config?.self_gen_rate !== undefined ? user.commission_config.self_gen_rate : 0.50) * 100
     });
 
     // Image Upload State
@@ -234,7 +235,12 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
             }
 
             // Update Commission Config
-            const configResult = await updateUserCommissionConfig(user.id, commissionConfig);
+            // Convert percentages back to decimals for storage
+            const configToSave = {
+                company_driven_rate: commissionConfig.company_driven_rate / 100,
+                self_gen_rate: commissionConfig.self_gen_rate / 100
+            };
+            const configResult = await updateUserCommissionConfig(user.id, configToSave);
             if (configResult.error) {
                 toast.error(configResult.error);
                 setIsLoading(false);
@@ -583,7 +589,7 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
                                         />
                                         <span className="absolute right-3 top-2.5 text-xs text-muted-foreground">%</span>
                                     </div>
-                                    <p className="text-[10px] text-muted-foreground">e.g. 0.30 for 30%</p>
+                                    <p className="text-[10px] text-muted-foreground">e.g. 30 for 30%</p>
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Self-Gen Rate</Label>
@@ -597,7 +603,7 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
                                         />
                                         <span className="absolute right-3 top-2.5 text-xs text-muted-foreground">%</span>
                                     </div>
-                                    <p className="text-[10px] text-muted-foreground">e.g. 0.50 for 50%</p>
+                                    <p className="text-[10px] text-muted-foreground">e.g. 50 for 50%</p>
                                 </div>
                             </div>
                         </div>

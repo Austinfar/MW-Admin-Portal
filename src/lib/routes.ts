@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, CheckSquare, DollarSign, CreditCard, BrainCircuit, Calendar, Lightbulb, Camera, Quote } from 'lucide-react'
+import { LayoutDashboard, Users, CheckSquare, DollarSign, CreditCard, BrainCircuit, Calendar, Lightbulb, Camera, Quote, Drill, CalendarClock } from 'lucide-react'
 import { UserPermissions } from '@/lib/auth-utils'
 
 export interface AppRoute {
@@ -53,13 +53,7 @@ export const APP_ROUTES: AppRoute[] = [
                 color: 'text-orange-700',
                 permission: 'can_view_commissions'
             },
-            {
-                label: 'AI Call Analyzer',
-                icon: BrainCircuit,
-                href: '/sales',
-                color: 'text-rose-500',
-                permission: 'can_view_sales'
-            },
+
         ]
     },
     {
@@ -69,6 +63,13 @@ export const APP_ROUTES: AppRoute[] = [
         // No permission on parent
         children: [
             {
+                label: 'Onboarding',
+                icon: CheckSquare,
+                href: '/onboarding',
+                color: 'text-pink-700',
+                permission: 'can_view_onboarding'
+            },
+            {
                 label: 'Clients',
                 icon: Users,
                 href: '/clients',
@@ -76,11 +77,11 @@ export const APP_ROUTES: AppRoute[] = [
                 permission: 'can_view_clients'
             },
             {
-                label: 'Onboarding',
-                icon: CheckSquare,
-                href: '/onboarding',
-                color: 'text-pink-700',
-                permission: 'can_view_onboarding'
+                label: 'Renewals',
+                icon: CalendarClock,
+                href: '/renewals',
+                color: 'text-amber-500',
+                permission: 'can_view_clients'
             },
         ]
     },
@@ -114,8 +115,8 @@ export const APP_ROUTES: AppRoute[] = [
         ]
     },
     {
-        label: 'Tools',
-        icon: BrainCircuit, // Using BrainCircuit as generic tools icon
+        label: '(Power) Tools',
+        icon: Drill, // Power tool icon
         color: 'text-indigo-500',
         permission: 'can_view_business',
         children: [
@@ -125,6 +126,13 @@ export const APP_ROUTES: AppRoute[] = [
                 href: '/tools/links',
                 color: 'text-indigo-400',
                 permission: 'can_view_business'
+            },
+            {
+                label: 'AI Call Analyzer',
+                icon: BrainCircuit,
+                href: '/sales',
+                color: 'text-rose-500',
+                permission: 'can_view_sales'
             }
         ]
     },

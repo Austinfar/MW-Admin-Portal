@@ -365,19 +365,21 @@ async function getCoachCommissionRate(
         .eq('id', coachId)
         .single()
 
-    if (coach?.commission_rate !== null && coach?.commission_rate !== undefined) {
-        return Number(coach.commission_rate)
+    // Check commission_config overrides FIRST (Granular overrides take precedence)
+    // Note: Cast to expected shape based on UserEditModal.tsx saving format
+    const config = coach?.commission_config as { company_driven_rate?: number; self_gen_rate?: number } | null
+    if (config) {
+        if (client.lead_source === 'company_driven' && config.company_driven_rate !== undefined) {
+            return Number(config.company_driven_rate)
+        }
+        if (client.lead_source === 'coach_driven' && config.self_gen_rate !== undefined) {
+            return Number(config.self_gen_rate)
+        }
     }
 
-    // Check commission_config overrides
-    const config = coach?.commission_config as { company_lead_rate?: number; self_gen_rate?: number } | null
-    if (config) {
-        if (client.lead_source === 'company_driven' && config.company_lead_rate) {
-            return config.company_lead_rate
-        }
-        if (client.lead_source === 'coach_driven' && config.self_gen_rate) {
-            return config.self_gen_rate
-        }
+    // Check legacy/global flat override SECOND
+    if (coach?.commission_rate !== null && coach?.commission_rate !== undefined) {
+        return Number(coach.commission_rate)
     }
 
     // Apply default rates based on client status

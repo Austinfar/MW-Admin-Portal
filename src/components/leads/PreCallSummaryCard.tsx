@@ -51,39 +51,39 @@ export function PreCallSummaryCard({ metadata, source, coachName }: PreCallSumma
 
     // Common questionnaire field mappings
     const primaryGoal = questionnaire?.primary_goal ||
-                        questionnaire?.goal ||
-                        questionnaire?.['What is your primary goal?'] ||
-                        metadata.primary_goal ||
-                        null
+        questionnaire?.goal ||
+        questionnaire?.['What is your primary goal?'] ||
+        metadata.primary_goal ||
+        null
 
     const experience = questionnaire?.experience_level ||
-                      questionnaire?.training_experience ||
-                      questionnaire?.['How long have you been training?'] ||
-                      metadata.experience_level ||
-                      null
+        questionnaire?.training_experience ||
+        questionnaire?.['How long have you been training?'] ||
+        metadata.experience_level ||
+        null
 
     const budget = questionnaire?.budget ||
-                   questionnaire?.budget_range ||
-                   questionnaire?.['What is your budget?'] ||
-                   metadata.budget_range ||
-                   null
+        questionnaire?.budget_range ||
+        questionnaire?.['What is your budget?'] ||
+        metadata.budget_range ||
+        null
 
     const timeline = questionnaire?.timeline ||
-                    questionnaire?.urgency ||
-                    questionnaire?.['When are you looking to start?'] ||
-                    metadata.timeline ||
-                    null
+        questionnaire?.urgency ||
+        questionnaire?.['When are you looking to start?'] ||
+        metadata.timeline ||
+        null
 
     const challenge = questionnaire?.biggest_challenge ||
-                     questionnaire?.challenge ||
-                     questionnaire?.['What is your biggest challenge?'] ||
-                     metadata.biggest_challenge ||
-                     null
+        questionnaire?.challenge ||
+        questionnaire?.['What is your biggest challenge?'] ||
+        metadata.biggest_challenge ||
+        null
 
     const commitment = questionnaire?.commitment_level ||
-                      questionnaire?.commitment ||
-                      metadata.commitment_level ||
-                      null
+        questionnaire?.commitment ||
+        metadata.commitment_level ||
+        null
 
     // Build source string
     const sourceInfo = []
@@ -97,7 +97,7 @@ export function PreCallSummaryCard({ metadata, source, coachName }: PreCallSumma
     const allQuestionnaireEntries = questionnaire
         ? Object.entries(questionnaire).filter(([key]) =>
             !key.startsWith('_') && key !== 'id'
-          )
+        )
         : []
 
     return (
@@ -110,8 +110,17 @@ export function PreCallSummaryCard({ metadata, source, coachName }: PreCallSumma
             </CardHeader>
             <CardContent className="space-y-4">
                 {/* Source & Coach Row */}
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
+                <div className="grid grid-cols-3 gap-3">
+                    <div className="col-span-1 space-y-1">
+                        <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                            <Target className="h-3 w-3" />
+                            Type
+                        </div>
+                        <Badge variant="outline" className="text-zinc-300 border-zinc-700 bg-zinc-800/50">
+                            {formatQuestionKey(String(metadata.lead_type || 'Unknown'))}
+                        </Badge>
+                    </div>
+                    <div className="col-span-1 space-y-1">
                         <div className="flex items-center gap-1.5 text-xs text-zinc-500">
                             <Globe className="h-3 w-3" />
                             Source
@@ -120,12 +129,12 @@ export function PreCallSummaryCard({ metadata, source, coachName }: PreCallSumma
                             {sourceString}
                         </p>
                     </div>
-                    <div className="space-y-1">
+                    <div className="col-span-1 space-y-1">
                         <div className="flex items-center gap-1.5 text-xs text-zinc-500">
                             <User className="h-3 w-3" />
                             Coach Preference
                         </div>
-                        <p className="text-sm font-medium text-zinc-200">
+                        <p className="text-sm font-medium text-zinc-200 truncate" title={coachName || 'No preference'}>
                             {coachName || 'No preference'}
                         </p>
                     </div>

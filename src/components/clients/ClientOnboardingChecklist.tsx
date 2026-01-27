@@ -40,6 +40,14 @@ export function ClientOnboardingChecklist({ tasks, clientId, users = [] }: Clien
     const [isAddingTask, setIsAddingTask] = useState(false)
     const [newTaskTitle, setNewTaskTitle] = useState('')
 
+    // Sync state with props if they change (server revalidation)
+    // using a key or simple effect
+    const [prevTasks, setPrevTasks] = useState(tasks)
+    if (tasks !== prevTasks) {
+        setPrevTasks(tasks)
+        setOptimisticTasks(tasks)
+    }
+
     // Edit state
     const [editingTask, setEditingTask] = useState<OnboardingTask | null>(null)
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
@@ -125,9 +133,17 @@ export function ClientOnboardingChecklist({ tasks, clientId, users = [] }: Clien
         )
     }
 
-    const pendingTasks = optimisticTasks.filter(t => t.status === 'pending')
-    const completedTasks = optimisticTasks.filter(t => t.status === 'completed')
-    const progress = Math.round((completedTasks.length / optimisticTasks.length) * 100)
+    // Sort tasks by due date (soonest to latest), then by title
+    const sortedTasks = [...optimisticTasks].sort((a, b) => {
+        const dateA = new Date(a.due_date || '9999-12-31').getTime()
+        const dateB = new Date(b.due_date || '9999-12-31').getTime()
+        if (dateA !== dateB) return dateA - dateB
+        return a.title.localeCompare(b.title)
+    })
+
+    const pendingTasks = sortedTasks.filter(t => t.status === 'pending')
+    const completedTasks = sortedTasks.filter(t => t.status === 'completed')
+    const progress = optimisticTasks.length > 0 ? Math.round((completedTasks.length / optimisticTasks.length) * 100) : 0
 
     return (
         <Card>

@@ -14,14 +14,27 @@ export async function POST(req: NextRequest) {
             )
         }
 
+        // Initialize metadata from body or empty object
+        const metadata = body.metadata || {}
+
+        // Extract UTMs and source from top-level body if not present in metadata
+        // This handles cases where external forms send these as top-level fields
+        const sourceFields = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'source', 'lead_type']
+        sourceFields.forEach(field => {
+            if (body[field] !== undefined && metadata[field] === undefined) {
+                metadata[field] = body[field]
+            }
+        })
+
         const supabase = createAdminClient()
         const result = await upsertLead(supabase, {
             firstName: body.firstName,
             lastName: body.lastName || '',
             email: body.email,
             phone: body.phone || '',
-            metadata: body.metadata || {},
-            coachId: body.coachId
+            metadata: metadata,
+            coachId: body.coachId,
+            setterId: body.setterId
         })
 
         if (result.error) {
