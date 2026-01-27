@@ -79,7 +79,7 @@ export function LeadPipelineFunnel({
         },
         {
             key: 'won',
-            label: 'Closed Won',
+            label: 'Sold',
             value: data.closedWon,
             icon: Trophy,
             color: 'text-neon-green',

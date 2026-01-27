@@ -35,6 +35,7 @@ interface SlackResponse {
 const SLACK_CONFIG = {
     BOT_TOKEN: process.env.SLACK_BOT_TOKEN || '',
     SALES_CHANNEL_ID: process.env.SLACK_SALES_CHANNEL_ID || '',
+    RENEWAL_CHANNEL_ID: process.env.SLACK_RENEWAL_CHANNEL_ID || '',
     API_URL: 'https://slack.com/api',
 }
 
@@ -141,8 +142,29 @@ export async function postToSalesChannel(
 }
 
 /**
+ * Post a renewal reminder to the configured renewals channel
+ */
+export async function postToRenewalChannel(
+    message: SlackMessage
+): Promise<{ success: boolean; error?: string; ts?: string }> {
+    if (!SLACK_CONFIG.RENEWAL_CHANNEL_ID) {
+        console.warn('[Slack] Renewal channel ID not configured')
+        return { success: false, error: 'Renewal channel ID not configured' }
+    }
+
+    return postToChannel(SLACK_CONFIG.RENEWAL_CHANNEL_ID, message)
+}
+
+/**
  * Check if Slack is configured and available
  */
 export function isSlackConfigured(): boolean {
     return Boolean(SLACK_CONFIG.BOT_TOKEN && SLACK_CONFIG.SALES_CHANNEL_ID)
+}
+
+/**
+ * Check if Slack renewal channel is configured
+ */
+export function isRenewalChannelConfigured(): boolean {
+    return Boolean(SLACK_CONFIG.BOT_TOKEN && SLACK_CONFIG.RENEWAL_CHANNEL_ID)
 }

@@ -382,19 +382,52 @@ export async function convertLeadToClient(
             (lead as any).booked_by_user_id ||
             null
 
-        // 2. Create Client with full data (aligned with Stripe webhook pattern)
-        const placeholderGhlId = `manual_${Date.now()}_${Math.random().toString(36).substring(7)}`
+        // 2. Determine GHL Contact ID
+        let finalGhlId = lead.ghl_contact_id
 
+        // If lead doesn't have a GHL ID, try to sync it now to get one
+        if (!finalGhlId) {
+            console.log('Lead has no GHL ID, attempting to sync with GHL before conversion...')
+            try {
+                const ghlResult = await pushToGHL({
+                    email: lead.email,
+                    firstName: lead.first_name,
+                    lastName: lead.last_name || '',
+                    phone: lead.phone || '',
+                    status: lead.status || 'New'
+                })
+
+                if (ghlResult.ghlContactId) {
+                    finalGhlId = ghlResult.ghlContactId
+                    // Update the lead record with this new ID too so we remain consistent
+                    await supabase.from('leads').update({ ghl_contact_id: finalGhlId }).eq('id', leadId)
+                }
+            } catch (syncError) {
+                console.error('Failed to sync with GHL during conversion:', syncError)
+            }
+        }
+
+        // Fallback to placeholder if we absolutely cannot get a GHL ID (to satisfy DB constraint)
+        if (!finalGhlId) {
+            finalGhlId = `manual_${Date.now()}_${Math.random().toString(36).substring(7)}`
+            console.warn(`Using manual placeholder ID for client conversion: ${finalGhlId}`)
+        }
+
+        // 3. Create Client with full data
         const { data: client, error: insertError } = await supabase
             .from('clients')
             .insert({
                 name: `${lead.first_name} ${lead.last_name || ''}`.trim(),
                 email: lead.email,
                 phone: lead.phone,
-                ghl_contact_id: placeholderGhlId,
+                ghl_contact_id: finalGhlId,
                 status: 'onboarding', // Match Stripe path - start in onboarding
                 start_date: new Date().toISOString().split('T')[0],
-                lead_source: lead.source === 'Company' ? 'company_driven' : 'coach_driven',
+                // Logic update: Default to 'company_driven' (Company Gen) for Web Forms, Ads, etc.
+                // Only mark as 'coach_driven' if explicitly 'Coach' or 'Referral' or similar.
+                lead_source: (lead.source === 'Coach' || lead.source === 'Manuel' || lead.source === 'Referral' || lead.source === 'Self-Gen')
+                    ? 'coach_driven'
+                    : 'company_driven',
                 appointment_setter_id: (lead as any).booked_by_user_id || null,
                 assigned_coach_id: assignedCoachId,
                 client_type_id: options?.clientTypeId || null,
@@ -774,7 +807,7 @@ async function _getLeadFunnelData(period: '7d' | '30d' | 'all' = '30d'): Promise
     let query = supabase
         .from('leads')
         .select('id, status, metadata, created_at')
-        .neq('status', 'converted')
+    // removed .neq('status', 'converted') so we count sold clients
 
     // Apply time filter
     if (period !== 'all') {
@@ -812,7 +845,8 @@ async function _getLeadFunnelData(period: '7d' | '30d' | 'all' = '30d'): Promise
         const meta = l.metadata as Record<string, unknown> | null
         return meta?.questionnaire_completed_at || meta?.questionnaire
     }).length
-    const closedWon = leads.filter(l => l.status === 'Closed Won').length
+    // "Closed Won" corresponds to "Sold" (converted leads + legacy 'Closed Won' status if any)
+    const closedWon = leads.filter(l => l.status === 'converted' || l.status === 'Closed Won').length
 
     const conversionRate = contactsSubmitted > 0
         ? Math.round((closedWon / contactsSubmitted) * 1000) / 10

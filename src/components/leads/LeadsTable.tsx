@@ -92,7 +92,7 @@ function getJourneySteps(lead: EnhancedLead) {
         { label: 'Contact', done: true },
         { label: 'Coach', done: !!(meta?.coach_selected || meta?.coach_selected_id) },
         { label: 'Booked', done: !!(meta?.consultation_scheduled_for || lead.status === 'Appt Set') },
-        { label: 'Quest.', done: !!(meta?.questionnaire_completed_at || meta?.questionnaire) },
+        { label: 'Quest.', done: !!(meta?.questionnaire_completed_at || (meta?.questionnaire && Object.keys(meta.questionnaire).length > 0)) },
     ]
 }
 
