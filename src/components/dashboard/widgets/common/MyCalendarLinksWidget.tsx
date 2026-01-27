@@ -7,13 +7,7 @@ import { Calendar, Copy, Loader2 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
 import { getMyCalLinks, type CalUserLink } from '@/lib/actions/cal-links'
-
-// Utility to add source parameter to booking URL
-function buildBookingUrl(baseUrl: string, source: 'company-driven' | 'coach-driven'): string {
-    if (!baseUrl) return ''
-    const separator = baseUrl.includes('?') ? '&' : '?'
-    return `${baseUrl}${separator}source=${source}`
-}
+import { buildBookingUrl } from '@/lib/cal/utils'
 
 interface MyCalendarLinksWidgetProps {
     delay?: number

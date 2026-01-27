@@ -306,6 +306,34 @@ export class CalClient {
     }
 
     /**
+     * Update a booking (e.g., to add attendees)
+     */
+    async updateBooking(
+        bookingId: number,
+        data: {
+            title?: string;
+            description?: string;
+            status?: 'ACCEPTED' | 'PENDING' | 'CANCELLED' | 'REJECTED';
+            attendees?: { email: string; name?: string; timeZone?: string }[];
+            metadata?: Record<string, unknown>;
+        }
+    ): Promise<{ success: boolean; booking?: CalBooking; error?: string }> {
+        try {
+            const response = await this.requestV1<CalBookingResponse>(`/bookings/${bookingId}`, {
+                method: 'PATCH',
+                body: data
+            });
+            return { success: true, booking: response.booking };
+        } catch (error) {
+            console.error('Failed to update Cal.com booking:', error);
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to update booking'
+            };
+        }
+    }
+
+    /**
      * Get available time slots for an event type
      */
     async getAvailability(

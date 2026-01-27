@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import crypto from 'crypto'
 import { parseName } from '@/lib/utils/name-parser'
 import { logLeadActivity } from '@/lib/actions/lead-actions'
+import { calClient } from '@/lib/cal/client'
 
 // Cal.com webhook event types
 type CalWebhookEvent =
@@ -517,6 +518,48 @@ export async function POST(req: NextRequest) {
 
                 // Send Slack notification
                 await sendSlackNotification('BOOKING_CREATED', body.payload)
+
+                // AUTO-INVITE FIREFLIES.AI
+                // Check if this is a consult call and invite Fireflies if configured
+                const firefliesEmail = process.env.FIREFLIES_EMAIL
+                if (firefliesEmail && body.payload.bookingId) {
+                    const isConsult =
+                        (body.payload.title?.toLowerCase().includes('consult')) ||
+                        (body.payload.eventTypeSlug?.toLowerCase().includes('consult'))
+
+                    if (isConsult) {
+                        try {
+                            // Get current attendees
+                            const currentAttendees = body.payload.attendees || []
+
+                            // Check if Fireflies is already invited
+                            const isAlreadyInvited = currentAttendees.some(
+                                a => a.email.toLowerCase() === firefliesEmail.toLowerCase()
+                            )
+
+                            if (!isAlreadyInvited) {
+                                // Add Fireflies to attendees
+                                const newAttendees = [
+                                    ...currentAttendees,
+                                    {
+                                        email: firefliesEmail,
+                                        name: 'Fireflies.ai Notetaker',
+                                        timeZone: body.payload.attendees?.[0]?.timeZone || 'America/New_York'
+                                    }
+                                ]
+
+                                console.log(`[Cal Webhook] Auto-inviting Fireflies (${firefliesEmail}) to booking ${body.payload.bookingId}`)
+
+                                await calClient.updateBooking(body.payload.bookingId, {
+                                    attendees: newAttendees
+                                })
+                            }
+                        } catch (error) {
+                            console.error('[Cal Webhook] Failed to auto-invite Fireflies:', error)
+                            // Don't block the rest of the webhook processing
+                        }
+                    }
+                }
                 break
             }
 
