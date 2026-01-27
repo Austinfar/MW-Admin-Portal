@@ -25,6 +25,7 @@ const STAGE_MAP: Record<string, string> = {
     'Closed Won': process.env.GHL_STAGE_WON || 'REPLACE_WITH_STAGE_ID',
     'Closed Lost': process.env.GHL_STAGE_LOST || 'REPLACE_WITH_STAGE_ID'
 }
+const GHL_CUSTOM_FIELD_OPPORTUNITY_ID = 'mw_opportunity_id'
 
 export async function pushToGHL(contact: GHLContact, options: { isUpdate?: boolean } = {}) {
     const accessToken = process.env.GHL_ACCESS_TOKEN
@@ -108,6 +109,33 @@ export async function pushToGHL(contact: GHLContact, options: { isUpdate?: boole
                 // Don't fail the whole operation, just log
             } else {
                 console.log('[GHL Service] Opportunity Synced:', oppData.opportunity?.id)
+
+                // 3. Update Contact with Opportunity ID for Automations
+                if (oppData.opportunity?.id) {
+                    try {
+                        await fetch(`https://services.leadconnectorhq.com/contacts/${ghlContactId}`, {
+                            method: 'PUT',
+                            headers: {
+                                'Authorization': `Bearer ${accessToken}`,
+                                'Version': '2021-07-28',
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                customFields: [
+                                    {
+                                        key: GHL_CUSTOM_FIELD_OPPORTUNITY_ID,
+                                        field_value: oppData.opportunity.id
+                                    }
+                                ]
+                            })
+                        })
+                        console.log(`[GHL Service] Updated Contact with Opportunity ID: ${oppData.opportunity.id}`)
+                    } catch (updateError) {
+                        console.error('[GHL Service] Failed to update contact with Opp ID:', updateError)
+                    }
+                }
+
+                return { success: true, ghlContactId, ghlOpportunityId: oppData.opportunity?.id }
             }
         }
 
