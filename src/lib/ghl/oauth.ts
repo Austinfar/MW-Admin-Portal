@@ -31,8 +31,12 @@ export function getAuthorizationUrl(redirectUri: string) {
 }
 
 export async function exchangeCodeForToken(code: string, redirectUri: string) {
+    if (!GHL_CONFIG.CLIENT_ID) {
+        throw new Error('GHL_CLIENT_ID is not configured in environment variables.')
+    }
+
     const body = new URLSearchParams({
-        client_id: GHL_CONFIG.CLIENT_ID || '',
+        client_id: GHL_CONFIG.CLIENT_ID,
         client_secret: GHL_CONFIG.CLIENT_SECRET || '',
         grant_type: 'authorization_code',
         code,
