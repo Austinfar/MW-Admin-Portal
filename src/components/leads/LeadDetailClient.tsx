@@ -1,21 +1,35 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
-import { format } from 'date-fns'
-import { Mail, Phone, ArrowRight, Trash2, MessageSquare, Activity, ExternalLink, UserPlus, Loader2 } from 'lucide-react'
+import { format, differenceInDays } from 'date-fns'
+import {
+    Mail, Phone, ArrowRight, Trash2, MessageSquare, Activity,
+    ExternalLink, UserPlus, Loader2, Star, CalendarPlus, ListPlus, UserCheck
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Textarea } from '@/components/ui/textarea'
-import { convertLeadToClient, deleteLead, updateLeadAppointmentSetter, getLeadActivity } from '@/lib/actions/lead-actions'
-import { LeadMetadataCard } from '@/components/leads/LeadMetadataCard'
+import {
+    convertLeadToClient,
+    deleteLead,
+    updateLeadAppointmentSetter,
+    updateLeadCloser,
+    getLeadActivity,
+    toggleLeadPriority,
+    updateLeadStatus,
+    addToCallQueue
+} from '@/lib/actions/lead-actions'
 import { LeadJourneyStepper } from '@/components/leads/LeadJourneyStepper'
+import { ConsultationInfoCard } from '@/components/leads/ConsultationInfoCard'
+import { PreCallSummaryCard } from '@/components/leads/PreCallSummaryCard'
+import { LeadNotesEditor } from '@/components/leads/LeadNotesEditor'
+import { ScheduleFollowUpDialog } from '@/components/leads/ScheduleFollowUpDialog'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
+import { cn } from '@/lib/utils'
 
 interface Lead {
     id: string
@@ -30,7 +44,9 @@ interface Lead {
     created_at: string
     updated_at: string
     booked_by_user_id: string | null
-    metadata?: Record<string, any>
+    assigned_user_id: string | null
+    is_priority?: boolean
+    metadata?: Record<string, unknown>
 }
 
 interface ActivityLog {
@@ -38,7 +54,7 @@ interface ActivityLog {
     type: string
     description: string | null
     created_at: string
-    metadata?: Record<string, any>
+    metadata?: Record<string, unknown>
 }
 
 interface SimpleUser {
@@ -52,15 +68,39 @@ interface LeadDetailClientProps {
     resolvedCoachName?: string | null
 }
 
+const LEAD_STATUSES = [
+    { value: 'New', label: 'New' },
+    { value: 'Contacted', label: 'Contacted' },
+    { value: 'Appt Set', label: 'Appt Set' },
+    { value: 'Closed Won', label: 'Won' },
+    { value: 'Closed Lost', label: 'Lost' },
+    { value: 'No Show', label: 'No Show' },
+]
+
 export function LeadDetailClient({ lead, ghlLocationId, resolvedCoachName }: LeadDetailClientProps) {
     const router = useRouter()
     const [users, setUsers] = useState<SimpleUser[]>([])
     const [loadingUsers, setLoadingUsers] = useState(true)
     const [selectedSetter, setSelectedSetter] = useState<string>(lead.booked_by_user_id || '')
+    const [selectedCloser, setSelectedCloser] = useState<string>(lead.assigned_user_id || '')
     const [updatingSetter, setUpdatingSetter] = useState(false)
+    const [updatingCloser, setUpdatingCloser] = useState(false)
     const [isAdmin, setIsAdmin] = useState(false)
     const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([])
     const [loadingActivity, setLoadingActivity] = useState(true)
+    const [isPriority, setIsPriority] = useState(lead.is_priority || false)
+    const [togglingPriority, setTogglingPriority] = useState(false)
+    const [currentStatus, setCurrentStatus] = useState(lead.status)
+    const [updatingStatus, setUpdatingStatus] = useState<string | null>(null)
+    const [followUpDialogOpen, setFollowUpDialogOpen] = useState(false)
+
+    // Calculate days in pipeline
+    const daysInPipeline = differenceInDays(new Date(), new Date(lead.created_at))
+
+    // Get consultation date from metadata
+    const consultationDate = (lead.metadata?.consultation_scheduled_for as string) || null
+    const meetingLink = (lead.metadata?.meeting_link as string) ||
+                        (lead.metadata?.video_call_url as string) || null
 
     useEffect(() => {
         async function fetchActivity() {
@@ -76,7 +116,6 @@ export function LeadDetailClient({ lead, ghlLocationId, resolvedCoachName }: Lea
         fetchActivity()
     }, [lead.id])
 
-    // Fetch users for appointment setter dropdown and check if current user is admin
     useEffect(() => {
         async function init() {
             try {
@@ -86,7 +125,6 @@ export function LeadDetailClient({ lead, ghlLocationId, resolvedCoachName }: Lea
                     setIsAdmin(true)
                     const { users: allUsers } = await getAllUsers()
                     if (allUsers) {
-                        // Filter to setters/appointment setters or just show all for flexibility
                         setUsers(allUsers.map(u => ({ id: u.id, name: u.name })))
                     }
                 }
@@ -110,7 +148,7 @@ export function LeadDetailClient({ lead, ghlLocationId, resolvedCoachName }: Lea
             } else {
                 toast.success('Appointment setter updated')
             }
-        } catch (e) {
+        } catch {
             toast.error('Failed to update appointment setter')
             setSelectedSetter(lead.booked_by_user_id || '')
         } finally {
@@ -118,15 +156,80 @@ export function LeadDetailClient({ lead, ghlLocationId, resolvedCoachName }: Lea
         }
     }
 
+    const handleCloserChange = async (newCloserId: string) => {
+        setSelectedCloser(newCloserId)
+        setUpdatingCloser(true)
+        try {
+            const result = await updateLeadCloser(lead.id, newCloserId || null)
+            if (result.error) {
+                toast.error(result.error)
+                setSelectedCloser(lead.assigned_user_id || '')
+            } else {
+                toast.success('Closer updated')
+            }
+        } catch {
+            toast.error('Failed to update closer')
+            setSelectedCloser(lead.assigned_user_id || '')
+        } finally {
+            setUpdatingCloser(false)
+        }
+    }
+
+    const handleTogglePriority = async () => {
+        setTogglingPriority(true)
+        const result = await toggleLeadPriority(lead.id)
+        if (result.error) {
+            toast.error(result.error)
+        } else {
+            setIsPriority(result.is_priority || false)
+            toast.success(result.is_priority ? 'Marked as priority' : 'Priority removed')
+        }
+        setTogglingPriority(false)
+    }
+
+    const handleStatusChange = async (newStatus: string) => {
+        if (newStatus === currentStatus) return
+
+        setUpdatingStatus(newStatus)
+        const result = await updateLeadStatus(lead.id, newStatus)
+        if (result.error) {
+            toast.error(result.error)
+        } else {
+            setCurrentStatus(newStatus)
+            toast.success(`Status changed to ${newStatus}`)
+        }
+        setUpdatingStatus(null)
+    }
+
+    const handleAddToQueue = async () => {
+        const result = await addToCallQueue(lead.id)
+        if (result.error) {
+            toast.error(result.error)
+        } else {
+            toast.success('Added to call queue')
+        }
+    }
+
     const getStatusColor = (status: string) => {
         const styles: Record<string, string> = {
             'New': 'bg-blue-500/15 text-blue-700 dark:text-blue-400',
             'Contacted': 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-400',
+            'Appt Set': 'bg-purple-500/15 text-purple-700 dark:text-purple-400',
             'Qualified': 'bg-purple-500/15 text-purple-700 dark:text-purple-400',
+            'Closed Won': 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
             'Won': 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
+            'Closed Lost': 'bg-red-500/15 text-red-700 dark:text-red-400',
             'Lost': 'bg-red-500/15 text-red-700 dark:text-red-400',
+            'No Show': 'bg-orange-500/15 text-orange-700 dark:text-orange-400',
         }
         return styles[status] || 'bg-gray-500/15 text-gray-700'
+    }
+
+    const getDaysColor = (days: number) => {
+        if (days <= 7) return 'bg-blue-500/20 text-blue-400'
+        if (days <= 14) return 'bg-zinc-500/20 text-zinc-400'
+        if (days <= 30) return 'bg-amber-500/20 text-amber-400'
+        return 'bg-red-500/20 text-red-400'
     }
 
     const handleConvert = async () => {
@@ -144,14 +247,13 @@ export function LeadDetailClient({ lead, ghlLocationId, resolvedCoachName }: Lea
     const handleDelete = async () => {
         if (!confirm('Are you sure you want to delete this lead? This cannot be undone.')) return
 
-        toast.promise(async () => {
-            await deleteLead(lead.id)
+        const result = await deleteLead(lead.id)
+        if (result.error) {
+            toast.error(`Failed to delete: ${result.error}`)
+        } else {
+            toast.success('Lead deleted')
             router.push('/leads')
-        }, {
-            loading: 'Deleting...',
-            success: 'Lead deleted',
-            error: 'Failed to delete'
-        })
+        }
     }
 
     const ghlContactUrl = lead.ghl_contact_id && ghlLocationId
@@ -169,11 +271,33 @@ export function LeadDetailClient({ lead, ghlLocationId, resolvedCoachName }: Lea
                     </Avatar>
                     <div className="space-y-1">
                         <div className="flex items-center gap-2">
+                            {/* Priority Star */}
+                            <button
+                                onClick={handleTogglePriority}
+                                disabled={togglingPriority}
+                                className="p-1 hover:bg-zinc-800 rounded transition-colors disabled:opacity-50"
+                                title={isPriority ? 'Remove priority' : 'Mark as priority'}
+                            >
+                                {togglingPriority ? (
+                                    <Loader2 className="h-5 w-5 animate-spin text-yellow-500" />
+                                ) : (
+                                    <Star
+                                        className={cn(
+                                            'h-5 w-5 transition-colors',
+                                            isPriority ? 'fill-yellow-500 text-yellow-500' : 'text-zinc-600 hover:text-yellow-500'
+                                        )}
+                                    />
+                                )}
+                            </button>
                             <h2 className="text-3xl font-bold tracking-tight text-foreground">
                                 {lead.first_name} {lead.last_name}
                             </h2>
-                            <Badge variant="secondary" className={getStatusColor(lead.status)}>
-                                {lead.status}
+                            <Badge variant="secondary" className={getStatusColor(currentStatus)}>
+                                {currentStatus}
+                            </Badge>
+                            {/* Days in Pipeline */}
+                            <Badge variant="secondary" className={getDaysColor(daysInPipeline)}>
+                                {daysInPipeline} day{daysInPipeline !== 1 ? 's' : ''}
                             </Badge>
                         </div>
                         <div className="text-muted-foreground flex items-center gap-4">
@@ -207,18 +331,28 @@ export function LeadDetailClient({ lead, ghlLocationId, resolvedCoachName }: Lea
                 </div>
             </div>
 
+            {/* Journey Stepper */}
             <div className="mb-6">
                 <LeadJourneyStepper
                     metadata={lead.metadata || null}
-                    status={lead.status}
+                    status={currentStatus}
                     coachName={resolvedCoachName}
                 />
             </div>
 
-            <Separator className="bg-primary/10 mb-6" />
+            {/* Consultation Info Card - Full Width */}
+            <ConsultationInfoCard
+                consultationDate={consultationDate}
+                meetingLink={meetingLink}
+                leadId={lead.id}
+                status={currentStatus}
+                onStatusChange={() => setCurrentStatus('No Show')}
+            />
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-250px)]">
-                {/* Left Column: Identity & Contact (3 cols) */}
+            <Separator className="bg-primary/10 my-6" />
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Left Column: Identity & Quick Actions (3 cols) */}
                 <div className="lg:col-span-3 space-y-6">
                     {/* Lead Details Card */}
                     <Card className="bg-card/40 border-primary/5 backdrop-blur-sm">
@@ -235,14 +369,18 @@ export function LeadDetailClient({ lead, ghlLocationId, resolvedCoachName }: Lea
                                 <span className="text-sm font-medium">{format(new Date(lead.created_at), 'MMM d, yyyy')}</span>
                             </div>
                             <div className="flex justify-between items-center border-b border-primary/5 pb-2">
-                                <span className="text-sm text-muted-foreground">Last Updated</span>
-                                <span className="text-sm font-medium">{format(new Date(lead.updated_at), 'MMM d, yyyy')}</span>
+                                <span className="text-sm text-muted-foreground">Age</span>
+                                <span className={cn('text-sm font-medium px-2 py-0.5 rounded', getDaysColor(daysInPipeline))}>
+                                    {daysInPipeline} day{daysInPipeline !== 1 ? 's' : ''}
+                                </span>
                             </div>
+
+                            {/* Setter Dropdown */}
                             {isAdmin && (
-                                <div className="flex justify-between items-center pb-2">
+                                <div className="flex justify-between items-center border-b border-primary/5 pb-2">
                                     <span className="text-sm text-muted-foreground flex items-center gap-1">
                                         <UserPlus className="h-3 w-3" />
-                                        Appt. Setter
+                                        Setter
                                     </span>
                                     {loadingUsers ? (
                                         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -266,6 +404,36 @@ export function LeadDetailClient({ lead, ghlLocationId, resolvedCoachName }: Lea
                                     )}
                                 </div>
                             )}
+
+                            {/* Closer Dropdown */}
+                            {isAdmin && (
+                                <div className="flex justify-between items-center pb-2">
+                                    <span className="text-sm text-muted-foreground flex items-center gap-1">
+                                        <UserCheck className="h-3 w-3" />
+                                        Closer
+                                    </span>
+                                    {loadingUsers ? (
+                                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                    ) : (
+                                        <div className="relative">
+                                            <select
+                                                className="h-8 px-2 py-1 bg-[#1a1a1a] border border-white/10 rounded-md text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 disabled:opacity-50"
+                                                value={selectedCloser}
+                                                onChange={(e) => handleCloserChange(e.target.value)}
+                                                disabled={updatingCloser}
+                                            >
+                                                <option value="">None</option>
+                                                {users.map(u => (
+                                                    <option key={u.id} value={u.id}>{u.name || 'Unknown'}</option>
+                                                ))}
+                                            </select>
+                                            {updatingCloser && (
+                                                <Loader2 className="absolute right-6 top-2 h-3 w-3 animate-spin text-emerald-500" />
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
 
@@ -275,6 +443,23 @@ export function LeadDetailClient({ lead, ghlLocationId, resolvedCoachName }: Lea
                             <CardTitle className="text-lg">Quick Actions</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-2">
+                            <Button
+                                variant="outline"
+                                className="w-full justify-start"
+                                onClick={() => setFollowUpDialogOpen(true)}
+                            >
+                                <CalendarPlus className="mr-2 h-4 w-4" />
+                                Schedule Follow-up
+                            </Button>
+                            <Button
+                                variant="outline"
+                                className="w-full justify-start"
+                                onClick={handleAddToQueue}
+                            >
+                                <ListPlus className="mr-2 h-4 w-4" />
+                                Add to Call Queue
+                            </Button>
+                            <Separator className="my-2" />
                             <Button variant="outline" className="w-full justify-start" asChild>
                                 <a href={`mailto:${lead.email}`}>
                                     <Mail className="mr-2 h-4 w-4" />
@@ -297,40 +482,29 @@ export function LeadDetailClient({ lead, ghlLocationId, resolvedCoachName }: Lea
                     </Card>
                 </div>
 
-                {/* Main Column: Notes & Activity (6 cols) */}
-                <div className="lg:col-span-6 space-y-6 h-full flex flex-col">
-                    {/* Metadata Card */}
-                    <LeadMetadataCard
+                {/* Main Column: Pre-Call Summary, Notes & Activity (6 cols) */}
+                <div className="lg:col-span-6 space-y-6 flex flex-col">
+                    {/* Pre-Call Summary */}
+                    <PreCallSummaryCard
                         metadata={lead.metadata || null}
-                        resolvedCoachName={resolvedCoachName}
+                        source={lead.source}
+                        coachName={resolvedCoachName}
                     />
 
-                    <Tabs defaultValue="activity" className="w-full flex-1 flex flex-col">
+                    <Tabs defaultValue="notes" className="w-full flex-1 flex flex-col">
                         <TabsList className="grid w-full grid-cols-2">
-                            <TabsTrigger value="activity">Activity</TabsTrigger>
                             <TabsTrigger value="notes">Notes</TabsTrigger>
+                            <TabsTrigger value="activity">Activity</TabsTrigger>
                         </TabsList>
                         <TabsContent value="notes" className="mt-4 flex-1">
-                            <Card className="bg-card/40 border-primary/5 backdrop-blur-sm h-full">
-                                <CardHeader>
-                                    <CardTitle>Notes</CardTitle>
-                                    <CardDescription>Add notes about this lead</CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    {lead.description ? (
-                                        <div className="bg-zinc-900/50 rounded-lg p-4 text-sm">
-                                            {lead.description}
-                                        </div>
-                                    ) : (
-                                        <div className="text-center text-muted-foreground py-8">
-                                            No notes yet. Use the description field to add notes.
-                                        </div>
-                                    )}
-                                </CardContent>
-                            </Card>
+                            <LeadNotesEditor
+                                leadId={lead.id}
+                                initialNotes={lead.description}
+                                updatedAt={lead.updated_at}
+                            />
                         </TabsContent>
                         <TabsContent value="activity" className="mt-4 flex-1">
-                            <Card className="bg-card/40 border-primary/5 backdrop-blur-sm h-full max-h-[600px] overflow-y-auto">
+                            <Card className="bg-card/40 border-primary/5 backdrop-blur-sm h-full max-h-[400px] overflow-y-auto">
                                 <CardHeader>
                                     <CardTitle>Activity Timeline</CardTitle>
                                     <CardDescription>Recent activity for this lead</CardDescription>
@@ -376,21 +550,28 @@ export function LeadDetailClient({ lead, ghlLocationId, resolvedCoachName }: Lea
                     <Card className="bg-card/40 border-primary/5 backdrop-blur-sm">
                         <CardHeader>
                             <CardTitle className="text-lg">Lead Status</CardTitle>
+                            <CardDescription className="text-xs">Click to change status</CardDescription>
                         </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="flex flex-col gap-2">
-                                {['New', 'Contacted', 'Qualified', 'Won', 'Lost'].map((status) => (
-                                    <div
-                                        key={status}
-                                        className={`px-3 py-2 rounded-lg border transition-colors ${lead.status === status
+                        <CardContent className="space-y-2">
+                            {LEAD_STATUSES.map((status) => (
+                                <button
+                                    key={status.value}
+                                    onClick={() => handleStatusChange(status.value)}
+                                    disabled={updatingStatus !== null}
+                                    className={cn(
+                                        'w-full px-3 py-2 rounded-lg border transition-all text-left flex items-center justify-between',
+                                        currentStatus === status.value
                                             ? 'border-neon-green bg-neon-green/10 text-neon-green'
-                                            : 'border-zinc-800 text-zinc-500'
-                                            }`}
-                                    >
-                                        {status}
-                                    </div>
-                                ))}
-                            </div>
+                                            : 'border-zinc-800 text-zinc-500 hover:border-zinc-600 hover:bg-zinc-800/30',
+                                        updatingStatus !== null && 'opacity-50 cursor-not-allowed'
+                                    )}
+                                >
+                                    {status.label}
+                                    {updatingStatus === status.value && (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                    )}
+                                </button>
+                            ))}
                         </CardContent>
                     </Card>
 
@@ -410,6 +591,14 @@ export function LeadDetailClient({ lead, ghlLocationId, resolvedCoachName }: Lea
                     </Card>
                 </div>
             </div>
+
+            {/* Schedule Follow-up Dialog */}
+            <ScheduleFollowUpDialog
+                leadId={lead.id}
+                leadName={`${lead.first_name} ${lead.last_name || ''}`}
+                open={followUpDialogOpen}
+                onOpenChange={setFollowUpDialogOpen}
+            />
         </div>
     )
 }

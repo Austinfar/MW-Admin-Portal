@@ -14,16 +14,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: {
-    template: "%s | MW Admin Portal",
-    default: "Dashboard | MW Admin Portal", // Default if no title is provided
-  },
-  description: "MW Fitness Coaching Administration",
+  title: "Admin | MW Fitness Coaching",
+  description: "MW Fitness Coaching Admin Portal",
   icons: {
     icon: "/favicon.svg",
   },
   openGraph: {
-    images: ["/og-image.png"],
+    images: ["/opengraph-image.png"],
   },
 };
 

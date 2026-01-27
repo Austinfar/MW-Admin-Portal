@@ -10,13 +10,7 @@ import {
     CollapsibleTrigger,
 } from '@/components/ui/collapsible'
 import { CalUserLink, CalUserLinkWithUser } from '@/lib/actions/cal-links'
-
-// Utility to add source parameter to booking URL
-function buildBookingUrl(baseUrl: string, source: 'company-driven' | 'coach-driven'): string {
-    if (!baseUrl) return ''
-    const separator = baseUrl.includes('?') ? '&' : '?'
-    return `${baseUrl}${separator}source=${source}`
-}
+import { buildBookingUrl } from '@/lib/cal/utils'
 
 interface BookingLinksSectionProps {
     globalCalendarUrl: string | null

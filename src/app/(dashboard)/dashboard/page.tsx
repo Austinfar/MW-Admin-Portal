@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server"
 import { getPendingApprovalRequests } from "@/lib/actions/subscriptions"
 import { ApprovalRequestsPanel } from "@/components/admin/ApprovalRequestsPanel"
 
-export const dynamic = 'force-dynamic' // Ensure real-time data
+export const revalidate = 60 // Revalidate every 60 seconds, cached functions handle their own revalidation
 
 export default async function DashboardPage() {
     await protectRoute('can_view_dashboard')
