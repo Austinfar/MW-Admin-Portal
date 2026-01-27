@@ -9,6 +9,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Button } from '@/components/ui/button'
 import { Check, Clipboard, RefreshCw, Link as LinkIcon } from 'lucide-react'
 import { toast } from 'sonner'
+import { getCoaches, type CoachUser } from '@/lib/actions/user-actions'
 
 export default function LinkGeneratorPage() {
     // --- State ---
@@ -17,6 +18,9 @@ export default function LinkGeneratorPage() {
     const [coach, setCoach] = useState<string>('none')
     const [trafficType, setTrafficType] = useState<string>('paid')
     const [source, setSource] = useState<string>('instagram')
+
+    // Dynamic Data
+    const [availableCoaches, setAvailableCoaches] = useState<CoachUser[]>([])
 
     // Manual overrides
     const [campaign, setCampaign] = useState<string>('')
@@ -33,12 +37,6 @@ export default function LinkGeneratorPage() {
         'book': 'https://book.mwfitnesscoaching.com/'
     }
 
-    const COACHES = [
-        { label: 'No Specific Coach', value: 'none' },
-        { label: 'Matt Basardo', value: 'matt-basardo' },
-        { label: 'Sarah Gleason', value: 'sarah-gleason' }
-    ]
-
     const SOURCES = [
         { label: 'Instagram', value: 'instagram' },
         { label: 'Facebook', value: 'facebook' },
@@ -49,6 +47,20 @@ export default function LinkGeneratorPage() {
         { label: 'Other', value: 'other' }
     ]
 
+    // --- Load Data ---
+    useEffect(() => {
+        const loadCoaches = async () => {
+            try {
+                const data = await getCoaches()
+                setAvailableCoaches(data)
+            } catch (error) {
+                console.error('Failed to load coaches', error)
+                toast.error('Failed to load coach list')
+            }
+        }
+        loadCoaches()
+    }, [])
+
     // --- Logic ---
     useEffect(() => {
         let url = new URL(BASE_URLS[funnel])
@@ -57,7 +69,7 @@ export default function LinkGeneratorPage() {
         // 1. Attribution
         if (leadType === 'coach' && coach !== 'none') {
             params.set('lead_type', 'coach')
-            params.set('coach', coach)
+            params.set('coach', coach) // Now using the UUID from the value
         } else {
             params.set('lead_type', 'company')
             if (coach !== 'none') {
@@ -93,7 +105,7 @@ export default function LinkGeneratorPage() {
         url.search = params.toString()
         setGeneratedUrl(url.toString())
 
-    }, [funnel, leadType, coach, trafficType, source, campaign, term, content])
+    }, [funnel, leadType, coach, trafficType, source, campaign, term, content, BASE_URLS])
 
     // --- Handlers ---
     const copyToClipboard = () => {
@@ -160,8 +172,11 @@ export default function LinkGeneratorPage() {
                                         <SelectValue placeholder="Select Coach" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {COACHES.map(c => (
-                                            <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                                        <SelectItem value="none">No Specific Coach</SelectItem>
+                                        {availableCoaches.map(c => (
+                                            <SelectItem key={c.id} value={c.id}>
+                                                {c.name}
+                                            </SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>
