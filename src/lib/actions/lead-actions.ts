@@ -138,6 +138,10 @@ export async function upsertLead(supabase: any, data: {
 
             const ghlResult = await pushToGHL(ghlData)
 
+            if (ghlResult.error) {
+                console.error('[lead-actions] GHL Sync returned error:', ghlResult)
+            }
+
             if (ghlResult.ghlContactId) {
                 const updates: any = { ghl_contact_id: ghlResult.ghlContactId }
                 if (ghlResult.ghlOpportunityId) {
