@@ -159,7 +159,7 @@ export async function pushContractVariablesToGHL(
     // Validate variables
     const validated = ContractVariablesSchema.safeParse(variables)
     if (!validated.success) {
-        console.error('[GHL Contract] Invalid contract variables:', validated.error.errors)
+        console.error('[GHL Contract] Invalid contract variables:', validated.error.issues)
         return { success: false, error: 'Invalid contract variables' }
     }
 
@@ -247,6 +247,13 @@ export async function getContractVariablesForClient(
         return { success: false, error: 'No active contract found' }
     }
 
+    // Handle Supabase returning array for single relation
+    const coachData = client.assigned_coach
+    const coach = Array.isArray(coachData) ? coachData[0] : coachData
+    const assignedCoach = coach && typeof coach === 'object' && 'name' in coach && 'email' in coach
+        ? (coach as { name: string; email: string })
+        : null
+
     const variables = buildContractVariables(
         {
             id: client.id,
@@ -254,7 +261,7 @@ export async function getContractVariablesForClient(
             email: client.email,
             phone: client.phone,
             ghl_contact_id: client.ghl_contact_id,
-            assigned_coach: client.assigned_coach as { name: string; email: string } | null,
+            assigned_coach: assignedCoach,
         },
         {
             start_date: contract.start_date,

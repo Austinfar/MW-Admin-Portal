@@ -376,7 +376,7 @@ export async function createContractFromPaymentSchedule(
     }
 
     // Determine payment type from schedule
-    let paymentType: PaymentType | null = null
+    let paymentType: PaymentType | undefined
     if (schedule.payment_type === 'one_time') {
         paymentType = 'paid_in_full'
     } else if (schedule.payment_type === 'split') {
@@ -413,13 +413,13 @@ export async function createContractFromPaymentSchedule(
         end_date: endDate,
         program_name: schedule.plan_name || 'Coaching Program',
         program_term_months: programTermMonths,
-        payment_type: paymentType,
+        payment_type: paymentType ?? undefined,
         payment_schedule_id: paymentScheduleId,
-        total_value: schedule.total_amount || null,
-        monthly_rate: schedule.amount || null,
-        down_payment: downPayment,
-        installment_count: installmentCount,
-        installment_amount: installmentAmount,
+        total_value: schedule.total_amount ?? undefined,
+        monthly_rate: schedule.amount ?? undefined,
+        down_payment: downPayment ?? undefined,
+        installment_count: installmentCount ?? undefined,
+        installment_amount: installmentAmount ?? undefined,
         payment_collection_method: 'payment_link',
         manual_entry: false,
     }
