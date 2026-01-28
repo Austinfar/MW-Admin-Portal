@@ -93,7 +93,7 @@ export function PaymentScheduleCard({
                             {new Intl.NumberFormat('en-US', {
                                 style: 'currency',
                                 currency: 'USD'
-                            }).format(totalValue)}
+                            }).format(totalValue / 100)}
                         </span>
                     </div>
 
@@ -105,7 +105,7 @@ export function PaymentScheduleCard({
                                 {new Intl.NumberFormat('en-US', {
                                     style: 'currency',
                                     currency: 'USD'
-                                }).format(totalPaid)}
+                                }).format(totalPaid / 100)}
                             </span>
                         </div>
                         <Progress value={progressPercent} className="h-2" />
@@ -115,7 +115,7 @@ export function PaymentScheduleCard({
                                 {new Intl.NumberFormat('en-US', {
                                     style: 'currency',
                                     currency: 'USD'
-                                }).format(totalRemaining)}
+                                }).format(totalRemaining / 100)}
                             </span>
                         </div>
                     </div>
@@ -151,7 +151,7 @@ export function PaymentScheduleCard({
                                                     {new Intl.NumberFormat('en-US', {
                                                         style: 'currency',
                                                         currency: 'USD'
-                                                    }).format(charge.amount)}
+                                                    }).format(charge.amount / 100)}
                                                 </div>
                                                 <div className={`text-xs ${isPastDue ? 'text-red-500' : 'text-muted-foreground'}`}>
                                                     <Calendar className="h-3 w-3 inline mr-1" />

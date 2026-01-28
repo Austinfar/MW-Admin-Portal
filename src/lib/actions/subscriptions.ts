@@ -107,7 +107,7 @@ export async function getClientSubscription(clientId: string): Promise<ClientSub
             customer: client.stripe_customer_id,
             status: 'all',
             limit: 1,
-            expand: ['data.items.data.price.product'],
+            expand: ['data.items.data.price'],
         });
 
         if (subscriptions.data.length > 0) {

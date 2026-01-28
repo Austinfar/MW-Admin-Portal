@@ -446,3 +446,103 @@ export async function getNextContractNumber(clientId: string): Promise<number> {
 
     return (data?.[0]?.contract_number || 0) + 1
 }
+// ============================================================================
+// Get Latest Payment Schedule for Prefill
+// ============================================================================
+
+export async function getLatestPaymentScheduleForClient(clientId: string) {
+    const adminSupabase = createAdminClient()
+
+    // 1. Try to find by client_id directly
+    let { data: schedules } = await adminSupabase
+        .from('payment_schedules')
+        .select('*')
+        .eq('client_id', clientId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+    // 2. If not found, try to find by linking via email/lead
+    if (!schedules || schedules.length === 0) {
+        const { data: client } = await adminSupabase
+            .from('clients')
+            .select('email, ghl_contact_id')
+            .eq('id', clientId)
+            .single()
+
+        if (client?.email) {
+            // Find lead by email
+            const { data: lead } = await adminSupabase
+                .from('leads')
+                .select('id')
+                .eq('email', client.email)
+                .single()
+
+            if (lead) {
+                const { data: leadSchedules } = await adminSupabase
+                    .from('payment_schedules')
+                    .select('*')
+                    .eq('lead_id', lead.id)
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+
+                schedules = leadSchedules
+            }
+        }
+    }
+
+    if (!schedules || schedules.length === 0) {
+        return null
+    }
+
+    const schedule = schedules[0]
+
+    // Map to form values
+    let paymentType: 'paid_in_full' | 'monthly' | 'split_pay' | '' = ''
+    if (schedule.payment_type === 'one_time') paymentType = 'paid_in_full'
+    else if (schedule.payment_type === 'recurring') paymentType = 'monthly'
+    else if (schedule.payment_type === 'split') paymentType = 'split_pay'
+
+    const programTerm = schedule.program_term || '6'
+    const programName = schedule.plan_name || ''
+
+    // Amounts are in cents, convert to dollars
+    const totalValue = schedule.total_amount ? (schedule.total_amount / 100).toFixed(2) : ''
+
+    // Default assignments
+    let monthlyRate = ''
+    let downPayment = ''
+    let installmentCount = ''
+    let installmentAmount = ''
+
+    if (schedule.payment_type === 'recurring') {
+        // For monthly, amount is the monthly rate
+        monthlyRate = schedule.amount ? (schedule.amount / 100).toFixed(2) : ''
+    } else if (schedule.payment_type === 'split') {
+        // For split, amount is the down payment
+        downPayment = schedule.amount ? (schedule.amount / 100).toFixed(2) : ''
+
+        if (schedule.schedule_json && Array.isArray(schedule.schedule_json)) {
+            installmentCount = schedule.schedule_json.length.toString()
+            if (schedule.schedule_json.length > 0) {
+                // Assuming all installments are same amount, take the first one
+                installmentAmount = (schedule.schedule_json[0].amount / 100).toFixed(2)
+            }
+        }
+    } else {
+        // Fallback catch-all
+        monthlyRate = schedule.amount ? (schedule.amount / 100).toFixed(2) : ''
+    }
+
+    return {
+        programName,
+        paymentType,
+        programTerm,
+        startDate: schedule.start_date ? new Date(schedule.start_date) : undefined,
+        totalValue,
+        monthlyRate,
+        downPayment,
+        installmentCount,
+        installmentAmount,
+        notes: `Prefilled from Payment Schedule: ${schedule.id}`
+    }
+}

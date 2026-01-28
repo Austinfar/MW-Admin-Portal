@@ -372,11 +372,12 @@ export class GHLClient {
      * @returns Document ID if successful
      */
     async sendDocument(contactId: string, templateId: string): Promise<{ documentId: string } | null> {
-        const response = await this.request<{ document?: { id: string }; id?: string }>(`/contacts/${contactId}/documents`, {
+        // NOTE: Using the /documents/templates/send endpoint which creates AND sends a document from a template
+        const response = await this.request<{ document?: { id: string }; id?: string }>(`/documents/templates/send`, {
             method: 'POST',
             body: JSON.stringify({
                 templateId,
-                // GHL auto-populates template variables from contact data
+                contactIds: [contactId],
             })
         })
 
@@ -435,5 +436,20 @@ export class GHLClient {
         })
 
         return response?.success !== false
+    }
+
+    /**
+     * Add contact to a workflow
+     * @param contactId GHL contact ID
+     * @param workflowId GHL workflow ID
+     */
+    async addContactToWorkflow(contactId: string, workflowId: string): Promise<{ success: boolean }> {
+        // NOTE: Endpoint is /contacts/{contactId}/workflow/{workflowId} - POST
+        const response = await this.request<{ success?: boolean }>(`/contacts/${contactId}/workflow/${workflowId}`, {
+            method: 'POST'
+        })
+
+        // GHL usually returns 200 OK with success: true or similar
+        return { success: true }
     }
 }

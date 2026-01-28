@@ -16,7 +16,10 @@ export function getAuthorizationUrl(redirectUri: string) {
         'calendars.readonly',
         'calendars.write',
         'users.readonly',
-        'locations.readonly'
+        'locations.readonly',
+        'documents.readonly',
+        'documents.write',
+        'locations/customFields.readonly'
     ].join(' ')
 
     const params = new URLSearchParams({
