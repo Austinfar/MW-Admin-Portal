@@ -118,6 +118,7 @@ export async function POST(req: NextRequest) {
         const contactId = body.contactId ||
             body.contact_id ||
             body.document?.contactId ||
+            body.document?.contact?.id ||
             body.data?.contactId
 
         // Update agreement in database
