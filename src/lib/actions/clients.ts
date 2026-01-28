@@ -253,14 +253,11 @@ export async function updateClient(id: string, data: Partial<Client>) {
     return { success: true }
 }
 
-// Get enhanced client data with payment and onboarding info
-async function _getEnhancedClients(): Promise<EnhancedClient[]> {
+// Internal cached function working with primitive arguments (static or passed in)
+async function _fetchEnhancedClients(permission: string, userId?: string): Promise<EnhancedClient[]> {
     const supabase = createAdminClient()
-    const userAccess = await getCurrentUserAccess()
 
-    // Default empty if no access
-    if (!userAccess) return []
-    const permission = userAccess.permissions.can_view_clients
+    // Default empty if blocked at top level (though caller should handle this)
     if (!permission || permission === 'none') return []
 
     // Get clients with basic data
@@ -275,12 +272,10 @@ async function _getEnhancedClients(): Promise<EnhancedClient[]> {
         `)
         .order('created_at', { ascending: false })
 
-    // Apply 'own' filter
+    // Apply 'own' filter using passed userId
     if (permission === 'own') {
-        const authClient = await createClient()
-        const { data: { user } } = await authClient.auth.getUser()
-        if (user) {
-            query = query.or(`assigned_coach_id.eq.${user.id},appointment_setter_id.eq.${user.id},sold_by_user_id.eq.${user.id}`)
+        if (userId) {
+            query = query.or(`assigned_coach_id.eq.${userId},appointment_setter_id.eq.${userId},sold_by_user_id.eq.${userId}`)
         } else {
             return []
         }
@@ -338,14 +333,56 @@ async function _getEnhancedClients(): Promise<EnhancedClient[]> {
     })) as EnhancedClient[]
 }
 
-export const getEnhancedClients = unstable_cache(
-    _getEnhancedClients,
+// 1. Define the cached wrapper expecting primitive args
+const getEnhancedClientsCached = unstable_cache(
+    _fetchEnhancedClients,
     ['enhanced-clients'],
     { revalidate: 60, tags: ['clients'] }
 )
 
+// 2. Export the public function that fetches dynamic data first
+export async function getEnhancedClients() {
+    const userAccess = await getCurrentUserAccess()
+
+    // Default empty if no access
+    if (!userAccess) return []
+    const permission = userAccess.permissions.can_view_clients
+    if (!permission || permission === 'none') return []
+
+    // Get user ID if needed for "own" scope
+    let userId: string | undefined
+    if (permission === 'own') {
+        const supabase = await createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        userId = user?.id
+    }
+
+    // Call the cached function with primitive args
+    // We append userId to cache key implicitly via arguments? 
+    // unstable_cache uses the arguments to generate unique keys if configured, 
+    // but here we are using a fixed key ['enhanced-clients']. 
+    // WAIT: If we use a fixed key, everyone gets the same result!
+    // We MUST include keys in the cache key array or rely on args if using implicit hashing (Next 15+ sometimes).
+    // Let's rely on explicit keys to be safe. We need a wrapper that varies by user if permission is 'own'.
+
+    // Logic update: `unstable_cache` key needs to vary if the data varies.
+    // If permission is 'all', key is generic. If 'own', key must include userId.
+
+    // Changing approach slightly: We can't pass varying keys to a single defined `unstable_cache` instance easily
+    // without using the arguments in the key generator function if supported, or creating the cached function dynamically.
+
+    // Better pattern: Wrapper function calls specific cached entry points or dynamic key generation.
+    const cacheKey = permission === 'own' && userId ? `enhanced-clients-${userId}` : 'enhanced-clients-all'
+
+    return unstable_cache(
+        () => _fetchEnhancedClients(permission, userId),
+        [cacheKey],
+        { revalidate: 60, tags: ['clients'] }
+    )()
+}
+
 // Get client statistics for dashboard cards
-async function _getClientStats(userId?: string, ownOnly?: boolean): Promise<ClientStats> {
+async function _fetchClientStats(userId?: string, ownOnly?: boolean): Promise<ClientStats> {
     const supabase = createAdminClient()
 
     // Get all clients
@@ -389,6 +426,12 @@ async function _getClientStats(userId?: string, ownOnly?: boolean): Promise<Clie
     // Calculate stats
     const activeClients = clients.filter(c => c.status === 'active')
 
+    // Filter secondary lists if ownOnly is on?
+    // Wait, failedPaymentClientIds and overdueTaskClientIds are derived from global queries above.
+    // If we only care about 'own' clients, this is fine because we filter the main 'clients' list effectively.
+    // The Set lookups will just fail for IDs not in 'clients' list anyway.
+    // Optimization: We could filter the payments/tasks queries too, but for stats cards typical volume this is likely okay.
+
     const atRiskClients = activeClients.filter(c =>
         failedPaymentClientIds.has(c.id) || overdueTaskClientIds.has(c.id)
     )
@@ -407,14 +450,46 @@ async function _getClientStats(userId?: string, ownOnly?: boolean): Promise<Clie
     }
 }
 
-export const getClientStats = async (userId?: string, ownOnly?: boolean): Promise<ClientStats> => {
+const getClientStatsCached = async (userId?: string, ownOnly?: boolean) => {
     const cacheKey = ownOnly && userId ? `client-stats-${userId}` : 'client-stats-all'
-    const cachedFn = unstable_cache(
-        () => _getClientStats(userId, ownOnly),
+    return unstable_cache(
+        () => _fetchClientStats(userId, ownOnly),
         [cacheKey],
         { revalidate: 120, tags: ['clients', 'client_stats'] }
-    )
-    return cachedFn()
+    )()
+}
+
+export const getClientStats = async (userId?: string, ownOnly?: boolean): Promise<ClientStats> => {
+    // If arguments are explicitly passed, use them (legacy behavior support if any)
+    if (userId !== undefined || ownOnly !== undefined) {
+        return getClientStatsCached(userId, ownOnly)
+    }
+
+    // Otherwise, infer from current session
+    const userAccess = await getCurrentUserAccess()
+    if (!userAccess) return { total: 0, active: 0, atRisk: 0, endingSoon: 0 }
+
+    const permission = userAccess.permissions.can_view_clients
+
+    if (!permission || permission === 'none') {
+        return { total: 0, active: 0, atRisk: 0, endingSoon: 0 }
+    }
+
+    let effectiveUserId: string | undefined = undefined
+    let effectiveOwnOnly = false
+
+    if (permission === 'own') {
+        const supabase = await createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+            effectiveUserId = user.id
+            effectiveOwnOnly = true
+        } else {
+            return { total: 0, active: 0, atRisk: 0, endingSoon: 0 }
+        }
+    }
+
+    return getClientStatsCached(effectiveUserId, effectiveOwnOnly)
 }
 
 // Bulk update client status
