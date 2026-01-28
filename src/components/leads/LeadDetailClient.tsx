@@ -379,6 +379,33 @@ export function LeadDetailClient({ lead, ghlLocationId, resolvedCoachName }: Lea
                                 </span>
                             </div>
 
+                            <div className="flex justify-between items-center border-b border-primary/5 pb-2">
+                                <span className="text-sm text-muted-foreground">GHL Contact</span>
+                                <div className="flex items-center gap-2">
+                                    {lead.ghl_contact_id ? (
+                                        <>
+                                            <span
+                                                className="text-xs font-mono text-muted-foreground cursor-pointer hover:text-primary transition-colors"
+                                                title="Click to copy"
+                                                onClick={() => {
+                                                    navigator.clipboard.writeText(lead.ghl_contact_id!)
+                                                    toast.success('GHL ID copied')
+                                                }}
+                                            >
+                                                {lead.ghl_contact_id.substring(0, 8)}...
+                                            </span>
+                                            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[10px] px-1.5 h-5">
+                                                Synced
+                                            </Badge>
+                                        </>
+                                    ) : (
+                                        <Badge variant="destructive" className="text-[10px] px-1.5 h-5">
+                                            Not Synced
+                                        </Badge>
+                                    )}
+                                </div>
+                            </div>
+
                             {/* Setter Dropdown */}
                             {isAdmin && (
                                 <div className="flex justify-between items-center border-b border-primary/5 pb-2">
