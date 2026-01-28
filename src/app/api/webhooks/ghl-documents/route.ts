@@ -110,8 +110,14 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ received: true, handled: false })
         }
 
+        // Extract contact ID
+        const contactId = body.contactId ||
+            body.contact_id ||
+            body.document?.contactId ||
+            body.data?.contactId
+
         // Update agreement in database
-        const result = await updateAgreementFromWebhook(documentId, status, signedDocumentUrl)
+        const result = await updateAgreementFromWebhook(documentId, status, signedDocumentUrl, contactId)
 
         if (!result.success) {
             console.error('[GHL Documents] Failed to update agreement:', result.error)
