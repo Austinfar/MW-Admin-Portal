@@ -25,8 +25,8 @@ export function ClientJourneyTab({ client, tasks, goals, payments, users, logs }
             <div className="lg:col-span-2 space-y-6">
                 <Card className="bg-card/50 backdrop-blur-xl border-white/5 hover:border-primary/20 transition-all duration-300 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
                     <CardHeader>
-                        <CardTitle>Client Journey</CardTitle>
-                        <CardDescription>Track onboarding progress and milestones</CardDescription>
+                        <CardTitle>Client Tasks</CardTitle>
+                        <CardDescription>Manage client to-dos and milestones</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <ClientOnboardingChecklist tasks={tasks} clientId={client.id} users={users} />

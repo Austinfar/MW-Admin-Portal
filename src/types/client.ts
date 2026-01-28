@@ -66,8 +66,7 @@ export interface Note {
 export interface EnhancedClient extends Client {
     last_payment_date?: string | null
     last_payment_status?: string | null
-    onboarding_total?: number
-    onboarding_completed?: number
+    open_tasks_count?: number
     lifetime_revenue?: number
 }
 

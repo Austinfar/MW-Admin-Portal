@@ -47,6 +47,7 @@ function getStatusColor(status: string): string {
         case 'completed':
             return 'bg-blue-500';
         case 'cancelled':
+        case 'canceled':
             return 'bg-red-500';
         case 'pending_initial':
             return 'bg-yellow-500';
@@ -62,6 +63,7 @@ function getChargeStatusIcon(status: string) {
         case 'failed':
             return <XCircle className="h-4 w-4 text-red-500" />;
         case 'cancelled':
+        case 'canceled':
             return <XCircle className="h-4 w-4 text-gray-500" />;
         default:
             return <Clock className="h-4 w-4 text-amber-500" />;
@@ -107,13 +109,15 @@ export function ScheduleDetailSheet({
 
     // Calculate accurate totals
     const downPayment = schedule?.amount || 0;
-    const isScheduleActive = schedule?.status === 'active' || schedule?.status === 'completed';
-    const totalPaid = (isScheduleActive ? downPayment : 0) + paidChargesTotal;
+    // Down payment was collected if schedule ever became active (not draft or pending_initial)
+    const downPaymentCollected = schedule?.status !== 'draft' && schedule?.status !== 'pending_initial';
+    const totalPaid = (downPaymentCollected ? downPayment : 0) + paidChargesTotal;
     const actualRemaining = pendingChargesTotal;
 
     const canCancelSchedule =
         schedule &&
         schedule.status !== 'cancelled' &&
+        schedule.status !== 'canceled' &&
         schedule.status !== 'completed';
 
     if (!schedule) return null;
@@ -187,12 +191,23 @@ export function ScheduleDetailSheet({
                             {formatCurrency(schedule.total_amount || 0)}
                         </span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex justify-between items-center">
                         <span className="text-muted-foreground">
-                            Down Payment {isScheduleActive && <span className="text-emerald-500 text-xs">(Paid)</span>}
+                            Down Payment {downPaymentCollected && <span className="text-emerald-500 text-xs">(Paid)</span>}
                         </span>
-                        <span className={`font-medium ${isScheduleActive ? 'text-emerald-500' : ''}`}>
+                        <span className={`font-medium flex items-center gap-2 ${downPaymentCollected ? 'text-emerald-500' : ''}`}>
                             {formatCurrency(downPayment)}
+                            {downPaymentCollected && schedule.stripe_payment_intent_id && (
+                                <a
+                                    href={`https://dashboard.stripe.com/payments/${schedule.stripe_payment_intent_id}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-muted-foreground hover:text-foreground transition-colors"
+                                    title="View in Stripe"
+                                >
+                                    <ExternalLink className="h-3.5 w-3.5" />
+                                </a>
+                            )}
                         </span>
                     </div>
                     {paidChargesTotal > 0 && (
@@ -279,14 +294,24 @@ export function ScheduleDetailSheet({
                 {/* Past Charges - Read Only */}
                 {pastCharges.length > 0 && (
                     <div className="mt-6">
-                        <h4 className="text-sm font-medium mb-3 text-muted-foreground">
-                            Past Charges ({pastCharges.length})
-                        </h4>
+                        <div className="flex items-center justify-between mb-3">
+                            <h4 className="text-sm font-medium flex items-center gap-2">
+                                <CheckCircle className="h-4 w-4 text-emerald-500" />
+                                Past Charges ({pastCharges.length})
+                            </h4>
+                            {paidChargesTotal > 0 && (
+                                <span className="text-xs text-emerald-500 font-medium">
+                                    {formatCurrency(paidChargesTotal)} collected
+                                </span>
+                            )}
+                        </div>
                         <div className="space-y-2">
-                            {pastCharges.map(charge => (
+                            {pastCharges.map((charge, index) => (
                                 <ChargeRow
                                     key={charge.id}
                                     charge={charge}
+                                    index={index + 1}
+                                    totalPending={pastCharges.length}
                                     editable={false}
                                 />
                             ))}
@@ -317,10 +342,14 @@ function ChargeRow({ charge, index, totalPending, editable, onUpdate }: ChargeRo
     const isPastDue =
         charge.status === 'pending' && new Date(charge.due_date) < new Date();
 
+    const stripePaymentUrl = charge.stripe_payment_intent_id
+        ? `https://dashboard.stripe.com/payments/${charge.stripe_payment_intent_id}`
+        : null;
+
     return (
         <div
             className={`flex items-center justify-between p-3 rounded-lg ${
-                editable ? 'bg-white/5' : 'bg-white/[0.02] opacity-70'
+                editable ? 'bg-white/5' : 'bg-white/[0.02]'
             } ${isPastDue ? 'border border-red-500/30' : ''}`}
         >
             <div className="flex items-center gap-3">
@@ -335,7 +364,8 @@ function ChargeRow({ charge, index, totalPending, editable, onUpdate }: ChargeRo
                         )}
                     </div>
                     <div className="text-xs text-muted-foreground flex items-center gap-1">
-                        Due: {format(new Date(charge.due_date), 'MMM d, yyyy')}
+                        {charge.status === 'paid' ? 'Paid' : 'Due'}:{' '}
+                        {format(new Date(charge.due_date), 'MMM d, yyyy')}
                         {isPastDue && (
                             <Badge variant="destructive" className="text-[10px] h-4 px-1">
                                 Past Due
@@ -363,9 +393,25 @@ function ChargeRow({ charge, index, totalPending, editable, onUpdate }: ChargeRo
                     </CancelChargeDialog>
                 </div>
             ) : (
-                <Badge variant="secondary" className="capitalize">
-                    {charge.status}
-                </Badge>
+                <div className="flex items-center gap-2">
+                    <Badge
+                        variant={charge.status === 'paid' ? 'default' : 'secondary'}
+                        className={`capitalize ${charge.status === 'paid' ? 'bg-emerald-500 hover:bg-emerald-600' : ''}`}
+                    >
+                        {charge.status}
+                    </Badge>
+                    {stripePaymentUrl && (
+                        <a
+                            href={stripePaymentUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-muted-foreground hover:text-foreground transition-colors"
+                            title="View in Stripe"
+                        >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                    )}
+                </div>
             )}
         </div>
     );

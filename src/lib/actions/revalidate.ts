@@ -11,3 +11,8 @@ export async function refreshClientsData() {
     revalidatePath('/clients')
     return { success: true, timestamp: new Date().toISOString() }
 }
+
+export async function refreshOnboardingData() {
+    revalidatePath('/onboarding')
+    return { success: true, timestamp: new Date().toISOString() }
+}

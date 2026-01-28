@@ -46,7 +46,7 @@ const SCHEDULE_STATUSES = [
     { value: 'pending_initial', label: 'Pending Initial', color: 'bg-yellow-500' },
     { value: 'active', label: 'Active', color: 'bg-emerald-500' },
     { value: 'completed', label: 'Completed', color: 'bg-blue-500' },
-    { value: 'cancelled', label: 'Cancelled', color: 'bg-red-500' },
+    { value: 'canceled', label: 'Canceled', color: 'bg-red-500' },
 ];
 
 type SortField = 'client' | 'plan' | 'status' | 'total' | 'remaining' | 'start_date' | 'created_at';
@@ -60,7 +60,9 @@ function formatCurrency(cents: number): string {
 }
 
 function getStatusColor(status: string): string {
-    const found = SCHEDULE_STATUSES.find(s => s.value === status);
+    // Handle both American and British spellings of "canceled"
+    const normalizedStatus = status === 'cancelled' ? 'canceled' : status;
+    const found = SCHEDULE_STATUSES.find(s => s.value === normalizedStatus);
     return found?.color || 'bg-gray-500';
 }
 

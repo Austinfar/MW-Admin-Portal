@@ -5,12 +5,11 @@ import { Payment } from '@/types/payment'
 import { Client } from '@/types/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { CheckCircle2, CreditCard, UserPlus, Clock } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 
 interface ActivityItem {
     id: string
-    type: 'payment' | 'task_completion' | 'client_created' | 'conversion' | 'lead_created' | 'status_change' | 'general_log'
+    type: 'payment' | 'task_completion' | 'general_task_completion' | 'client_created' | 'conversion' | 'lead_created' | 'status_change' | 'general_log'
     date: Date
     title: string
     description?: string
@@ -69,9 +68,9 @@ export function ClientActivityTimeline({ client, tasks, payments, logs = [] }: C
     tasks.filter(t => t.status === 'completed' && t.completed_at).forEach(t => {
         activities.push({
             id: t.id,
-            type: 'task_completion',
+            type: t.task_template_id ? 'task_completion' : 'general_task_completion',
             date: new Date(t.completed_at!),
-            title: 'Task Completed',
+            title: t.task_template_id ? 'Onboarding Step' : 'Task Completed',
             description: t.title
         })
     })
@@ -104,7 +103,8 @@ export function ClientActivityTimeline({ client, tasks, payments, logs = [] }: C
                             {/* Dot */}
                             <div className="absolute -left-[23px] top-1 h-3.5 w-3.5 rounded-full border-2 border-background bg-muted-foreground/30 group-hover:bg-primary transition-colors">
                                 {item.type === 'payment' && <div className="absolute inset-0 bg-emerald-500 rounded-full opacity-50" />}
-                                {item.type === 'task_completion' && <div className="absolute inset-0 bg-blue-500 rounded-full opacity-50" />}
+                                {(item.type === 'task_completion') && <div className="absolute inset-0 bg-blue-500 rounded-full opacity-50" />}
+                                {(item.type === 'general_task_completion') && <div className="absolute inset-0 bg-pink-500 rounded-full opacity-50" />}
                             </div>
 
                             <div className="flex flex-col space-y-1">
@@ -132,6 +132,8 @@ function getIcon(type: ActivityItem['type']) {
             return <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-emerald-500/30 text-emerald-500 bg-emerald-500/5">Payment</Badge>
         case 'task_completion':
             return <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-blue-500/30 text-blue-500 bg-blue-500/5">Onboarding</Badge>
+        case 'general_task_completion':
+            return <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-pink-500/30 text-pink-500 bg-pink-500/5">Task</Badge>
         case 'client_created':
         case 'lead_created':
             return <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">System</Badge>

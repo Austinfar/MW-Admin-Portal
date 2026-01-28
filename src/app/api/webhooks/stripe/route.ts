@@ -198,9 +198,13 @@ export async function POST(req: Request) {
                         : expandedSession.customer?.id
 
                     let paymentMethodId: string | null = null
+                    let paymentIntentIdForSchedule: string | null = null
                     if (expandedSession.payment_intent && typeof expandedSession.payment_intent !== 'string') {
                         const pm = expandedSession.payment_intent.payment_method
                         paymentMethodId = typeof pm === 'string' ? pm : pm?.id || null
+                        paymentIntentIdForSchedule = expandedSession.payment_intent.id
+                    } else if (typeof expandedSession.payment_intent === 'string') {
+                        paymentIntentIdForSchedule = expandedSession.payment_intent
                     }
                     if (!paymentMethodId && expandedSession.setup_intent && typeof expandedSession.setup_intent !== 'string') {
                         const pm = expandedSession.setup_intent.payment_method
@@ -214,6 +218,7 @@ export async function POST(req: Request) {
                         .update({
                             stripe_customer_id: customerId,
                             stripe_payment_method_id: paymentMethodId,
+                            stripe_payment_intent_id: paymentIntentIdForSchedule,
                             client_email: customerEmail || undefined,
                             status: 'active',
                             ...(stripeProductName && { stripe_product_name: stripeProductName }),

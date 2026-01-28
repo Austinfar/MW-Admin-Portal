@@ -119,6 +119,10 @@ export interface PaymentScheduleWithCharges {
     program_term: string | null;
     scheduled_charges: ScheduledCharge[];
     created_at: string;
+    // Stripe fields for linking to transactions
+    stripe_session_id: string | null;
+    stripe_price_id: string | null;
+    stripe_payment_intent_id: string | null;
 }
 
 export interface PaymentScheduleSummary {

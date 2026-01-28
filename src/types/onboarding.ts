@@ -28,5 +28,6 @@ export interface OnboardingTask {
     status: 'pending' | 'completed' | 'cancelled'
     completed_at: string | null
     completed_by: string | null
+    assigned_user_id: string | null
     created_at: string
 }

@@ -219,10 +219,11 @@ export async function cancelScheduledCharge(
             return { success: false, error: `Can only cancel pending charges. Current status: ${charge.status}` };
         }
 
-        // Update status to cancelled
+        // Update status to canceled
+        // Note: Using "canceled" (American spelling) to match database enum
         const { error } = await supabase
             .from('scheduled_charges')
-            .update({ status: 'cancelled' })
+            .update({ status: 'canceled' })
             .eq('id', chargeId);
 
         console.log('[cancelScheduledCharge] Update result error:', error);
@@ -294,18 +295,19 @@ export async function cancelPaymentSchedule(
             return { success: false, error: `Schedule not found: ${fetchError?.message || 'unknown error'}` };
         }
 
-        if (schedule.status === 'cancelled') {
-            return { success: false, error: 'Schedule is already cancelled' };
+        if (schedule.status === 'canceled' || schedule.status === 'cancelled') {
+            return { success: false, error: 'Schedule is already canceled' };
         }
 
         if (schedule.status === 'completed') {
             return { success: false, error: 'Cannot cancel a completed schedule' };
         }
 
-        // Update schedule status to cancelled (NOT the individual charges)
+        // Update schedule status to canceled
+        // Note: Using "canceled" (American spelling) to match database enum
         const { error } = await supabase
             .from('payment_schedules')
-            .update({ status: 'cancelled' })
+            .update({ status: 'canceled' })
             .eq('id', scheduleId);
 
         console.log('[cancelPaymentSchedule] Update result error:', error);
@@ -313,6 +315,22 @@ export async function cancelPaymentSchedule(
         if (error) {
             console.error('[cancelPaymentSchedule] Update failed:', error);
             return { success: false, error: `Failed to cancel schedule: ${error.message}` };
+        }
+
+        // Also cancel all pending charges to prevent the cron job from processing them
+        // This is critical for safety - the cron only checks scheduled_charges.status, not payment_schedules.status
+        const { error: chargesError, count } = await supabase
+            .from('scheduled_charges')
+            .update({ status: 'canceled' })
+            .eq('schedule_id', scheduleId)
+            .eq('status', 'pending');
+
+        if (chargesError) {
+            console.error('[cancelPaymentSchedule] Failed to cancel charges:', chargesError);
+            // Don't fail the whole operation - schedule is already canceled
+            // But log the warning
+        } else {
+            console.log(`[cancelPaymentSchedule] Canceled ${count ?? 0} pending charges`);
         }
 
         // Revalidate paths

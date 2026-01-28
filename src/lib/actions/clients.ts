@@ -296,7 +296,7 @@ async function _fetchEnhancedClients(permission: string, userId?: string): Promi
 
     // Get onboarding task counts
     const { data: tasks } = await supabase
-        .from('client_onboarding_tasks')
+        .from('onboarding_tasks')
         .select('client_id, status')
 
     // Build lookup maps
@@ -314,12 +314,12 @@ async function _fetchEnhancedClients(permission: string, userId?: string): Promi
         }
     })
 
-    const taskCountMap = new Map<string, { total: number; completed: number }>()
+    const taskCountMap = new Map<string, number>()
     tasks?.forEach(t => {
-        const current = taskCountMap.get(t.client_id) || { total: 0, completed: 0 }
-        current.total++
-        if (t.status === 'completed') current.completed++
-        taskCountMap.set(t.client_id, current)
+        if (t.status === 'pending') {
+            const current = taskCountMap.get(t.client_id) || 0
+            taskCountMap.set(t.client_id, current + 1)
+        }
     })
 
     // Merge data
@@ -327,8 +327,7 @@ async function _fetchEnhancedClients(permission: string, userId?: string): Promi
         ...client,
         last_payment_date: latestPaymentMap.get(client.id)?.date || null,
         last_payment_status: latestPaymentMap.get(client.id)?.status || null,
-        onboarding_total: taskCountMap.get(client.id)?.total || 0,
-        onboarding_completed: taskCountMap.get(client.id)?.completed || 0,
+        open_tasks_count: taskCountMap.get(client.id) || 0,
         lifetime_revenue: lifetimeRevenueMap.get(client.id) || 0
     })) as EnhancedClient[]
 }

@@ -8,6 +8,9 @@ export interface CoachUser {
     name: string;
     slug: string | null;
     avatar_url: string | null;
+    email: string;
+    role: string;
+    job_title: string;
 }
 
 async function _getCoaches(): Promise<CoachUser[]> {
@@ -72,5 +75,28 @@ async function _getSetters(): Promise<CoachUser[]> {
 export const getSetters = unstable_cache(
     _getSetters,
     ['setters-list'],
+    { revalidate: 60, tags: ['users'] }
+);
+
+async function _getAllUsers(): Promise<CoachUser[]> {
+    const supabase = createAdminClient();
+
+    const { data: users, error } = await supabase
+        .from('users')
+        .select('id, name, slug, avatar_url, email, role, job_title')
+        .eq('is_active', true)
+        .order('name');
+
+    if (error) {
+        console.error('Error fetching all users:', error);
+        return [];
+    }
+
+    return users || [];
+}
+
+export const getAllUsers = unstable_cache(
+    _getAllUsers,
+    ['all-users-list'],
     { revalidate: 60, tags: ['users'] }
 );

@@ -1,4 +1,5 @@
 import { getClient, getCoaches, getClientActivityLogs } from '@/lib/actions/clients'
+import { getAllUsers } from '@/lib/actions/user-actions'
 import { getClientTasks } from '@/lib/actions/onboarding'
 import { getClientNotes } from '@/lib/actions/notes'
 import { getClientGoals } from '@/lib/actions/goals'
@@ -37,7 +38,7 @@ export default async function ClientPage(props: { params: Promise<{ id: string }
 
     const tasksData = await getClientTasks(params.id)
     const tasks = (tasksData || []) as OnboardingTask[]
-    const users = await getCoaches()
+    const users = await getAllUsers()
 
     if (!client) {
         return (

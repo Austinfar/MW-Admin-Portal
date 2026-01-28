@@ -143,8 +143,8 @@ export function ClientsTable({ data, clientTypes, coaches, currentUserId }: Clie
                     compareB = b.lifetime_revenue || 0
                     break
                 case 'onboarding':
-                    compareA = a.onboarding_total ? (a.onboarding_completed || 0) / a.onboarding_total : 0
-                    compareB = b.onboarding_total ? (b.onboarding_completed || 0) / b.onboarding_total : 0
+                    compareA = a.open_tasks_count || 0
+                    compareB = b.open_tasks_count || 0
                     break
             }
 
@@ -241,13 +241,6 @@ export function ClientsTable({ data, clientTypes, coaches, currentUserId }: Clie
         if (value >= 5000) return { text: formatted, color: 'text-emerald-500' }
         if (value >= 1000) return { text: formatted, color: 'text-foreground' }
         return { text: formatted, color: 'text-foreground' }
-    }
-
-    // Onboarding progress
-    const getOnboardingDisplay = (total: number | undefined, completed: number | undefined) => {
-        if (!total || total === 0) return { text: '—', percent: 0 }
-        const pct = Math.round(((completed || 0) / total) * 100)
-        return { text: `${completed || 0}/${total}`, percent: pct }
     }
 
     // Export selected clients to CSV
@@ -529,7 +522,7 @@ export function ClientsTable({ data, clientTypes, coaches, currentUserId }: Clie
                                     LTV {sortField === 'ltv' && <ArrowUpDown className="ml-1 h-3 w-3 inline" />}
                                 </TableHead>
                                 <TableHead className="cursor-pointer hover:text-foreground" onClick={() => handleSort('onboarding')}>
-                                    Onboarding {sortField === 'onboarding' && <ArrowUpDown className="ml-1 h-3 w-3 inline" />}
+                                    Tasks {sortField === 'onboarding' && <ArrowUpDown className="ml-1 h-3 w-3 inline" />}
                                 </TableHead>
                                 <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
@@ -545,7 +538,6 @@ export function ClientsTable({ data, clientTypes, coaches, currentUserId }: Clie
                                 filteredData.map((client) => {
                                     const contractEnd = getContractEndStyle(client.contract_end_date)
                                     const ltv = getLTVDisplay(client.lifetime_revenue)
-                                    const onboarding = getOnboardingDisplay(client.onboarding_total, client.onboarding_completed)
 
                                     return (
                                         <TableRow key={client.id} className={`cursor-pointer hover:bg-muted/50 border-border/50 ${selectedIds.has(client.id) ? 'bg-primary/5' : ''}`} onClick={() => router.push(`/clients/${client.id}`)}>
@@ -601,18 +593,12 @@ export function ClientsTable({ data, clientTypes, coaches, currentUserId }: Clie
                                                 </span>
                                             </TableCell>
                                             <TableCell>
-                                                {onboarding.text === '—' ? (
-                                                    <span className="text-sm text-muted-foreground">—</span>
+                                                {client.open_tasks_count && client.open_tasks_count > 0 ? (
+                                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-secondary text-secondary-foreground">
+                                                        {client.open_tasks_count} Open
+                                                    </span>
                                                 ) : (
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="w-16 h-1.5 bg-secondary rounded-full overflow-hidden">
-                                                            <div
-                                                                className={`h-full rounded-full ${onboarding.percent === 100 ? 'bg-emerald-500' : 'bg-primary'}`}
-                                                                style={{ width: `${onboarding.percent}%` }}
-                                                            />
-                                                        </div>
-                                                        <span className="text-xs text-muted-foreground">{onboarding.text}</span>
-                                                    </div>
+                                                    <span className="text-sm text-muted-foreground">—</span>
                                                 )}
                                             </TableCell>
                                             <TableCell className="text-right">

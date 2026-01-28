@@ -281,7 +281,13 @@ export async function updateClientTaskStatus(taskId: string, status: 'pending' |
     return { success: true }
 }
 
-export async function createAdHocTask(clientId: string, taskTitle: string, dueDate?: string) {
+export async function createAdHocTask(
+    clientId: string,
+    taskTitle: string,
+    dueDate?: string,
+    description?: string,
+    assignedUserId?: string | null
+) {
     const supabase = await createClient()
 
     if (!taskTitle) return { error: 'Task title is required' }
@@ -291,8 +297,10 @@ export async function createAdHocTask(clientId: string, taskTitle: string, dueDa
         .insert({
             client_id: clientId,
             title: taskTitle,
+            description: description || null,
             status: 'pending',
             due_date: dueDate || new Date().toISOString(), // Default to today if not set
+            assigned_user_id: assignedUserId || null,
             created_at: new Date().toISOString()
         })
 
