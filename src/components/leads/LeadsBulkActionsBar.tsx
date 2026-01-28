@@ -30,6 +30,7 @@ const LEAD_STATUSES: { value: LeadStatus; label: string }[] = [
     { value: 'New', label: 'New' },
     { value: 'Contacted', label: 'Contacted' },
     { value: 'Appt Set', label: 'Appt Set' },
+    { value: 'Call Confirmed', label: 'Call Confirmed' },
     { value: 'Closed Won', label: 'Closed Won' },
     { value: 'Closed Lost', label: 'Closed Lost' },
     { value: 'No Show', label: 'No Show' },

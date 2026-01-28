@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { format, addDays, startOfMonth, addMonths } from 'date-fns'
 import { Calendar as CalendarIcon, Check, ChevronsUpDown, CreditCard, Repeat, Split, Trash2, User, Copy, ExternalLink, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useSearchParams } from 'next/navigation'
 
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
@@ -123,6 +124,9 @@ export interface LinkConfig {
 // Assuming we want to show unique products. If multiple prices exist for same product, we might want to handle that differently (e.g. variants). 
 // For now, let's just make sure we don't show exact duplicates and sort by price.
 export function PaymentLinkGenerators({ prices, isTestMode, coaches, closers, clients, leads, clientTypes }: PaymentLinkGeneratorsProps) {
+    const searchParams = useSearchParams()
+    const urlLeadId = searchParams.get('leadId')
+
     // Deduplicate prices by ID to avoid strict duplicates
     const uniquePrices = prices.filter((price, index, self) =>
         index === self.findIndex((p) => (
@@ -147,7 +151,7 @@ export function PaymentLinkGenerators({ prices, isTestMode, coaches, closers, cl
     const [selectedCoachId, setSelectedCoachId] = useState<string>('tbd')
     const [selectedCloserId, setSelectedCloserId] = useState<string>('tbd')
     const [selectedClientId, setSelectedClientId] = useState<string>('new')
-    const [selectedLeadId, setSelectedLeadId] = useState<string>('') // If linked to a lead
+    const [selectedLeadId, setSelectedLeadId] = useState<string>(urlLeadId || '') // Initialize with URL param if present
     const [selectedClientTypeId, setSelectedClientTypeId] = useState<string>('')
     const [startDate, setStartDate] = useState<Date | undefined>(undefined)
     const [programTerm, setProgramTerm] = useState<'6' | '12'>('6')
@@ -157,6 +161,16 @@ export function PaymentLinkGenerators({ prices, isTestMode, coaches, closers, cl
     // Split Payment State for Splits
     const [isSplitDialogOpen, setIsSplitDialogOpen] = useState(false)
     const [isClientOpen, setIsClientOpen] = useState(false)
+
+    // Effect to clear client ID if lead ID is provided via URL
+    useEffect(() => {
+        if (urlLeadId) {
+            setSelectedClientId('')
+            // Optional: Auto-select coach or other fields if lead has them?
+            // Currently leads table doesn't have assigned_coach_id in the type definition above, 
+            // but if it did, we could auto-select here nicely.
+        }
+    }, [urlLeadId])
 
     // USE sortedPrices HERE
     const oneTimePrices = sortedPrices.filter(p => p.type === 'one_time' && p.unit_amount !== null)
@@ -276,10 +290,11 @@ export function PaymentLinkGenerators({ prices, isTestMode, coaches, closers, cl
                                                             }
                                                             // Auto-template start date
                                                             if (client.start_date) {
-                                                                // Append T12:00:00 to avoid timezone issues with YYYY-MM-DD strings being treated as UTC midnight
-                                                                // or just use new Date(client.start_date) if standard
-                                                                // Assuming YYYY-MM-DD
-                                                                const date = new Date(client.start_date)
+                                                                // Fix: Append T12:00:00 to ensure it falls on the correct day in local time
+                                                                // new Date("YYYY-MM-DD") is UTC midnight, which is previous day in US
+                                                                const dateStr = client.start_date.includes('T') ? client.start_date : `${client.start_date}T12:00:00`;
+                                                                const date = new Date(dateStr)
+
                                                                 // Check if valid
                                                                 if (!isNaN(date.getTime())) {
                                                                     setStartDate(date)

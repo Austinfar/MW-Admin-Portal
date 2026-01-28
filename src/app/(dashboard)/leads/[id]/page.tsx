@@ -22,11 +22,19 @@ export default async function LeadPage(props: { params: Promise<{ id: string }> 
         }
     }
 
+    // Resolve setter name if needed
+    let setterName: string | null = null;
+    if (lead.booked_by_user_id) {
+        const profile = await getUserProfile(lead.booked_by_user_id);
+        if (profile) setterName = profile.name;
+    }
+
     return (
         <LeadDetailClient
             lead={lead}
             ghlLocationId={GHL_CONFIG.LOCATION_ID}
             resolvedCoachName={coachName}
+            resolvedSetterName={setterName}
         />
     )
 }

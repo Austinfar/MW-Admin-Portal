@@ -81,8 +81,15 @@ export function buildContractVariables(
             // Custom split payment schedule from schedule_json
             contract.schedule_json.forEach((item, index) => {
                 const amount = item.amount ? `$${Number(item.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '$0.00'
-                const date = item.date ? format(new Date(item.date), 'M/d/yyyy') : 'Date TBD'
-                parts.push(`${getOrdinal(index + 1)} Payment: ${amount} on ${date}`)
+
+                let dateStr = 'Date TBD'
+                if (item.date) {
+                    const dRaw = item.date
+                    const dSafe = dRaw.length === 10 && !dRaw.includes('T') ? `${dRaw}T12:00:00` : dRaw
+                    dateStr = format(new Date(dSafe), 'M/d/yyyy')
+                }
+
+                parts.push(`${getOrdinal(index + 1)} Payment: ${amount} on ${dateStr}`)
             })
         } else {
             // Standard uniform split payment fallback - Generate projected schedule
@@ -90,7 +97,11 @@ export function buildContractVariables(
             const downPayment = contract.down_payment || 0
             const installmentAmount = contract.installment_amount || 0
             const count = contract.installment_count || 0
-            const startDate = new Date(contract.start_date)
+
+            // Safe parse start date
+            const sDateRaw = contract.start_date;
+            const sDateSafe = sDateRaw.length === 10 && !sDateRaw.includes('T') ? `${sDateRaw}T12:00:00` : sDateRaw;
+            const startDate = new Date(sDateSafe)
 
             // 1st Payment (Down Payment)
             parts.push(`1st Payment: $${downPayment.toFixed(2)} on ${format(startDate, 'M/d/yyyy')}`)
@@ -110,6 +121,14 @@ export function buildContractVariables(
         paymentScheduleDescription = `Monthly Subscription: $${contract.monthly_rate?.toFixed(2) || '0.00'}/month for ${contract.program_term_months} months`
     }
 
+    // Helper to parse YYYY-MM-DD safely preventing timezone drift
+    const safeDate = (dateStr: string) => {
+        if (!dateStr) return new Date()
+        // If it's just a date string (YYYY-MM-DD), force it to noon to avoid UTC midnight drift
+        const safeStr = dateStr.length === 10 && !dateStr.includes('T') ? `${dateStr}T12:00:00` : dateStr
+        return new Date(safeStr)
+    }
+
     const variables: ContractVariables = {
         // Client Info
         client_name: client.name,
@@ -124,9 +143,9 @@ export function buildContractVariables(
         total_program_value: contract.total_value || undefined,
 
         // Dates
-        start_date: format(new Date(contract.start_date), 'MMMM d, yyyy'),
-        end_date: format(new Date(contract.end_date), 'MMMM d, yyyy'),
-        first_billing_date: format(new Date(contract.start_date), 'MMMM d, yyyy'),
+        start_date: format(safeDate(contract.start_date), 'MMMM d, yyyy'),
+        end_date: format(safeDate(contract.end_date), 'MMMM d, yyyy'),
+        first_billing_date: format(safeDate(contract.start_date), 'MMMM d, yyyy'),
 
         // Coach Info
         coach_name: client.assigned_coach?.name || undefined,

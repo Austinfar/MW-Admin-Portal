@@ -81,7 +81,7 @@ export const APP_ROUTES: AppRoute[] = [
                 icon: CalendarClock,
                 href: '/renewals',
                 color: 'text-amber-500',
-                permission: 'can_view_clients'
+                permission: 'can_view_business'
             },
         ]
     },
@@ -118,14 +118,14 @@ export const APP_ROUTES: AppRoute[] = [
         label: '(Power) Tools',
         icon: Drill, // Power tool icon
         color: 'text-indigo-500',
-        permission: 'can_view_business',
+        permission: 'can_view_leads',
         children: [
             {
                 label: 'Link Generator',
                 icon: Lightbulb,
                 href: '/tools/links',
                 color: 'text-indigo-400',
-                permission: 'can_view_business'
+                permission: 'can_view_leads'
             },
             {
                 label: 'AI Call Analyzer',

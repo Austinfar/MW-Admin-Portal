@@ -6,12 +6,19 @@ import { revalidatePath, unstable_cache } from 'next/cache'
 import { subDays } from 'date-fns'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getCurrentUserAccess } from '@/lib/auth-utils'
 
 export async function getClients() {
     // Using Admin Client to ensure all clients are visible regardless of complex RLS on joined tables
     const supabase = createAdminClient()
+    const userAccess = await getCurrentUserAccess()
 
-    const { data, error } = await supabase
+    if (!userAccess) return []
+
+    const permission = userAccess.permissions.can_view_clients
+    if (!permission || permission === 'none') return []
+
+    let query = supabase
         .from('clients')
         .select(`
       *,
@@ -21,6 +28,20 @@ export async function getClients() {
       appointment_setter:users!clients_appointment_setter_id_fkey(name, email)
     `)
         .order('created_at', { ascending: false })
+
+    // Enforce "own" permission scope
+    if (permission === 'own') {
+        const authClient = await createClient()
+        const { data: { user } } = await authClient.auth.getUser()
+
+        if (user) {
+            query = query.or(`assigned_coach_id.eq.${user.id},appointment_setter_id.eq.${user.id},sold_by_user_id.eq.${user.id}`)
+        } else {
+            return []
+        }
+    }
+
+    const { data, error } = await query
 
     if (error) {
         console.error('Error fetching clients:', JSON.stringify(error, null, 2))
@@ -235,9 +256,15 @@ export async function updateClient(id: string, data: Partial<Client>) {
 // Get enhanced client data with payment and onboarding info
 async function _getEnhancedClients(): Promise<EnhancedClient[]> {
     const supabase = createAdminClient()
+    const userAccess = await getCurrentUserAccess()
+
+    // Default empty if no access
+    if (!userAccess) return []
+    const permission = userAccess.permissions.can_view_clients
+    if (!permission || permission === 'none') return []
 
     // Get clients with basic data
-    const { data: clients, error } = await supabase
+    let query = supabase
         .from('clients')
         .select(`
             *,
@@ -247,6 +274,19 @@ async function _getEnhancedClients(): Promise<EnhancedClient[]> {
             appointment_setter:users!clients_appointment_setter_id_fkey(name, email)
         `)
         .order('created_at', { ascending: false })
+
+    // Apply 'own' filter
+    if (permission === 'own') {
+        const authClient = await createClient()
+        const { data: { user } } = await authClient.auth.getUser()
+        if (user) {
+            query = query.or(`assigned_coach_id.eq.${user.id},appointment_setter_id.eq.${user.id},sold_by_user_id.eq.${user.id}`)
+        } else {
+            return []
+        }
+    }
+
+    const { data: clients, error } = await query
 
     if (error) {
         console.error('Error fetching enhanced clients:', error)
