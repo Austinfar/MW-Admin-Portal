@@ -409,6 +409,7 @@ async function syncLeadFromBooking(
     // Parse name using utility function (handles edge cases)
     const { firstName, lastName } = parseName(attendee.name)
 
+
     // Create new lead with all extracted data
     const { data: newLead, error } = await supabase
         .from('leads')
@@ -431,6 +432,14 @@ async function syncLeadFromBooking(
         .single()
 
     if (newLead) {
+        // Log lead creation
+        await logLeadActivity(
+            supabase,
+            newLead.id,
+            'Lead Created',
+            `Lead created via Cal.com booking: ${payload.title}`
+        )
+
         // Sync to GHL
         try {
             await pushToGHL({
@@ -514,13 +523,23 @@ export async function POST(req: NextRequest) {
                 // Sync lead from booking
                 const leadId = await syncLeadFromBooking(supabase, body.payload, source)
 
-                if (leadId) {
-                    await logLeadActivity(
-                        supabase,
-                        leadId,
-                        'Call Scheduled',
-                        `Booking created: ${body.payload.title}`
-                    )
+                if (leadId && body.payload.bookingId) {
+                    // Check if booking already exists to prevent duplicate activity logs
+                    // Cal.com sends events for both REQUESTED and CREATED, or duplicate webhooks
+                    const { data: existingBooking } = await supabase
+                        .from('cal_bookings')
+                        .select('cal_booking_id')
+                        .eq('cal_booking_id', body.payload.bookingId)
+                        .single()
+
+                    if (!existingBooking) {
+                        await logLeadActivity(
+                            supabase,
+                            leadId,
+                            'Call Scheduled',
+                            `Booking created: ${body.payload.title}`
+                        )
+                    }
                 }
 
                 // Upsert booking to database
