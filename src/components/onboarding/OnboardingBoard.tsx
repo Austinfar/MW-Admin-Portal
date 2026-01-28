@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Calendar, CheckCircle2, MoreHorizontal, ArrowRight, User, Search, Filter, SortAsc } from 'lucide-react'
+import { Calendar, CheckCircle2, MoreHorizontal, ArrowRight, User, Search, Filter, SortAsc, ArrowUpDown } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { useRouter } from 'next/navigation'
@@ -32,6 +33,7 @@ export function OnboardingBoard({ clients }: OnboardingBoardProps) {
     const [searchTerm, setSearchTerm] = useState('')
     const [filterCoach, setFilterCoach] = useState('all')
     const [sortBy, setSortBy] = useState<'start_date' | 'name' | 'progress'>('start_date')
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
     const coaches = useMemo(() => {
         const uniqueCoaches = new Set<string>()
@@ -53,17 +55,22 @@ export function OnboardingBoard({ clients }: OnboardingBoardProps) {
                 return matchesSearch && matchesCoach
             })
             .sort((a, b) => {
-                if (sortBy === 'name') return a.name.localeCompare(b.name)
-                if (sortBy === 'progress') {
+                let diff = 0
+                if (sortBy === 'name') {
+                    diff = a.name.localeCompare(b.name)
+                } else if (sortBy === 'progress') {
                     const progA = a.onboarding_progress?.percentage || 0
                     const progB = b.onboarding_progress?.percentage || 0
-                    return progB - progA // Higher progress first
+                    diff = progA - progB // Default asc for numbers logic here? Actually usually desc for progress? 
+                    // Let's stick to simple diff and let sortOrder flip it.
+                } else {
+                    // Start date
+                    diff = new Date(a.start_date || 0).getTime() - new Date(b.start_date || 0).getTime()
                 }
-                // Default start_date (newest first usually, or oldest?) - task says 'Sort by Start Date'
-                // Let's do newest first (desc) as default in most apps
-                return new Date(b.start_date || 0).getTime() - new Date(a.start_date || 0).getTime()
+
+                return sortOrder === 'asc' ? diff : -diff
             })
-    }, [clients, searchTerm, filterCoach, sortBy])
+    }, [clients, searchTerm, filterCoach, sortBy, sortOrder])
 
     if (clients.length === 0) {
         return (
@@ -94,7 +101,7 @@ export function OnboardingBoard({ clients }: OnboardingBoardProps) {
                         className="pl-8"
                     />
                 </div>
-                <div className="flex gap-2 w-full sm:w-auto">
+                <div className="flex gap-2 w-full sm:w-auto items-center">
                     <Select value={filterCoach} onValueChange={setFilterCoach}>
                         <SelectTrigger className="w-[160px]">
                             <Filter className="w-4 h-4 mr-2" />
@@ -107,17 +114,29 @@ export function OnboardingBoard({ clients }: OnboardingBoardProps) {
                             ))}
                         </SelectContent>
                     </Select>
-                    <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
-                        <SelectTrigger className="w-[160px]">
-                            <SortAsc className="w-4 h-4 mr-2" />
-                            <SelectValue placeholder="Sort by" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="start_date">Start Date</SelectItem>
-                            <SelectItem value="name">Name</SelectItem>
-                            <SelectItem value="progress">Progress</SelectItem>
-                        </SelectContent>
-                    </Select>
+
+                    <div className="flex items-center gap-1 border rounded-md bg-background">
+                        <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
+                            <SelectTrigger className="w-[140px] border-0 focus:ring-0">
+                                <SortAsc className="w-4 h-4 mr-2" />
+                                <SelectValue placeholder="Sort by" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="start_date">Start Date</SelectItem>
+                                <SelectItem value="name">Name</SelectItem>
+                                <SelectItem value="progress">Progress</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                            className="h-9 w-9 px-0 border-l rounded-l-none"
+                            title={sortOrder === 'asc' ? "Ascending" : "Descending"}
+                        >
+                            <ArrowUpDown className={`h-4 w-4 transition-transform ${sortOrder === 'desc' ? 'rotate-180' : ''}`} />
+                        </Button>
+                    </div>
                 </div>
             </div>
 
@@ -138,8 +157,13 @@ export function OnboardingBoard({ clients }: OnboardingBoardProps) {
 function ClientOnboardingCard({ client }: { client: OnboardingClient }) {
     const progress = client.onboarding_progress || { total: 0, completed: 0, percentage: 0 }
 
+    const isPastStartDate = client.start_date && new Date(client.start_date) < new Date() && progress.percentage < 100
+
     return (
-        <Card className="hover:shadow-md transition-all duration-300 border-primary/10 bg-card/60 backdrop-blur-sm group">
+        <Card className={cn(
+            "hover:shadow-md transition-all duration-300 border-primary/10 bg-card/60 backdrop-blur-sm group",
+            isPastStartDate && "border-red-500/50 bg-red-500/5 hover:bg-red-500/10 animate-pulse-slow"
+        )}>
             <CardHeader className="pb-3">
                 <div className="flex justify-between items-start">
                     <div className="flex gap-3 items-center">

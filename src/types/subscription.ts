@@ -127,3 +127,15 @@ export interface PaymentScheduleSummary {
     totalPaid: number;
     totalRemaining: number;
 }
+
+// Extended type for admin payment schedule management
+export interface PaymentScheduleWithClientInfo extends PaymentScheduleWithCharges {
+    client: {
+        id: string;
+        name: string;
+        email: string;
+        status: 'active' | 'inactive' | 'lost' | 'onboarding';
+    } | null;
+    pendingChargesCount: number;
+    hasClientWarning: boolean;
+}

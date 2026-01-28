@@ -187,6 +187,8 @@ export function ClientsTable({ data, clientTypes, coaches, currentUserId }: Clie
         switch (status) {
             case 'active':
                 return 'bg-emerald-500/15 text-emerald-500 border-emerald-500/20'
+            case 'onboarding':
+                return 'bg-yellow-500/15 text-yellow-500 border-yellow-500/20'
             case 'inactive':
                 return 'bg-muted text-muted-foreground border-border'
             case 'lost':

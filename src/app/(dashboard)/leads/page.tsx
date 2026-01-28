@@ -34,7 +34,6 @@ export default async function LeadsPage() {
                 <h2 className="text-3xl font-bold tracking-tight text-white">Leads</h2>
                 <div className="flex items-center space-x-2">
                     <RefreshLeadsButton />
-                    <SyncGHLButton />
                     <AddLeadDialog />
                 </div>
             </div>
@@ -49,6 +48,10 @@ export default async function LeadsPage() {
                     sourceData={sourceData}
                 />
             </Suspense>
+
+            <div className="flex justify-center pt-8 pb-4 opacity-30 hover:opacity-100 transition-opacity">
+                <SyncGHLButton />
+            </div>
         </div>
     )
 }

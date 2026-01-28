@@ -99,6 +99,13 @@ export const APP_ROUTES: AppRoute[] = [
                 permission: 'can_view_business'
             },
             {
+                label: 'Payment Schedules',
+                icon: CreditCard,
+                href: '/admin/payment-schedules',
+                color: 'text-blue-500',
+                permission: 'can_view_business'
+            },
+            {
                 label: 'Transformations',
                 icon: Camera,
                 href: '/transformations',
