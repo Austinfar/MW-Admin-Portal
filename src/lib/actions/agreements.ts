@@ -395,7 +395,7 @@ export async function updateAgreementFromWebhook(
                 .from('client_agreements')
                 .select('id, client_id, status')
                 .eq('client_id', client.id)
-                .eq('status', 'sent')
+                .in('status', ['sent', 'viewed']) // Allow finding agreements that were already viewed
                 .is('ghl_document_id', null)
                 .order('created_at', { ascending: false })
                 .limit(1)
