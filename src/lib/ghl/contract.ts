@@ -64,29 +64,48 @@ export function buildContractVariables(
 ): ContractVariables {
     // Build payment schedule description based on payment type
     let paymentScheduleDescription = ''
+
+    // Helper to get ordinal suffix (1st, 2nd, 3rd...)
+    const getOrdinal = (n: number) => {
+        const s = ["th", "st", "nd", "rd"];
+        const v = n % 100;
+        return n + (s[(v - 20) % 10] || s[v] || s[0]);
+    }
+
     if (contract.payment_type === 'paid_in_full') {
         paymentScheduleDescription = `Paid in Full: $${contract.total_value?.toFixed(2) || '0.00'}`
     } else if (contract.payment_type === 'split_pay') {
+        const parts: string[] = []
+
         if (contract.schedule_json && Array.isArray(contract.schedule_json) && contract.schedule_json.length > 0) {
             // Custom split payment schedule from schedule_json
-            const parts: string[] = []
-
             contract.schedule_json.forEach((item, index) => {
                 const amount = item.amount ? `$${Number(item.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '$0.00'
-                const date = item.date ? format(new Date(item.date), 'MMM d, yyyy') : 'Date TBD'
-
-                if (index === 0) {
-                    parts.push(`• Initial Deposit: ${amount} (Paid Immediately)`)
-                } else {
-                    parts.push(`• Installment ${index}: ${amount} due on ${date}`)
-                }
+                const date = item.date ? format(new Date(item.date), 'M/d/yyyy') : 'Date TBD'
+                parts.push(`${getOrdinal(index + 1)} Payment: ${amount} on ${date}`)
             })
-
-            paymentScheduleDescription = parts.join('\n')
         } else {
-            // Standard uniform split payment fallback
-            paymentScheduleDescription = `Split Payment: $${contract.down_payment?.toFixed(2) || '0.00'} down, then ${contract.installment_count || 0} payments of $${contract.installment_amount?.toFixed(2) || '0.00'}`
+            // Standard uniform split payment fallback - Generate projected schedule
+            // Logic: Down payment (1st) today, then remaining installments monthly
+            const downPayment = contract.down_payment || 0
+            const installmentAmount = contract.installment_amount || 0
+            const count = contract.installment_count || 0
+            const startDate = new Date(contract.start_date)
+
+            // 1st Payment (Down Payment)
+            parts.push(`1st Payment: $${downPayment.toFixed(2)} on ${format(startDate, 'M/d/yyyy')}`)
+
+            // Subsequent payments (Installments)
+            for (let i = 0; i < count; i++) {
+                // Next payment is i+1 months from start (assuming 1 month gap for first installment?)
+                // Usually installments start 1 month after down payment
+                const nextDate = new Date(startDate)
+                nextDate.setMonth(startDate.getMonth() + (i + 1))
+                parts.push(`${getOrdinal(i + 2)} Payment: $${installmentAmount.toFixed(2)} on ${format(nextDate, 'M/d/yyyy')}`)
+            }
         }
+        paymentScheduleDescription = parts.join('\n')
+
     } else if (contract.payment_type === 'monthly') {
         paymentScheduleDescription = `Monthly Subscription: $${contract.monthly_rate?.toFixed(2) || '0.00'}/month for ${contract.program_term_months} months`
     }
@@ -125,42 +144,40 @@ export function buildContractVariables(
 }
 
 /**
- * Convert contract variables to GHL custom field format
+ * Convert contract variables to GHL custom field format (Array of objects with key and value)
+ * NOTE: GHL V2 technically requires ID, but we are trying key because user cannot provide read scope.
+ * If this fails, we must require the scope.
  */
-function variablesToGHLCustomFields(variables: ContractVariables): Record<string, string> {
-    const customFields: Record<string, string> = {}
+/**
+ * Convert contract variables to GHL custom field format (Array of objects with key and value)
+ * NOTE: GHL V2 technically requires ID, but we are trying key because user cannot provide read scope.
+ * If this fails, we must require the scope.
+ */
+function variablesToGHLCustomFields(variables: ContractVariables): Array<{ key: string; value: string }> {
+    const customFields: Array<{ key: string; value: string }> = []
+
+    // Helper to add field
+    const addField = (key: string, value: string | undefined) => {
+        if (value !== undefined) {
+            customFields.push({
+                key: key,
+                value: value
+            })
+        }
+    }
 
     // Map each variable to its GHL field key
-    if (variables.program_name) {
-        customFields[GHL_CONTRACT_FIELD_KEYS.program_name] = variables.program_name
-    }
-    if (variables.program_term_months) {
-        customFields[GHL_CONTRACT_FIELD_KEYS.term_months] = variables.program_term_months.toString()
-    }
-    if (variables.program_term_letters) {
-        customFields[GHL_CONTRACT_FIELD_KEYS.term_letters] = variables.program_term_letters
-    }
-    if (variables.monthly_rate !== undefined) {
-        customFields[GHL_CONTRACT_FIELD_KEYS.monthly_rate] = variables.monthly_rate.toString()
-    }
-    if (variables.total_program_value !== undefined) {
-        customFields[GHL_CONTRACT_FIELD_KEYS.total_value] = variables.total_program_value.toString()
-    }
-    if (variables.start_date) {
-        customFields[GHL_CONTRACT_FIELD_KEYS.start_date] = variables.start_date
-    }
-    if (variables.end_date) {
-        customFields[GHL_CONTRACT_FIELD_KEYS.end_date] = variables.end_date
-    }
-    if (variables.first_billing_date) {
-        customFields[GHL_CONTRACT_FIELD_KEYS.first_billing] = variables.first_billing_date
-    }
-    if (variables.coach_name) {
-        customFields[GHL_CONTRACT_FIELD_KEYS.coach_name] = variables.coach_name
-    }
-    if (variables.coach_email) {
-        customFields[GHL_CONTRACT_FIELD_KEYS.coach_email] = variables.coach_email
-    }
+    addField(GHL_CONTRACT_FIELD_KEYS.program_name, variables.program_name)
+    addField(GHL_CONTRACT_FIELD_KEYS.term_months, variables.program_term_months?.toString())
+    addField(GHL_CONTRACT_FIELD_KEYS.term_letters, variables.program_term_letters)
+    addField(GHL_CONTRACT_FIELD_KEYS.monthly_rate, variables.monthly_rate?.toString())
+    addField(GHL_CONTRACT_FIELD_KEYS.total_value, variables.total_program_value?.toString())
+    addField(GHL_CONTRACT_FIELD_KEYS.start_date, variables.start_date)
+    addField(GHL_CONTRACT_FIELD_KEYS.end_date, variables.end_date)
+    addField(GHL_CONTRACT_FIELD_KEYS.first_billing, variables.first_billing_date)
+    addField(GHL_CONTRACT_FIELD_KEYS.coach_name, variables.coach_name)
+    addField(GHL_CONTRACT_FIELD_KEYS.coach_email, variables.coach_email)
+
     if (variables.payment_type) {
         // Format payment type for display
         const paymentTypeDisplay = {
@@ -168,20 +185,13 @@ function variablesToGHLCustomFields(variables: ContractVariables): Record<string
             split_pay: 'Split Payment',
             monthly: 'Monthly Subscription',
         }[variables.payment_type]
-        customFields[GHL_CONTRACT_FIELD_KEYS.payment_type] = paymentTypeDisplay
+        addField(GHL_CONTRACT_FIELD_KEYS.payment_type, paymentTypeDisplay)
     }
-    if (variables.down_payment !== undefined) {
-        customFields[GHL_CONTRACT_FIELD_KEYS.down_payment] = variables.down_payment.toString()
-    }
-    if (variables.num_installments !== undefined) {
-        customFields[GHL_CONTRACT_FIELD_KEYS.installments] = variables.num_installments.toString()
-    }
-    if (variables.installment_amount !== undefined) {
-        customFields[GHL_CONTRACT_FIELD_KEYS.installment_amount] = variables.installment_amount.toString()
-    }
-    if (variables.payment_schedule_description) {
-        customFields[GHL_CONTRACT_FIELD_KEYS.payment_schedule] = variables.payment_schedule_description
-    }
+
+    addField(GHL_CONTRACT_FIELD_KEYS.down_payment, variables.down_payment?.toString())
+    addField(GHL_CONTRACT_FIELD_KEYS.installments, variables.num_installments?.toString())
+    addField(GHL_CONTRACT_FIELD_KEYS.installment_amount, variables.installment_amount?.toString())
+    addField(GHL_CONTRACT_FIELD_KEYS.payment_schedule, variables.payment_schedule_description)
 
     return customFields
 }
@@ -202,31 +212,40 @@ export async function pushContractVariablesToGHL(
 
     const supabase = createAdminClient()
 
-    // Get GHL tokens from database
-    const { data: ghlConfig, error: configError } = await supabase
-        .from('ghl_integration_config')
-        .select('access_token, refresh_token')
-        .single()
+    // Get GHL tokens from app_settings
+    const { data: settings, error: configError } = await supabase
+        .from('app_settings')
+        .select('key, value')
+        .in('key', ['ghl_access_token', 'ghl_refresh_token'])
 
-    if (configError || !ghlConfig) {
-        console.error('[GHL Contract] Failed to get GHL config:', configError)
+    if (configError || !settings) {
+        console.error('[GHL Contract] Failed to get GHL settings:', configError)
         return { success: false, error: 'GHL not configured' }
     }
 
-    const client = new GHLClient(ghlConfig.access_token, undefined, {
-        refreshToken: ghlConfig.refresh_token,
+    const accessToken = settings.find(s => s.key === 'ghl_access_token')?.value
+    const refreshToken = settings.find(s => s.key === 'ghl_refresh_token')?.value
+
+    if (!accessToken || !refreshToken) {
+        console.error('[GHL Contract] Missing GHL tokens in app_settings')
+        return { success: false, error: 'GHL not configured' }
+    }
+
+    const client = new GHLClient(accessToken, undefined, {
+        refreshToken: refreshToken,
         onTokenRefresh: async (tokens) => {
+            // Update tokens in app_settings
             await supabase
-                .from('ghl_integration_config')
-                .update({
-                    access_token: tokens.access_token,
-                    refresh_token: tokens.refresh_token,
-                })
-                .eq('id', (await supabase.from('ghl_integration_config').select('id').single()).data?.id)
+                .from('app_settings')
+                .upsert([
+                    { key: 'ghl_access_token', value: tokens.access_token, updated_at: new Date().toISOString() },
+                    { key: 'ghl_refresh_token', value: tokens.refresh_token, updated_at: new Date().toISOString() }
+                ])
         },
     })
 
-    // Convert variables to GHL custom fields format
+    // NOTE: Sending custom fields using 'key' instead of 'id' because permission to read custom fields is restricted.
+    // Convert variables to GHL custom fields format (using keys)
     const customFields = variablesToGHLCustomFields(variables)
 
     console.log('[GHL Contract] Pushing contract variables to contact:', ghlContactId)

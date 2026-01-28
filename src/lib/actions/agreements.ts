@@ -41,6 +41,14 @@ const GHL_AGREEMENT_TEMPLATES = {
     default: process.env.GHL_COACHING_AGREEMENT_TEMPLATE_ID || '',
 }
 
+// DEBUG: Log templates on init (server-side only)
+console.log('[Agreements] Loaded Templates:', {
+    paid_in_full: GHL_AGREEMENT_TEMPLATES.paid_in_full ? 'SET' : 'MISSING',
+    split_pay: GHL_AGREEMENT_TEMPLATES.split_pay ? 'SET' : 'MISSING',
+    monthly: GHL_AGREEMENT_TEMPLATES.monthly ? 'SET' : 'MISSING',
+    default: GHL_AGREEMENT_TEMPLATES.default ? 'SET' : 'MISSING',
+})
+
 // Template display names
 const TEMPLATE_NAMES: Record<string, string> = {
     paid_in_full: 'Paid in Full Agreement',
@@ -145,9 +153,10 @@ export async function sendAgreement(
         const paymentType = activeContract.payment_type as keyof typeof GHL_AGREEMENT_TEMPLATES
         agreementTemplateId = GHL_AGREEMENT_TEMPLATES[paymentType] || GHL_AGREEMENT_TEMPLATES.default
         templateName = TEMPLATE_NAMES[paymentType] || 'Coaching Agreement'
-        console.log(`[Agreements] Using ${paymentType} template for payment type`)
+        console.log(`[Agreements] Using ${paymentType} template for payment type. Resolved ID: ${agreementTemplateId ? 'FOUND' : 'MISSING'}`)
     } else if (!agreementTemplateId) {
         agreementTemplateId = GHL_AGREEMENT_TEMPLATES.default
+        console.log(`[Agreements] Using default template. Resolved ID: ${agreementTemplateId ? 'FOUND' : 'MISSING'}`)
     }
 
     if (!agreementTemplateId) {
@@ -202,28 +211,26 @@ export async function sendAgreement(
         await linkAgreementToContract(agreement.id, activeContractId)
     }
 
-    // Send document via GHL
+    // Trigger Agreement Workflow in GHL (instead of direct send)
     try {
         const ghlClient = new GHLClient()
-        const result = await ghlClient.sendDocument(client.ghl_contact_id, agreementTemplateId)
+        // ID provided by user for "Send Agreement" workflow
+        const WORKFLOW_ID = '70e97224-3482-4f8c-bf69-4645659a345a'
 
-        if (!result?.documentId) {
-            // Mark agreement as failed
-            await adminSupabase
-                .from('client_agreements')
-                .update({ status: 'voided', voided_reason: 'Failed to send via GHL' })
-                .eq('id', agreement.id)
+        console.log(`[Agreements] Triggering GHL Workflow: ${WORKFLOW_ID} for contact: ${client.ghl_contact_id}`)
+        await ghlClient.addContactToWorkflow(client.ghl_contact_id, WORKFLOW_ID)
 
-            return { success: false, error: 'Failed to send document via GHL' }
-        }
+        // Ideally, the workflow sends the document and the webhook updates the status later.
+        // We set status to 'sent' optimistically because we triggered the workflow.
+        // NOTE: We won't have a document ID immediately unless the webhook provides it later.
 
-        // Update agreement with GHL document ID and sent status
+        // Update agreement status
         await adminSupabase
             .from('client_agreements')
             .update({
-                ghl_document_id: result.documentId,
                 status: 'sent',
                 sent_at: new Date().toISOString(),
+                // Template ID is saved, but document ID will come from webhook
             })
             .eq('id', agreement.id)
 
@@ -232,7 +239,7 @@ export async function sendAgreement(
             user_id: user.id,
             type: 'agreement_sent',
             category: 'client',
-            message: `Agreement sent to ${client.name}`,
+            message: `Agreement workflow triggered for ${client.name}`,
             is_read: true, // Mark as read for the sender
         })
 
@@ -246,11 +253,12 @@ export async function sendAgreement(
         // Mark agreement as failed
         await adminSupabase
             .from('client_agreements')
-            .update({ status: 'voided', voided_reason: `GHL error: ${errorMsg}` })
+            .update({ status: 'voided', voided_reason: `GHL Workflow error: ${errorMsg}` })
             .eq('id', agreement.id)
 
-        return { success: false, error: `GHL error: ${errorMsg}` }
+        return { success: false, error: `GHL Workflow error: ${errorMsg}` }
     }
+
 }
 
 /**

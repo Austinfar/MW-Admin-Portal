@@ -147,7 +147,13 @@ export async function upsertLead(supabase: any, data: {
                 if (ghlResult.ghlOpportunityId) {
                     updates.ghl_opportunity_id = ghlResult.ghlOpportunityId
                 }
-                await supabase.from('leads').update(updates).eq('id', leadId)
+                const { error: updateError } = await supabase.from('leads').update(updates).eq('id', leadId)
+
+                if (updateError) {
+                    console.error('[lead-actions] Failed to save GHL ID to lead:', updateError)
+                } else {
+                    console.log(`[lead-actions] Successfully linked Lead ${leadId} to GHL Contact ${ghlResult.ghlContactId}`)
+                }
             }
         } catch (error) {
             console.error('GHL Direct Sync Failed:', error)

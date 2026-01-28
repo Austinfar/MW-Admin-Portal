@@ -1,6 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { getLatestPaymentScheduleForClient } from '@/lib/actions/contracts'
+import { sendAgreement } from '@/lib/actions/agreements'
 import {
     Dialog,
     DialogContent,
@@ -22,7 +24,7 @@ import {
 } from '@/components/ui/select'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { CalendarIcon, Loader2 } from 'lucide-react'
+import { CalendarIcon, Loader2, Send } from 'lucide-react'
 import { format, addMonths } from 'date-fns'
 import { toast } from 'sonner'
 import { createContract } from '@/lib/actions/contracts'
@@ -59,7 +61,35 @@ export function CreateContractDialog({
     // Calculate end date based on start date and term
     const endDate = startDate ? addMonths(startDate, parseInt(programTerm)) : undefined
 
-    async function handleSubmit() {
+    // Prefill from payment schedule
+    useEffect(() => {
+        if (open && clientId) {
+            const loadPrefill = async () => {
+                try {
+                    const prefillData = await getLatestPaymentScheduleForClient(clientId)
+                    if (prefillData) {
+                        if (prefillData.programName) setProgramName(prefillData.programName)
+                        if (prefillData.paymentType) setPaymentType(prefillData.paymentType as any)
+                        if (prefillData.programTerm) setProgramTerm(prefillData.programTerm as any)
+                        if (prefillData.startDate) setStartDate(prefillData.startDate)
+                        if (prefillData.totalValue) setTotalValue(prefillData.totalValue)
+                        if (prefillData.monthlyRate) setMonthlyRate(prefillData.monthlyRate)
+                        if (prefillData.downPayment) setDownPayment(prefillData.downPayment)
+                        if (prefillData.installmentCount) setInstallmentCount(prefillData.installmentCount)
+                        if (prefillData.installmentAmount) setInstallmentAmount(prefillData.installmentAmount)
+                        if (prefillData.notes) setNotes(prefillData.notes)
+
+                        toast.success('Prefilled contract details from payment link')
+                    }
+                } catch (error) {
+                    console.error('Failed to prefill contract:', error)
+                }
+            }
+            loadPrefill()
+        }
+    }, [open, clientId])
+
+    async function handleSubmit(shouldSend = false) {
         if (!startDate || !programName) {
             toast.error('Please fill in required fields')
             return
@@ -67,31 +97,52 @@ export function CreateContractDialog({
 
         setIsSubmitting(true)
 
-        const result = await createContract({
-            client_id: clientId,
-            start_date: format(startDate, 'yyyy-MM-dd'),
-            end_date: format(endDate!, 'yyyy-MM-dd'),
-            program_name: programName,
-            program_term_months: parseInt(programTerm),
-            payment_type: paymentType || undefined,
-            total_value: totalValue ? parseFloat(totalValue) : undefined,
-            monthly_rate: monthlyRate ? parseFloat(monthlyRate) : undefined,
-            down_payment: downPayment ? parseFloat(downPayment) : undefined,
-            installment_count: installmentCount ? parseInt(installmentCount) : undefined,
-            installment_amount: installmentAmount ? parseFloat(installmentAmount) : undefined,
-            manual_entry: true,
-            manual_notes: notes || undefined,
-        })
+        try {
+            // 1. Create Contract
+            const result = await createContract({
+                client_id: clientId,
+                start_date: format(startDate, 'yyyy-MM-dd'),
+                end_date: format(endDate!, 'yyyy-MM-dd'),
+                program_name: programName,
+                program_term_months: parseInt(programTerm),
+                payment_type: paymentType || undefined,
+                total_value: totalValue ? parseFloat(totalValue) : undefined,
+                monthly_rate: monthlyRate ? parseFloat(monthlyRate) : undefined,
+                down_payment: downPayment ? parseFloat(downPayment) : undefined,
+                installment_count: installmentCount ? parseInt(installmentCount) : undefined,
+                installment_amount: installmentAmount ? parseFloat(installmentAmount) : undefined,
+                manual_entry: true,
+                manual_notes: notes || undefined,
+            })
 
-        setIsSubmitting(false)
+            if (!result.success) {
+                throw new Error(result.error || 'Failed to create contract')
+            }
 
-        if (result.success) {
             toast.success('Contract created successfully')
+
+            // 2. Send Agreement (if requested)
+            if (shouldSend) {
+                toast.loading('Preparing agreement...')
+                const sendResult = await sendAgreement(clientId)
+                toast.dismiss() // Dismiss loading
+
+                if (sendResult.success) {
+                    toast.success('Agreement sent via GHL!')
+                } else {
+                    toast.error(`Contract created, but failed to send: ${sendResult.error}`)
+                    // Do NOT close valid contract dialog? No, contract is created. We shoud close.
+                }
+            }
+
             onOpenChange(false)
             onSuccess?.()
             resetForm()
-        } else {
-            toast.error(result.error || 'Failed to create contract')
+
+        } catch (error: any) {
+            toast.error(error.message || 'An error occurred')
+        } finally {
+            setIsSubmitting(false)
         }
     }
 
@@ -268,14 +319,31 @@ export function CreateContractDialog({
                     </div>
                 </div>
 
-                <DialogFooter>
+                <DialogFooter className="gap-2 sm:justify-end">
                     <Button variant="outline" onClick={() => onOpenChange(false)}>
                         Cancel
                     </Button>
-                    <Button onClick={handleSubmit} disabled={isSubmitting || !programName || !startDate}>
-                        {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Create Contract
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button
+                            variant="secondary"
+                            onClick={() => handleSubmit(false)}
+                            disabled={isSubmitting || !programName || !startDate}
+                        >
+                            Create Only
+                        </Button>
+                        <Button
+                            onClick={() => handleSubmit(true)}
+                            disabled={isSubmitting || !programName || !startDate}
+                            className="bg-green-600 hover:bg-green-700 text-white"
+                        >
+                            {isSubmitting ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                                <Send className="mr-2 h-4 w-4" />
+                            )}
+                            Create & Send
+                        </Button>
+                    </div>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

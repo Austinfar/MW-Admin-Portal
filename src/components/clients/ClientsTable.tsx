@@ -219,9 +219,8 @@ export function ClientsTable({ data, clientTypes, coaches, currentUserId }: Clie
 
     const clearSelection = () => setSelectedIds(new Set())
 
-    // Contract end date styling
     const getContractEndStyle = (endDate: string | null | undefined) => {
-        if (!endDate) return { color: 'text-muted-foreground', label: 'Open-ended' }
+        if (!endDate) return { color: 'text-muted-foreground', label: 'No Active Term' }
         const now = new Date()
         const end = new Date(endDate)
         const daysUntil = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))

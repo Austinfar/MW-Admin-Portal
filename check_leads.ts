@@ -34,6 +34,7 @@ async function checkRecentLeads() {
             console.log(`- ID: ${lead.id}`);
             console.log(`  Name: ${lead.first_name} ${lead.last_name}`);
             console.log(`  Email: ${lead.email}`);
+            console.log(`  GHL ID: ${lead.ghl_contact_id}`);
             console.log(`  Created: ${lead.created_at}`);
             console.log(`  Source: ${lead.source}`);
             console.log(`  Status: ${lead.status}`);
