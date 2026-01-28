@@ -124,8 +124,28 @@ export async function POST(req: NextRequest) {
         }
 
         if (!status) {
+            // Check customData just in case
+            const customDataStatus = (body.customData?.status || '').toLowerCase()
+            if (customDataStatus) {
+                if (customDataStatus === 'viewed' || customDataStatus === 'opened') status = 'viewed'
+                else if (customDataStatus === 'signed' || customDataStatus === 'completed') status = 'signed'
+                else if (customDataStatus === 'expired' || customDataStatus === 'voided' || customDataStatus === 'declined') status = 'voided'
+
+                if (status && customDataStatus === 'signed') {
+                    signedDocumentUrl = body.customData?.signedDocumentUrl
+                }
+            }
+        }
+
+        if (!status) {
             console.log('[GHL Documents] Unhandled event type:', eventType, body.status)
-            return NextResponse.json({ received: true, handled: false })
+            return NextResponse.json({
+                received: true,
+                handled: false,
+                message: 'Status could not be determined from payload',
+                keys: Object.keys(body),
+                customData: body.customData ? Object.keys(body.customData) : 'missing'
+            })
         }
 
         // Extract contact ID
