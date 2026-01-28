@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getAppSettings } from '@/lib/actions/app-settings'
 
 interface GHLContact {
     email: string
@@ -28,11 +29,14 @@ const STAGE_MAP: Record<string, string> = {
 const GHL_CUSTOM_FIELD_OPPORTUNITY_ID = 'mw_opportunity_id'
 
 export async function pushToGHL(contact: GHLContact, options: { isUpdate?: boolean } = {}) {
-    const accessToken = process.env.GHL_ACCESS_TOKEN
-    const locationId = process.env.GHL_LOCATION_ID
+    // Try to get config from DB (OAuth flow), fallback to Env
+    const settings = await getAppSettings()
+
+    const accessToken = settings['ghl_access_token'] || process.env.GHL_ACCESS_TOKEN
+    const locationId = settings['ghl_location_id'] || process.env.GHL_LOCATION_ID
 
     if (!accessToken || !locationId) {
-        console.error('[GHL Service] Missing GHL configuration')
+        console.error('[GHL Service] Missing GHL configuration (Token or Location ID missing in DB/Env)')
         return { error: 'Missing GHL config' }
     }
 
