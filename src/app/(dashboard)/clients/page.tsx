@@ -2,6 +2,7 @@ import { getEnhancedClients, getClientTypes, getCoaches, getClientStats } from '
 import { createClient } from '@/lib/supabase/server'
 import { ClientsTable } from '@/components/clients/ClientsTable'
 import { ClientStatsCards } from '@/components/clients/ClientStatsCards'
+import { RefreshClientsButton } from '@/components/clients/RefreshClientsButton'
 
 import { protectRoute } from '@/lib/protect-route'
 
@@ -26,6 +27,9 @@ export default async function ClientsPage() {
                     <p className="text-muted-foreground">
                         Manage your client roster, track statuses, and assign programs.
                     </p>
+                </div>
+                <div className="flex items-center space-x-2">
+                    <RefreshClientsButton />
                 </div>
             </div>
 

@@ -341,10 +341,18 @@ export async function updateClientTask(
 }
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getCurrentUserAccess } from '@/lib/auth-utils'
 
 export async function getOnboardingClients() {
+    const userAccess = await getCurrentUserAccess()
+    if (!userAccess) return []
+
+    const permission = userAccess.permissions.can_view_onboarding
+
+    if (!permission || permission === 'none') return []
+
     const supabase = createAdminClient()
-    const { data, error } = await supabase
+    let query = supabase
         .from('clients')
         .select(`
             *,
@@ -353,7 +361,17 @@ export async function getOnboardingClients() {
             onboarding_tasks(id, status)
         `)
         .eq('status', 'onboarding')
-        .order('start_date', { ascending: false })
+
+    if (permission === 'own') {
+        const authClient = await createClient()
+        const { data: { user } } = await authClient.auth.getUser()
+
+        if (!user) return []
+
+        query = query.eq('assigned_coach_id', user.id)
+    }
+
+    const { data, error } = await query.order('start_date', { ascending: false })
 
     if (error) {
         console.error('Error fetching onboarding clients:', error)
@@ -381,10 +399,16 @@ export async function getOnboardingClients() {
  * Get overdue onboarding tasks across all clients
  */
 export async function getOverdueOnboardingTasks() {
+    const userAccess = await getCurrentUserAccess()
+    if (!userAccess) return []
+
+    const permission = userAccess.permissions.can_view_onboarding
+    if (!permission || permission === 'none') return []
+
     const supabase = createAdminClient()
     const now = new Date().toISOString()
 
-    const { data, error } = await supabase
+    let query = supabase
         .from('onboarding_tasks')
         .select(`
             id,
@@ -403,6 +427,22 @@ export async function getOverdueOnboardingTasks() {
         `)
         .eq('status', 'pending')
         .lt('due_date', now)
+
+    if (permission === 'own') {
+        const authClient = await createClient()
+        const { data: { user } } = await authClient.auth.getUser()
+
+        if (!user) return []
+
+        // Filter by tasks for clients owned by the user
+        // OR tasks assigned directly to the user
+        // For now, let's stick to client ownership to match the board view, 
+        // but arguably one should see their own assigned tasks too. 
+        // Let's filter by client ownership for consistency with "Own Clients" scope.
+        query = query.eq('clients.assigned_coach_id', user.id)
+    }
+
+    const { data, error } = await query
         .order('due_date', { ascending: true })
         .limit(50)
 
