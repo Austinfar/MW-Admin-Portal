@@ -1,32 +1,34 @@
 
-import { pushToGHL } from '../src/lib/services/ghl';
+import dotenv from 'dotenv'
+dotenv.config({ path: '.env.local' })
+import { pushToGHL } from '@/lib/services/ghl'
 
-async function main() {
-    const email = `test.ghl.sync.${Date.now()}@test.com`;
-    console.log('Testing GHL Sync with email:', email);
+async function testSync() {
+    console.log('Testing GHL Sync...')
 
-    // 1. Test Sync (Create)
-    const result = await pushToGHL({
-        email,
+    const testContact = {
+        email: `test.sync.${Date.now()}@mailinator.com`,
         firstName: 'Test',
-        lastName: 'GHL Sync',
+        lastName: 'Sync',
         phone: '+15550000000',
-        tags: ['test_tag'],
+        tags: ['test_sync_script'],
         status: 'New'
-    });
+    }
 
-    console.log('Sync Result:', result);
+    console.log('Payload:', testContact)
 
-    if (result.success) {
-        console.log('SUCCESS: Contact created.');
-        if (result.ghlOpportunityId) {
-            console.log('SUCCESS: Opportunity created with ID:', result.ghlOpportunityId);
-        } else {
-            console.warn('WARNING: Opportunity ID missing (expected if status maps to valid stage).');
+    const result = await pushToGHL(testContact)
+
+    console.log('Result:', result)
+
+    if (result.error) {
+        console.error('FAILED:', result.error)
+        if (result.details) {
+            console.error('Details:', JSON.stringify(result.details, null, 2))
         }
     } else {
-        console.error('FAILURE:', result);
+        console.log('SUCCESS. GHL ID:', result.ghlContactId)
     }
 }
 
-main().catch(console.error);
+testSync()
