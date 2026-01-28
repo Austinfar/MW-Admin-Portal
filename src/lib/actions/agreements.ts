@@ -432,8 +432,67 @@ export async function updateAgreementFromWebhook(
         updates.viewed_at = new Date().toISOString()
     } else if (status === 'signed') {
         updates.signed_at = new Date().toISOString()
+
+        // If we have a signed document URL from GHL, try to upload it to Supabase Storage
         if (signedDocumentUrl) {
-            updates.signed_document_url = signedDocumentUrl
+            try {
+                // 1. Download PDF
+                console.log('[Agreements] Downloading signed PDF from:', signedDocumentUrl)
+                const pdfResponse = await fetch(signedDocumentUrl)
+                if (!pdfResponse.ok) throw new Error(`Failed to download PDF: ${pdfResponse.statusText}`)
+                const pdfBlob = await pdfResponse.blob()
+
+                // 2. Upload to Supabase Storage
+                // Path: contracts/{clientId}/{agreementId}.pdf
+                const fileName = `agreement-${agreement.id}.pdf`
+                const storagePath = `contracts/${agreement.client_id}/${fileName}`
+
+                const { error: uploadError } = await supabase.storage
+                    .from('client-documents')
+                    .upload(storagePath, pdfBlob, {
+                        contentType: 'application/pdf',
+                        upsert: true
+                    })
+
+                if (uploadError) {
+                    console.error('[Agreements] Storage upload failed:', uploadError)
+                    // Fallback: Use the GHL URL if upload fails
+                    updates.signed_document_url = signedDocumentUrl
+                } else {
+                    // 3. Get Public URL
+                    const { data: { publicUrl } } = supabase.storage
+                        .from('client-documents')
+                        .getPublicUrl(storagePath)
+
+                    console.log('[Agreements] Stored PDF at:', publicUrl)
+                    updates.signed_document_url = publicUrl
+
+                    // 4. Create record in client_documents table
+                    // Check if already exists to avoid duplicates
+                    const { data: existingDoc } = await supabase
+                        .from('client_documents')
+                        .select('id')
+                        .eq('storage_path', storagePath)
+                        .single()
+
+                    if (!existingDoc) {
+                        await supabase.from('client_documents').insert({
+                            client_id: agreement.client_id,
+                            name: 'Signed Coaching Agreement',
+                            description: `Agreement signed on ${new Date().toLocaleDateString()}`,
+                            document_type: 'contract',
+                            storage_path: storagePath,
+                            file_size: pdfBlob.size,
+                            mime_type: 'application/pdf',
+                            is_shared_with_client: true
+                        })
+                    }
+                }
+            } catch (storageError) {
+                console.error('[Agreements] Failed to store document:', storageError)
+                // Fallback to GHL URL
+                updates.signed_document_url = signedDocumentUrl
+            }
         }
     } else if (status === 'expired') {
         // No additional fields needed
