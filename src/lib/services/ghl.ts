@@ -78,6 +78,32 @@ export async function pushToGHL(contact: GHLContact, options: { isUpdate?: boole
         const ghlContactId = contactData.contact?.id
         console.log(`[GHL Service] Contact Synced. GHL ID: ${ghlContactId}`)
 
+        // 1.5 Explicitly Add Tags (Upsert can sometimes overwrite or ignore tags depending on GHL config)
+        if (contact.tags && contact.tags.length > 0 && ghlContactId) {
+            try {
+                const tagRes = await fetch(`https://services.leadconnectorhq.com/contacts/${ghlContactId}/tags`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'Version': '2021-07-28',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        tags: contact.tags
+                    })
+                })
+
+                if (!tagRes.ok) {
+                    const tagData = await tagRes.json()
+                    console.error('[GHL Service] Failed to add tags:', tagData)
+                } else {
+                    console.log(`[GHL Service] Tags added to contact ${ghlContactId}:`, contact.tags)
+                }
+            } catch (tagError) {
+                console.error('[GHL Service] Exception adding tags:', tagError)
+            }
+        }
+
         // 2. Sync Opportunity (if Status maps to a Stage)
         const stageId = STAGE_MAP[contact.status || '']
         if (stageId && PIPELINE_ID !== 'REPLACE_WITH_PIPELINE_ID') {
