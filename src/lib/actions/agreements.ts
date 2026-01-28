@@ -365,16 +365,56 @@ export async function resendAgreement(
 export async function updateAgreementFromWebhook(
     ghlDocumentId: string,
     status: 'viewed' | 'signed' | 'expired',
-    signedDocumentUrl?: string
+    signedDocumentUrl?: string,
+    ghlContactId?: string
 ): Promise<{ success: boolean; error?: string }> {
     const supabase = createAdminClient()
 
     // Find agreement by GHL document ID
-    const { data: agreement, error: fetchError } = await supabase
+    let { data: agreement, error: fetchError } = await supabase
         .from('client_agreements')
         .select('id, client_id, status')
         .eq('ghl_document_id', ghlDocumentId)
         .single()
+
+    // Fallback: If not found by Document ID, try matching by Contact ID (Late Binding for Workflow-initiated docs)
+    if ((!agreement || fetchError) && ghlContactId) {
+        console.log('[Agreements] Document ID not found, attempting late binding via Contact ID:', ghlContactId)
+
+        // Find client by GHL Contact ID
+        const { data: client } = await supabase
+            .from('clients')
+            .select('id')
+            .eq('ghl_contact_id', ghlContactId)
+            .single()
+
+        if (client) {
+            // Find the most recent 'sent' agreement for this client that DOESN'T have a document ID yet
+            // OR has a mismatched one (though purely empty is safer for initial binding)
+            const { data: pendingAgreement } = await supabase
+                .from('client_agreements')
+                .select('id, client_id, status')
+                .eq('client_id', client.id)
+                .eq('status', 'sent')
+                .is('ghl_document_id', null)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single()
+
+            if (pendingAgreement) {
+                console.log('[Agreements] Found matching pending agreement. Binding Document ID:', ghlDocumentId)
+
+                // Bind the document ID to this agreement
+                await supabase
+                    .from('client_agreements')
+                    .update({ ghl_document_id: ghlDocumentId })
+                    .eq('id', pendingAgreement.id)
+
+                agreement = pendingAgreement
+                fetchError = null
+            }
+        }
+    }
 
     if (fetchError || !agreement) {
         console.error('[Agreements] Agreement not found for GHL doc:', ghlDocumentId)
