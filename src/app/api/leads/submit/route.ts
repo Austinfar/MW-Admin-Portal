@@ -17,9 +17,11 @@ export async function POST(req: NextRequest) {
         // Initialize metadata from body or empty object
         const metadata = body.metadata || {}
 
-        // Extract UTMs and source from top-level body if not present in metadata
-        // This handles cases where external forms send these as top-level fields
-        const sourceFields = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'source', 'lead_type']
+        // Extract UTMs, source, and lifecycle fields from top-level body if not present in metadata
+        const sourceFields = [
+            'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'source', 'lead_type',
+            'questionnaire', 'questionnaire_completed_at', 'coach_selected', 'consultation_scheduled_for', 'booking_completed_at'
+        ]
         sourceFields.forEach(field => {
             if (body[field] !== undefined && metadata[field] === undefined) {
                 metadata[field] = body[field]

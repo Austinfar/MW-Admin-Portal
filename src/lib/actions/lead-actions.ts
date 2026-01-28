@@ -62,6 +62,7 @@ export async function upsertLead(supabase: any, data: {
                 // However, update might overwrite existing setter if we pass null. 
                 // Let's safe-guard: if setterId is passed, update it.
                 ...(setterId ? { booked_by_user_id: setterId } : {}),
+                ...(metadata?.source || metadata?.utm_source ? { source: metadata?.utm_source || metadata?.source } : {}),
                 metadata: newMetadata,
                 updated_at: new Date().toISOString()
             })
@@ -95,6 +96,8 @@ export async function upsertLead(supabase: any, data: {
         leadId = newLead.id
     }
 
+
+
     if (leadId) {
         // Log activity
         await logLeadActivity(
@@ -112,6 +115,42 @@ export async function upsertLead(supabase: any, data: {
                 'Questionnaire Submitted',
                 'Client submitted questionnaire answers.'
             )
+        }
+
+        // Sync to GHL immediately
+        try {
+            const tags = ['landing_page_submission']
+            if (metadata?.questionnaire) tags.push('questionnaire_submitted')
+
+            // Prepare GHL payload
+            const ghlData: any = {
+                email,
+                firstName,
+                lastName,
+                phone,
+                tags
+            }
+
+            // Only set status for new leads to avoid resetting pipeline stage for existing leads
+            if (!existingLead) {
+                ghlData.status = 'New'
+            }
+
+            const ghlResult = await pushToGHL(ghlData)
+
+            if (ghlResult.error) {
+                console.error('[lead-actions] GHL Sync returned error:', ghlResult)
+            }
+
+            if (ghlResult.ghlContactId) {
+                const updates: any = { ghl_contact_id: ghlResult.ghlContactId }
+                if (ghlResult.ghlOpportunityId) {
+                    updates.ghl_opportunity_id = ghlResult.ghlOpportunityId
+                }
+                await supabase.from('leads').update(updates).eq('id', leadId)
+            }
+        } catch (error) {
+            console.error('GHL Direct Sync Failed:', error)
         }
     }
 

@@ -4,6 +4,7 @@ import crypto from 'crypto'
 import { parseName } from '@/lib/utils/name-parser'
 import { logLeadActivity } from '@/lib/actions/lead-actions'
 import { calClient } from '@/lib/cal/client'
+import { pushToGHL } from '@/lib/services/ghl'
 
 // Cal.com webhook event types
 type CalWebhookEvent =
@@ -349,7 +350,7 @@ async function syncLeadFromBooking(
     // Check if lead already exists
     const { data: existingLead } = await supabase
         .from('leads')
-        .select('id, status, phone, assigned_user_id, metadata')
+        .select('id, status, phone, assigned_user_id, metadata, email')
         .eq('email', attendee.email.toLowerCase())
         .single()
 
@@ -388,6 +389,20 @@ async function syncLeadFromBooking(
             .update(updates)
             .eq('id', existingLead.id)
 
+        // Sync to GHL
+        try {
+            await pushToGHL({
+                email: existingLead.email || attendee?.email,
+                firstName: parseName(attendee?.name || '').firstName,
+                lastName: parseName(attendee?.name || '').lastName,
+                phone: updates.phone as string || existingLead.phone,
+                tags: ['appointment_scheduled'],
+                status: updates.status as string || existingLead.status
+            })
+        } catch (error) {
+            console.error('[Cal Webhook] Failed to sync to GHL:', error)
+        }
+
         return existingLead.id
     }
 
@@ -414,6 +429,22 @@ async function syncLeadFromBooking(
         })
         .select('id')
         .single()
+
+    if (newLead) {
+        // Sync to GHL
+        try {
+            await pushToGHL({
+                email: attendee.email.toLowerCase(),
+                firstName: firstName,
+                lastName: lastName,
+                phone: phone || '',
+                tags: ['appointment_scheduled', 'new_lead_booking'],
+                status: 'Appt Set'
+            })
+        } catch (error) {
+            console.error('[Cal Webhook] Failed to sync new lead to GHL:', error)
+        }
+    }
 
     if (error) {
         console.error('[Cal Webhook] Failed to create lead:', error)

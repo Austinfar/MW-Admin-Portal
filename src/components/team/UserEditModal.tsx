@@ -94,6 +94,8 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
     const [calLinksLoading, setCalLinksLoading] = useState(false);
     const [consultUrl, setConsultUrl] = useState('');
     const [consultEventTypeId, setConsultEventTypeId] = useState('');
+    const [consultCalUsername, setConsultCalUsername] = useState('');
+    const [consultEventSlug, setConsultEventSlug] = useState('');
     const [monthlyCoachingUrl, setMonthlyCoachingUrl] = useState('');
 
     // Check if user should have calendar links
@@ -117,6 +119,8 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
             const monthly = links.find(l => l.link_type === 'monthly_coaching');
             setConsultUrl(consult?.url || '');
             setConsultEventTypeId(consult?.event_type_id?.toString() || '');
+            setConsultCalUsername(consult?.cal_username || '');
+            setConsultEventSlug(consult?.event_slug || '');
             setMonthlyCoachingUrl(monthly?.url || '');
         } catch (error) {
             console.error('Failed to load calendar links:', error);
@@ -130,7 +134,10 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
 
         const displayName = linkType === 'consult' ? 'Coaching Consult' : 'Monthly Coaching Call';
         const eventTypeId = linkType === 'consult' && consultEventTypeId ? parseInt(consultEventTypeId) : null;
-        const result = await upsertCalLink(user.id, linkType, url, displayName, eventTypeId);
+        const calUsername = linkType === 'consult' && consultCalUsername ? consultCalUsername : null;
+        const eventSlug = linkType === 'consult' && consultEventSlug ? consultEventSlug : null;
+
+        const result = await upsertCalLink(user.id, linkType, url, displayName, eventTypeId, calUsername, eventSlug);
 
         if (result.success) {
             toast.success(`${displayName} link saved`);
@@ -645,6 +652,28 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
                                                         type="number"
                                                     />
                                                 </div>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-2 mt-2">
+                                                <div className="flex-1">
+                                                    <Input
+                                                        id="consultCalUsername"
+                                                        value={consultCalUsername}
+                                                        onChange={(e) => setConsultCalUsername(e.target.value)}
+                                                        className="bg-white/5 border-white/10"
+                                                        placeholder="Cal Username (e.g. austin-mw)"
+                                                    />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <Input
+                                                        id="consultEventSlug"
+                                                        value={consultEventSlug}
+                                                        onChange={(e) => setConsultEventSlug(e.target.value)}
+                                                        className="bg-white/5 border-white/10"
+                                                        placeholder="Event Slug (e.g. consult)"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="flex justify-end mt-2">
                                                 <Button
                                                     size="sm"
                                                     onClick={() => saveCalLink('consult', consultUrl)}
@@ -656,7 +685,7 @@ export function UserEditModal({ user, onUpdate, isSuperAdmin = false }: UserEdit
                                             </div>
                                         </div>
                                         <p className="text-xs text-muted-foreground">
-                                            Used for sales calls. Event Type ID is required for the booking funnel. Source parameter will be added automatically.
+                                            Used for sales calls. <strong>For V2 API (Managed Events), Username and Slug are REQUIRED.</strong> ID is legacy.
                                         </p>
                                     </div>
 
