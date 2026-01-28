@@ -98,7 +98,8 @@ export function ClientOnboardingChecklist({ tasks, clientId, users = [] }: Clien
                 due_date: newTaskDueDate || new Date().toISOString(),
                 assigned_user_id: newTaskAssignee,
                 created_at: new Date().toISOString(),
-                completed_at: null
+                completed_at: null,
+                completed_by: null
             }
             setOptimisticTasks(prev => [...prev, newTask])
         }
