@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
 
         // Determine the status from webhook event type
         const eventType = body.type || body.event || body.eventType || ''
-        let status: 'viewed' | 'signed' | 'expired' | null = null
+        let status: 'viewed' | 'signed' | 'expired' | 'voided' | null = null
         let signedDocumentUrl: string | undefined
 
         // Map GHL event types to our status
@@ -89,6 +89,8 @@ export async function POST(req: NextRequest) {
         } else if (eventType.toLowerCase().includes('expired') ||
             eventType.toLowerCase().includes('voided')) {
             status = 'expired'
+        } else if (eventType.toLowerCase().includes('declined')) {
+            status = 'voided'
         }
 
         // Also check status field directly if event type didn't match
@@ -102,6 +104,8 @@ export async function POST(req: NextRequest) {
                     body.document?.signedDocumentUrl
             } else if (docStatus === 'expired' || docStatus === 'voided') {
                 status = 'expired'
+            } else if (docStatus === 'declined') {
+                status = 'voided'
             }
         }
 

@@ -364,7 +364,7 @@ export async function resendAgreement(
  */
 export async function updateAgreementFromWebhook(
     ghlDocumentId: string,
-    status: 'viewed' | 'signed' | 'expired',
+    status: 'viewed' | 'signed' | 'expired' | 'voided',
     signedDocumentUrl?: string,
     ghlContactId?: string
 ): Promise<{ success: boolean; error?: string }> {
