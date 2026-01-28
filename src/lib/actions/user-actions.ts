@@ -21,7 +21,7 @@ async function _getCoaches(): Promise<CoachUser[]> {
     // But let's be inclusive.
     const { data, error } = await supabase
         .from('users')
-        .select('id, name, slug, avatar_url')
+        .select('id, name, slug, avatar_url, email, role, job_title')
         .or('job_title.ilike.coach,role.in.(coach,admin,owner)')
     // Note: Admin/Owner might also be coaches. 
     // User specifically said "display any coach... that has the coach job type"
@@ -35,7 +35,7 @@ async function _getCoaches(): Promise<CoachUser[]> {
     // Re-querying specifically for job_title='coach' is safest for "coach job type".
     const { data: coaches, error: coachError } = await supabase
         .from('users')
-        .select('id, name, slug, avatar_url')
+        .select('id, name, slug, avatar_url, email, role, job_title')
         .ilike('job_title', '%coach%')
         .eq('is_active', true)
         .order('name');
@@ -59,7 +59,7 @@ async function _getSetters(): Promise<CoachUser[]> {
 
     const { data: setters, error } = await supabase
         .from('users')
-        .select('id, name, slug, avatar_url')
+        .select('id, name, slug, avatar_url, email, role, job_title')
         .ilike('job_title', '%setter%')
         .eq('is_active', true)
         .order('name');
