@@ -63,11 +63,25 @@ export async function POST(req: NextRequest) {
         const documentId = body.documentId ||
             body.document?.id ||
             body.data?.documentId ||
-            body.data?.document?.id
+            body.data?.document?.id ||
+            body.id // Check usage of top-level ID
 
+        // If no document ID but we have a Contact ID, we proceed (Blind Sign)
+        // logic later will attempt to match via Contact ID
         if (!documentId) {
-            console.error('[GHL Documents] No document ID in webhook payload')
-            return NextResponse.json({ error: 'Missing document ID' }, { status: 400 })
+            // Check if we can proceed with just Contact ID
+            const hasContactId = body.contactId || body.contact_id || body.document?.contactId || body.document?.contact?.id || body.data?.contactId
+
+            if (!hasContactId) {
+                console.error('[GHL Documents] No document ID or Contact ID in webhook payload')
+                return NextResponse.json({
+                    error: 'Missing document ID',
+                    keys: Object.keys(body),
+                    dataKeys: body.data ? Object.keys(body.data) : []
+                }, { status: 400 })
+            }
+
+            console.warn('[GHL Documents] No Document ID found, but proceeding with Contact ID lookup')
         }
 
         // Determine the status from webhook event type
