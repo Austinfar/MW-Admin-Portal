@@ -5,7 +5,7 @@ import {
     getLeadStats,
     getLeadFunnelData,
     getLeadSourceBreakdown
-} from '@/lib/actions/lead-actions'
+} from '@/lib/actions/lead-analytics'
 import { getCurrentUserProfile } from '@/lib/actions/profile'
 import { LeadsPageContent } from '@/components/leads/LeadsPageContent'
 import { SyncGHLButton } from '@/components/leads/SyncGHLButton'

@@ -21,9 +21,10 @@ interface PreCallSummaryCardProps {
     metadata: Record<string, unknown> | null
     source: string | null
     coachName?: string | null
+    setterName?: string | null
 }
 
-export function PreCallSummaryCard({ metadata, source, coachName }: PreCallSummaryCardProps) {
+export function PreCallSummaryCard({ metadata, source, coachName, setterName }: PreCallSummaryCardProps) {
     const [showFullQuestionnaire, setShowFullQuestionnaire] = useState(false)
 
     if (!metadata) {
@@ -47,7 +48,35 @@ export function PreCallSummaryCard({ metadata, source, coachName }: PreCallSumma
     const sourceDetail = metadata.source_detail as string | undefined
     const utmSource = metadata.utm_source as string | undefined
     const utmCampaign = metadata.utm_campaign as string | undefined
-    const landingPage = metadata.landing_page_variant as string | undefined
+    const utmContent = metadata.utm_content as string | undefined
+    const landingPage = (metadata.landing_page_variant || metadata.landing_page_url) as string | undefined
+
+    // Determine Funnel Endpoint Display
+    let funnelEndpoint = 'Direct Booking'
+    if (landingPage) {
+        const lowerPage = landingPage.toLowerCase()
+        if (lowerPage.includes('can.mwfitnesscoaching.com') || lowerPage.includes('book.')) {
+            funnelEndpoint = 'Direct Booking'
+        } else if (lowerPage.includes('she.')) {
+            funnelEndpoint = 'Female Landing Page'
+        } else if (lowerPage.includes('him.')) {
+            funnelEndpoint = 'Male Landing Page'
+        } else {
+            // Try to clean up URL to just path or variant name
+            try {
+                if (landingPage.startsWith('http')) {
+                    const url = new URL(landingPage)
+                    funnelEndpoint = url.pathname === '/' ? 'Home Page' : url.pathname.replace(/^\/|\/$/g, '')
+                } else {
+                    funnelEndpoint = landingPage
+                }
+            } catch {
+                funnelEndpoint = landingPage
+            }
+        }
+    } else if (sourceDetail) {
+        funnelEndpoint = sourceDetail
+    }
 
     // Common questionnaire field mappings
     const primaryGoal = questionnaire?.primary_goal ||
@@ -88,7 +117,8 @@ export function PreCallSummaryCard({ metadata, source, coachName }: PreCallSumma
     // Build source string
     const sourceInfo = []
     if (utmSource) sourceInfo.push(utmSource)
-    if (utmCampaign) sourceInfo.push(utmCampaign)
+    if (metadata.utm_medium) sourceInfo.push(metadata.utm_medium as string)
+    // if (utmCampaign) sourceInfo.push(utmCampaign) // Removed from source string as we show it separately now
     if (!sourceInfo.length && sourceDetail) sourceInfo.push(sourceDetail)
     if (!sourceInfo.length && source) sourceInfo.push(source)
     const sourceString = sourceInfo.join(' / ') || 'Direct'
@@ -100,6 +130,27 @@ export function PreCallSummaryCard({ metadata, source, coachName }: PreCallSumma
         )
         : []
 
+    // Determine Lead Driver (Company vs Coach)
+    // Matches logic in convertLeadToClient
+    const isCoachDriven = ['Coach', 'Manuel', 'Referral', 'Self-Gen'].includes(source || '')
+    const leadDriver = isCoachDriven ? 'Coach' : 'Company'
+
+    // Determine Traffic Type (Paid vs Organic)
+    // Can be derived from utm_medium or source_detail
+    let trafficType = 'Unknown'
+    const medium = (metadata.utm_medium as string || '').toLowerCase()
+    if (['cpc', 'paid', 'ppc', 'meta', 'fb_ads', 'ig_ads'].includes(medium)) {
+        trafficType = 'Paid'
+    } else if (['organic', 'social', 'email', 'referral', 'content'].includes(medium)) {
+        trafficType = 'Organic'
+    } else if (metadata.utm_medium) {
+        trafficType = metadata.utm_medium as string // Fallback to raw value
+    } else {
+        // Fallback heuristics based on source
+        if (source === 'Ads' || source === 'Facebook Ads') trafficType = 'Paid'
+        else if (source === 'Instagram' || source === 'Content') trafficType = 'Organic'
+    }
+
     return (
         <Card className="bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border-zinc-800">
             <CardHeader className="pb-3">
@@ -109,33 +160,100 @@ export function PreCallSummaryCard({ metadata, source, coachName }: PreCallSumma
                 </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-                {/* Source & Coach Row */}
-                <div className="grid grid-cols-3 gap-3">
+                {/* Marketing Context Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-3 bg-zinc-900/50 rounded-lg border border-zinc-800/50">
+                    {/* Row 1: High Level Source Info */}
+
+                    {/* Lead Driver */}
                     <div className="col-span-1 space-y-1">
                         <div className="flex items-center gap-1.5 text-xs text-zinc-500">
                             <Target className="h-3 w-3" />
-                            Type
+                            Lead Driver
                         </div>
-                        <Badge variant="outline" className="text-zinc-300 border-zinc-700 bg-zinc-800/50">
-                            {formatQuestionKey(String(metadata.lead_type || 'Unknown'))}
+                        <Badge variant="outline" className={cn(
+                            "border-zinc-700 bg-zinc-800/50",
+                            leadDriver === 'Company' ? "text-blue-400" : "text-purple-400"
+                        )}>
+                            {leadDriver}
                         </Badge>
                     </div>
+
+                    {/* Traffic Type */}
+                    <div className="col-span-1 space-y-1">
+                        <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                            <Wallet className="h-3 w-3" />
+                            Traffic Type
+                        </div>
+                        <p className="text-sm font-medium text-zinc-200 capitalize">
+                            {trafficType}
+                        </p>
+                    </div>
+
+                    {/* Source Platform */}
                     <div className="col-span-1 space-y-1">
                         <div className="flex items-center gap-1.5 text-xs text-zinc-500">
                             <Globe className="h-3 w-3" />
-                            Source
+                            Source Platform
                         </div>
-                        <p className="text-sm font-medium text-zinc-200 truncate" title={sourceString}>
-                            {sourceString}
+                        <p className="text-sm font-medium text-zinc-200 truncate" title={utmSource || source || 'Direct'}>
+                            {utmSource || source || 'Direct'}
                         </p>
                     </div>
+
+                    {/* Funnel Endpoint */}
+                    <div className="col-span-1 space-y-1">
+                        <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                            <Target className="h-3 w-3" />
+                            Funnel Endpoint
+                        </div>
+                        <p className="text-sm font-medium text-zinc-200 truncate" title={landingPage || sourceDetail}>
+                            {funnelEndpoint}
+                        </p>
+                    </div>
+
+                    {/* Row 2: Campaign & Assignment Details */}
+
+                    {/* Campaign Name */}
+                    <div className="col-span-1 space-y-1">
+                        <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                            <Megaphone className="h-3 w-3" />
+                            Campaign
+                        </div>
+                        <p className="text-sm font-medium text-zinc-300 truncate" title={utmCampaign || 'N/A'}>
+                            {utmCampaign || '-'}
+                        </p>
+                    </div>
+
+                    {/* Ad Name / Content */}
+                    <div className="col-span-1 space-y-1">
+                        <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                            <Megaphone className="h-3 w-3" />
+                            Content / Ad
+                        </div>
+                        <p className="text-sm font-medium text-zinc-300 truncate" title={utmContent || 'N/A'}>
+                            {utmContent || '-'}
+                        </p>
+                    </div>
+
+                    {/* Coach Preference */}
                     <div className="col-span-1 space-y-1">
                         <div className="flex items-center gap-1.5 text-xs text-zinc-500">
                             <User className="h-3 w-3" />
-                            Coach Preference
+                            Assigned Coach
                         </div>
                         <p className="text-sm font-medium text-zinc-200 truncate" title={coachName || 'No preference'}>
-                            {coachName || 'No preference'}
+                            {coachName || 'Any'}
+                        </p>
+                    </div>
+
+                    {/* Setter Preference */}
+                    <div className="col-span-1 space-y-1">
+                        <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                            <User className="h-3 w-3" />
+                            Assigned Setter
+                        </div>
+                        <p className="text-sm font-medium text-zinc-200 truncate" title={setterName || 'No specific setter'}>
+                            {setterName || 'None'}
                         </p>
                     </div>
                 </div>

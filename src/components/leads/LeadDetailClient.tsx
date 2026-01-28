@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { format, differenceInDays } from 'date-fns'
 import {
     Mail, Phone, ArrowRight, Trash2, MessageSquare, Activity,
-    ExternalLink, UserPlus, Loader2, Star, CalendarPlus, ListPlus, UserCheck
+    ExternalLink, UserPlus, Loader2, Star, CalendarPlus, ListPlus, UserCheck, CreditCard
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -13,7 +13,6 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
-    convertLeadToClient,
     deleteLead,
     updateLeadAppointmentSetter,
     updateLeadCloser,
@@ -66,13 +65,14 @@ interface LeadDetailClientProps {
     lead: Lead
     ghlLocationId?: string
     resolvedCoachName?: string | null
+    resolvedSetterName?: string | null
 }
 
 const LEAD_STATUSES = [
     { value: 'New', label: 'New' },
     { value: 'Contacted', label: 'Contacted' },
-    { value: 'Call Confirmed', label: 'Call Confirmed' },
     { value: 'Appt Set', label: 'Appt Set' },
+    { value: 'Call Confirmed', label: 'Call Confirmed' },
     { value: 'Closed Won', label: 'Won' },
     { value: 'Closed Lost', label: 'Lost' },
     { value: 'No Show', label: 'No Show' },
@@ -103,7 +103,7 @@ function getDaysColor(days: number): string {
     return 'bg-red-500/20 text-red-400'
 }
 
-export function LeadDetailClient({ lead, ghlLocationId, resolvedCoachName }: LeadDetailClientProps) {
+export function LeadDetailClient({ lead, ghlLocationId, resolvedCoachName, resolvedSetterName }: LeadDetailClientProps) {
     const router = useRouter()
     const [users, setUsers] = useState<SimpleUser[]>([])
     const [loadingUsers, setLoadingUsers] = useState(true)
@@ -236,18 +236,6 @@ export function LeadDetailClient({ lead, ghlLocationId, resolvedCoachName }: Lea
         }
     }
 
-    const handleConvert = async () => {
-        toast.promise(async () => {
-            const result = await convertLeadToClient(lead.id)
-            if (result?.error) throw new Error(result.error)
-            router.push('/clients')
-        }, {
-            loading: 'Converting to client...',
-            success: 'Lead converted successfully!',
-            error: (err) => `Failed to convert: ${err}`
-        })
-    }
-
     const handleDelete = async () => {
         if (!confirm('Are you sure you want to delete this lead? This cannot be undone.')) return
 
@@ -328,9 +316,9 @@ export function LeadDetailClient({ lead, ghlLocationId, resolvedCoachName }: Lea
                         <Trash2 className="mr-2 h-4 w-4" />
                         Delete
                     </Button>
-                    <Button onClick={handleConvert} className="bg-neon-green text-black hover:bg-neon-green/90">
-                        <ArrowRight className="mr-2 h-4 w-4" />
-                        Convert to Client
+                    <Button onClick={() => router.push(`/payment-links?leadId=${lead.id}`)} className="bg-neon-green text-black hover:bg-neon-green/90">
+                        <CreditCard className="mr-2 h-4 w-4" />
+                        Send Payment Link
                     </Button>
                 </div>
             </div>
@@ -364,9 +352,19 @@ export function LeadDetailClient({ lead, ghlLocationId, resolvedCoachName }: Lea
                             <CardTitle className="text-lg">Lead Details</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <div className="flex justify-between items-center border-b border-primary/5 pb-2">
-                                <span className="text-sm text-muted-foreground">Source</span>
-                                <Badge variant="outline">{lead.source || 'Manual'}</Badge>
+                            <div className="flex justify-between items-start border-b border-primary/5 pb-2">
+                                <span className="text-sm text-muted-foreground mt-1">Source</span>
+                                <div className="flex flex-col items-end gap-1 text-right">
+                                    <Badge variant="outline">{lead.source || 'Manual'}</Badge>
+                                    {(lead.metadata as any)?.utm_medium && (
+                                        <span className="text-xs text-muted-foreground">Medium: {(lead.metadata as any).utm_medium}</span>
+                                    )}
+                                    {(lead.metadata as any)?.lead_type && (
+                                        <Badge variant="secondary" className="text-[10px] h-5 capitalize">
+                                            {(lead.metadata as any).lead_type}
+                                        </Badge>
+                                    )}
+                                </div>
                             </div>
                             <div className="flex justify-between items-center border-b border-primary/5 pb-2">
                                 <span className="text-sm text-muted-foreground">Created</span>
@@ -520,6 +518,7 @@ export function LeadDetailClient({ lead, ghlLocationId, resolvedCoachName }: Lea
                         metadata={lead.metadata || null}
                         source={lead.source}
                         coachName={resolvedCoachName}
+                        setterName={resolvedSetterName}
                     />
 
                     <Tabs defaultValue="notes" className="w-full flex-1 flex flex-col">
@@ -606,17 +605,22 @@ export function LeadDetailClient({ lead, ghlLocationId, resolvedCoachName }: Lea
                         </CardContent>
                     </Card>
 
+
+
                     <Card className="bg-card/40 border-primary/5 backdrop-blur-sm">
                         <CardHeader>
                             <CardTitle className="text-lg">Conversion</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <p className="text-sm text-muted-foreground mb-4">
-                                Ready to onboard this lead? Convert them to a client to start their journey.
+                                Ready to onboard this lead? Send them a payment link to convert them.
                             </p>
-                            <Button onClick={handleConvert} className="w-full bg-neon-green text-black hover:bg-neon-green/90">
-                                <ArrowRight className="mr-2 h-4 w-4" />
-                                Convert to Client
+                            <Button
+                                onClick={() => router.push(`/payment-links?leadId=${lead.id}`)}
+                                className="w-full bg-neon-green text-black hover:bg-neon-green/90"
+                            >
+                                <CreditCard className="mr-2 h-4 w-4" />
+                                Send Payment Link
                             </Button>
                         </CardContent>
                     </Card>

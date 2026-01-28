@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { CalendarIcon, Copy, Loader2, Plus, Trash2, ExternalLink } from 'lucide-react'
-import { format } from 'date-fns'
+import { format, addMonths } from 'date-fns'
+
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -83,8 +84,8 @@ export function CreateSplitPaymentDialog({
         // Let's assume relative to start date + length
         const baseDate = futurePayments.length > 0 ? futurePayments[futurePayments.length - 1].date : currentStart
 
-        const nextMonth = new Date(baseDate)
-        nextMonth.setMonth(nextMonth.getMonth() + 1)
+        // safer month addition using date-fns
+        const nextMonth = addMonths(baseDate, 1)
 
         setFuturePayments([
             ...futurePayments,
@@ -118,10 +119,17 @@ export function CreateSplitPaymentDialog({
             const payload = {
                 planName,
                 downPayment: Math.round(downPayment * 100),
-                schedule: futurePayments.map(p => ({
-                    amount: Math.round(p.amount * 100),
-                    dueDate: p.date.toISOString(),
-                })),
+                schedule: futurePayments.map(p => {
+                    // Safe Date logic: Ensure we save noon to prevent timezone rollback
+                    const d = p.date;
+                    const dateStr = format(d, 'yyyy-MM-dd'); // Get YYYY-MM-DD
+                    const safeIso = `${dateStr}T12:00:00.000Z`; // Force Noon UTC 
+
+                    return {
+                        amount: Math.round(p.amount * 100),
+                        dueDate: safeIso,
+                    }
+                }),
                 productId, // Pass the linked ID
                 coachId: globalConfig?.coachId,
                 salesCloserId: globalConfig?.salesCloserId,
