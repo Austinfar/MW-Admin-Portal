@@ -13,6 +13,8 @@ import { AddLeadDialog } from '@/components/leads/AddLeadDialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { protectRoute } from '@/lib/protect-route'
 
+import { RefreshLeadsButton } from '@/components/leads/RefreshLeadsButton'
+
 export default async function LeadsPage() {
     await protectRoute('can_view_leads')
 
@@ -31,6 +33,7 @@ export default async function LeadsPage() {
             <div className="flex items-center justify-between space-y-2">
                 <h2 className="text-3xl font-bold tracking-tight text-white">Leads</h2>
                 <div className="flex items-center space-x-2">
+                    <RefreshLeadsButton />
                     <SyncGHLButton />
                     <AddLeadDialog />
                 </div>
