@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
+    Eye,
+    Mail,
     FileText,
     Calendar,
     CheckCircle2,
@@ -32,6 +34,15 @@ const STATUS_CONFIG: Record<ContractStatus, { label: string; color: 'default' | 
     active: { label: 'Active', color: 'default', icon: CheckCircle2 },
     completed: { label: 'Completed', color: 'secondary', icon: Clock },
     cancelled: { label: 'Cancelled', color: 'destructive', icon: XCircle },
+}
+
+const AGREEMENT_STATUS_CONFIG: Record<string, { label: string; color: 'default' | 'secondary' | 'destructive' | 'outline'; icon: React.ElementType }> = {
+    pending: { label: 'Draft', color: 'secondary', icon: FileText },
+    sent: { label: 'Sent', color: 'outline', icon: Mail },
+    viewed: { label: 'Viewed', color: 'secondary', icon: Eye },
+    signed: { label: 'Signed', color: 'default', icon: CheckCircle2 },
+    expired: { label: 'Expired', color: 'destructive', icon: Clock },
+    voided: { label: 'Voided', color: 'destructive', icon: XCircle },
 }
 
 const PAYMENT_TYPE_LABELS: Record<PaymentType, string> = {
@@ -184,8 +195,17 @@ interface ContractItemProps {
 }
 
 function ContractItem({ contract, onRenew }: ContractItemProps) {
-    const statusConfig = STATUS_CONFIG[contract.status]
-    const StatusIcon = statusConfig.icon
+    // Priority: Agreement Status > Contract Status
+    let displayConfig = STATUS_CONFIG[contract.status]
+
+    if (contract.agreement) {
+        const agreementStatus = contract.agreement.status || 'pending'
+        if (AGREEMENT_STATUS_CONFIG[agreementStatus]) {
+            displayConfig = AGREEMENT_STATUS_CONFIG[agreementStatus]
+        }
+    }
+
+    const StatusIcon = displayConfig.icon
 
     const daysUntilEnd = differenceInDays(parseISO(contract.end_date), new Date())
     const isExpiringSoon = contract.status === 'active' && daysUntilEnd <= 30 && daysUntilEnd > 0
@@ -205,9 +225,9 @@ function ContractItem({ contract, onRenew }: ContractItemProps) {
             {/* Header row */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <Badge variant={statusConfig.color} className="gap-1 text-xs">
+                    <Badge variant={displayConfig.color} className="gap-1 text-xs">
                         <StatusIcon className="h-3 w-3" />
-                        {statusConfig.label}
+                        {displayConfig.label}
                     </Badge>
                     <span className="text-xs text-muted-foreground">
                         Contract #{contract.contract_number}
@@ -251,24 +271,6 @@ function ContractItem({ contract, onRenew }: ContractItemProps) {
                     )}
                     {contract.monthly_rate && (
                         <span>{formatCurrency(contract.monthly_rate)}/mo</span>
-                    )}
-                </div>
-            )}
-
-            {/* Agreement status */}
-            {contract.agreement && (
-                <div className="flex items-center gap-2 text-xs">
-                    <span className="text-muted-foreground">Agreement:</span>
-                    <Badge
-                        variant={contract.agreement.status === 'signed' ? 'default' : 'outline'}
-                        className="text-xs capitalize"
-                    >
-                        {contract.agreement.status}
-                    </Badge>
-                    {contract.agreement.signed_at && (
-                        <span className="text-muted-foreground">
-                            {format(parseISO(contract.agreement.signed_at), 'MMM d, yyyy')}
-                        </span>
                     )}
                 </div>
             )}
