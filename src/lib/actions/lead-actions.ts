@@ -446,16 +446,20 @@ export async function convertLeadToClient(
                     finalGhlId = ghlResult.ghlContactId
                     // Update the lead record with this new ID too so we remain consistent
                     await supabase.from('leads').update({ ghl_contact_id: finalGhlId }).eq('id', leadId)
+                } else {
+                    // Start of Change: Strict Enforcement
+                    console.error('GHL Sync returned no ID:', ghlResult)
+                    return { error: `GHL Sync Failed: ${ghlResult.error || 'Unknown Error'}. Please check email/phone.` }
                 }
             } catch (syncError) {
                 console.error('Failed to sync with GHL during conversion:', syncError)
+                return { error: 'GHL Sync Connection Failed. Please try again.' }
             }
         }
 
-        // Fallback to placeholder if we absolutely cannot get a GHL ID (to satisfy DB constraint)
+        // Double check we have an ID
         if (!finalGhlId) {
-            finalGhlId = `manual_${Date.now()}_${Math.random().toString(36).substring(7)}`
-            console.warn(`Using manual placeholder ID for client conversion: ${finalGhlId}`)
+            return { error: 'Cannot convert: GHL Contact ID is missing and sync failed.' }
         }
 
         // 3. Create Client with full data
