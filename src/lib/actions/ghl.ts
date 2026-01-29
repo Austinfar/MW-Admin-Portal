@@ -1,8 +1,7 @@
 'use server';
 
-import { GHLClient } from '@/lib/ghl/client';
 import { syncGHLContact } from '@/lib/ghl/sync';
-import { getAppSettings, updateAppSetting } from '@/lib/actions/app-settings';
+import { getAuthenticatedGHLClient } from '@/lib/ghl/factory';
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
@@ -12,28 +11,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 const PIPELINES_CACHE_FILE = join(process.cwd(), '.pipelines-cache.json');
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-// Helper to get client with DB settings
-async function getAuthenticatedGHLClient() {
-    const settings = await getAppSettings();
-    const token = settings['ghl_access_token'];
-    const refreshToken = settings['ghl_refresh_token'];
-    const location = settings['ghl_location_id'];
 
-    console.log('[GHL Info] Using credentials from DB:', { tokenExists: !!token, location });
-
-    return new GHLClient(token, location, {
-        refreshToken,
-        onTokenRefresh: async (newTokens) => {
-            console.log('[GHL Action] Refreshing stored tokens via callback');
-            await updateAppSetting('ghl_access_token', newTokens.access_token);
-            await updateAppSetting('ghl_refresh_token', newTokens.refresh_token);
-            if (newTokens.expires_in) {
-                const expiresAt = new Date(Date.now() + newTokens.expires_in * 1000).toISOString();
-                await updateAppSetting('ghl_token_expires_at', expiresAt);
-            }
-        }
-    });
-}
 
 /**
  * Fetches all pipelines from GHL location with caching to avoid rate limits.

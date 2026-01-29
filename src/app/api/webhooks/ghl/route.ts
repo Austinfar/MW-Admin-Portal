@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { syncGHLContact } from '@/lib/ghl/sync'
+import { getAuthenticatedGHLClient } from '@/lib/ghl/factory'
 import * as fs from 'fs'
 import * as path from 'path'
 
@@ -32,7 +33,8 @@ export async function POST(req: NextRequest) {
             // Let's assume body has the data we need or ID. 
             const contactId = body.id || body.contact_id
             if (contactId) {
-                await syncGHLContact(contactId)
+                const client = await getAuthenticatedGHLClient()
+                await syncGHLContact(contactId, client)
             }
         }
 
@@ -64,7 +66,8 @@ export async function POST(req: NextRequest) {
                 const contactId = body.contact_id || body.contact?.id
                 if (contactId) {
                     const { syncGHLLead } = await import('@/lib/ghl/sync')
-                    await syncGHLLead(contactId)
+                    const client = await getAuthenticatedGHLClient()
+                    await syncGHLLead(contactId, client)
                 }
             } else {
                 console.log(`[GHL Webhook] Stage '${body.stageName}' does not match target. Ignoring.`)
